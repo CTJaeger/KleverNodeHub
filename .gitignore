@@ -22,3 +22,6 @@ coverage.out
 *.pem
 *.key
 config.enc
+
+# Chat context (local only)
+_chatcontext/
