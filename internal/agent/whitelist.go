@@ -24,6 +24,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"config.backup":  {Description: "Create a backup of a configuration file", RequiresContainer: false},
 	"config.backups": {Description: "List backups of a configuration file", RequiresContainer: false},
 	"config.restore": {Description: "Restore a configuration file from backup", RequiresContainer: false},
+	"node.logs":      {Description: "Fetch historical logs from a container", RequiresContainer: true},
 }
 
 // CommandSpec defines constraints for a whitelisted command.

@@ -176,11 +176,29 @@
                 </div>
             </div>
 
-            <!-- Logs Placeholder (Phase 3) -->
+            <!-- Log Viewer -->
             <div class="card">
-                <div class="card-header"><h3>Logs</h3></div>
-                <div class="empty-state">
-                    <p class="text-muted text-sm">Live log viewer coming in Phase 3.</p>
+                <div class="card-header">
+                    <h3>Logs</h3>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="text" id="log-filter" placeholder="Filter..." oninput="filterLogs()" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;font-size:13px;width:140px;">
+                        <select id="log-lines" onchange="loadLogs()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
+                            <option value="100">100 lines</option>
+                            <option value="500">500 lines</option>
+                            <option value="2000">2000 lines</option>
+                        </select>
+                        <button class="btn btn-sm btn-secondary" onclick="loadLogs()">Refresh</button>
+                        <button class="btn btn-sm btn-secondary" onclick="downloadLogs()">Download</button>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                            <input type="checkbox" id="log-timestamps" checked onchange="renderLogView()"> Timestamps
+                        </label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                            <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
+                        </label>
+                    </div>
+                </div>
+                <div id="log-viewer" style="background:#0d1117;color:#c9d1d9;font-family:monospace;font-size:12px;line-height:1.5;padding:8px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all;border-radius:4px;">
+                    <div class="text-muted text-sm" style="padding:16px;text-align:center;">Click Refresh to load logs.</div>
                 </div>
             </div>
         </main>
@@ -421,6 +439,84 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        }
+
+        let logData = [];
+
+        async function loadLogs() {
+            const tail = document.getElementById('log-lines').value || 100;
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/logs?tail=' + tail);
+                if (data && data.lines) {
+                    logData = data.lines;
+                    renderLogView();
+                }
+            } catch (e) {
+                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
+            }
+        }
+
+        function renderLogView() {
+            const viewer = document.getElementById('log-viewer');
+            const showTimestamps = document.getElementById('log-timestamps').checked;
+            const filter = (document.getElementById('log-filter').value || '').toLowerCase();
+
+            let html = '';
+            let count = 0;
+            for (const line of logData) {
+                const msg = line.message || '';
+                if (filter && msg.toLowerCase().indexOf(filter) === -1) continue;
+
+                count++;
+                let lineHtml = '';
+                if (showTimestamps && line.timestamp) {
+                    lineHtml += '<span style="color:#6e7681;">' + esc(line.timestamp) + '</span> ';
+                }
+                if (line.stream === 'stderr') {
+                    lineHtml += '<span style="color:#f85149;">' + highlightLogLevel(esc(msg)) + '</span>';
+                } else {
+                    lineHtml += highlightLogLevel(esc(msg));
+                }
+                html += lineHtml + '\n';
+            }
+
+            if (count === 0) {
+                html = '<div style="color:var(--text-muted);padding:16px;text-align:center;">No log lines' + (filter ? ' matching filter' : '') + '.</div>';
+            }
+
+            viewer.innerHTML = html;
+
+            if (document.getElementById('log-autoscroll').checked) {
+                viewer.scrollTop = viewer.scrollHeight;
+            }
+        }
+
+        function filterLogs() {
+            renderLogView();
+        }
+
+        function highlightLogLevel(text) {
+            return text
+                .replace(/\b(ERROR|FATAL|PANIC)\b/g, '<span style="color:#f85149;font-weight:bold;">$1</span>')
+                .replace(/\b(WARN|WARNING)\b/g, '<span style="color:#d29922;font-weight:bold;">$1</span>')
+                .replace(/\b(INFO)\b/g, '<span style="color:#3fb950;">$1</span>')
+                .replace(/\b(DEBUG)\b/g, '<span style="color:#6e7681;">$1</span>');
+        }
+
+        function downloadLogs() {
+            if (!logData || logData.length === 0) return;
+            let text = '';
+            for (const line of logData) {
+                if (line.timestamp) text += line.timestamp + ' ';
+                text += '[' + (line.stream || 'stdout') + '] ';
+                text += (line.message || '') + '\n';
+            }
+            const blob = new Blob([text], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = (node ? node.container_name : 'node') + '-logs.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
         }
 
         async function loadConfigFiles() {
