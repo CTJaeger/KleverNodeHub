@@ -150,11 +150,29 @@
                 </div>
             </div>
 
-            <!-- Config Placeholder (Phase 3) -->
+            <!-- Configuration Editor -->
             <div class="card mb-16">
-                <div class="card-header"><h3>Configuration</h3></div>
-                <div class="empty-state">
-                    <p class="text-muted text-sm">Configuration editor coming in Phase 3.</p>
+                <div class="card-header">
+                    <h3>Configuration</h3>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="config-file-select" onchange="loadConfigFile()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
+                            <option value="">Select file...</option>
+                        </select>
+                        <button class="btn btn-sm btn-primary" onclick="saveConfig()" id="btn-save-config" disabled>Save</button>
+                        <button class="btn btn-sm btn-secondary" onclick="saveAndRestart()" id="btn-save-restart" disabled>Save &amp; Restart</button>
+                    </div>
+                </div>
+                <div id="config-editor-wrap" class="hidden">
+                    <textarea id="config-editor" style="width:100%;min-height:300px;font-family:monospace;font-size:13px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);padding:8px;resize:vertical;tab-size:4;white-space:pre;overflow:auto;" spellcheck="false"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                        <select id="config-backup-select" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:200px;">
+                            <option value="">Backups...</option>
+                        </select>
+                        <button class="btn btn-sm btn-secondary" onclick="restoreBackup()">Restore</button>
+                    </div>
+                </div>
+                <div id="config-empty" class="empty-state">
+                    <p class="text-muted text-sm">Select a configuration file above to edit.</p>
                 </div>
             </div>
 
@@ -405,6 +423,118 @@
             return div.innerHTML;
         }
 
+        async function loadConfigFiles() {
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/config');
+                const select = document.getElementById('config-file-select');
+                // Clear existing options except first
+                while (select.options.length > 1) select.remove(1);
+                if (data && data.files) {
+                    data.files.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f.name;
+                        opt.textContent = f.name + ' (' + formatFileSize(f.size) + ')';
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function loadConfigFile() {
+            const fileName = document.getElementById('config-file-select').value;
+            const editorWrap = document.getElementById('config-editor-wrap');
+            const empty = document.getElementById('config-empty');
+
+            if (!fileName) {
+                editorWrap.classList.add('hidden');
+                empty.classList.remove('hidden');
+                document.getElementById('btn-save-config').disabled = true;
+                document.getElementById('btn-save-restart').disabled = true;
+                return;
+            }
+
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName));
+                if (data && data.content !== undefined) {
+                    document.getElementById('config-editor').value = data.content;
+                    editorWrap.classList.remove('hidden');
+                    empty.classList.add('hidden');
+                    document.getElementById('btn-save-config').disabled = false;
+                    document.getElementById('btn-save-restart').disabled = false;
+                    loadConfigBackups(fileName);
+                }
+            } catch (e) {
+                showResult('Failed to load config: ' + e.message, true);
+            }
+        }
+
+        async function loadConfigBackups(fileName) {
+            const select = document.getElementById('config-backup-select');
+            while (select.options.length > 1) select.remove(1);
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName) + '/backups');
+                if (data && data.backups) {
+                    data.backups.forEach(b => {
+                        const opt = document.createElement('option');
+                        opt.value = b.name;
+                        opt.textContent = b.name;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function saveConfig() {
+            const fileName = document.getElementById('config-file-select').value;
+            const content = document.getElementById('config-editor').value;
+            if (!fileName) return;
+
+            const result = await API.request('PUT', '/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: false });
+            if (result && result.success) {
+                showResult('Config saved: ' + fileName, false);
+                loadConfigBackups(fileName);
+            } else {
+                showResult('Save failed: ' + (result?.error || 'Unknown error'), true);
+            }
+        }
+
+        async function saveAndRestart() {
+            const fileName = document.getElementById('config-file-select').value;
+            const content = document.getElementById('config-editor').value;
+            if (!fileName) return;
+
+            const result = await API.request('PUT', '/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: true });
+            if (result && result.success) {
+                showResult('Config saved and container restarted', false);
+                loadConfigBackups(fileName);
+                setTimeout(loadNode, 2000);
+            } else {
+                showResult('Save failed: ' + (result?.error || 'Unknown error'), true);
+            }
+        }
+
+        async function restoreBackup() {
+            const backupName = document.getElementById('config-backup-select').value;
+            if (!backupName) {
+                showResult('Select a backup first', true);
+                return;
+            }
+
+            const result = await API.postJSON('/api/nodes/' + nodeId + '/config/restore', { backup_name: backupName });
+            if (result && result.ok && result.data && result.data.success) {
+                showResult('Restored from: ' + backupName, false);
+                loadConfigFile(); // Reload current file
+            } else {
+                showResult('Restore failed: ' + (result?.data?.error || 'Unknown error'), true);
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
         async function loadDockerTags() {
             try {
                 const data = await API.getJSON('/api/docker/tags');
@@ -488,6 +618,7 @@
 
         init();
         loadDockerTags();
+        loadConfigFiles();
     </script>
 </body>
 </html>

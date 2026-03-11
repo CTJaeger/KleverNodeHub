@@ -18,6 +18,12 @@ var AllowedCommands = map[string]CommandSpec{
 	"node.pull":      {Description: "Pull a Docker image", RequiresContainer: false},
 	"node.provision": {Description: "Provision a new Klever node from scratch", RequiresContainer: false},
 	"node.discovery": {Description: "Scan for existing Klever nodes", RequiresContainer: false},
+	"config.list":    {Description: "List configuration files for a node", RequiresContainer: false},
+	"config.read":    {Description: "Read a configuration file", RequiresContainer: false},
+	"config.write":   {Description: "Write a configuration file (auto-backup)", RequiresContainer: false},
+	"config.backup":  {Description: "Create a backup of a configuration file", RequiresContainer: false},
+	"config.backups": {Description: "List backups of a configuration file", RequiresContainer: false},
+	"config.restore": {Description: "Restore a configuration file from backup", RequiresContainer: false},
 }
 
 // CommandSpec defines constraints for a whitelisted command.

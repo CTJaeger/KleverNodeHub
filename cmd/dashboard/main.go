@@ -126,6 +126,7 @@ func main() {
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
+	configHandler := handlers.NewConfigHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
@@ -178,6 +179,12 @@ func main() {
 	mux.Handle("GET /api/nodes/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleNodeMetrics)))
 	mux.Handle("GET /api/servers/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleServerMetrics)))
 	mux.Handle("POST /api/nodes/provision", authMw(http.HandlerFunc(provisionHandler.HandleProvision)))
+	mux.Handle("GET /api/nodes/{id}/config", authMw(http.HandlerFunc(configHandler.HandleListFiles)))
+	mux.Handle("GET /api/nodes/{id}/config/{filename}", authMw(http.HandlerFunc(configHandler.HandleReadFile)))
+	mux.Handle("PUT /api/nodes/{id}/config/{filename}", authMw(http.HandlerFunc(configHandler.HandleWriteFile)))
+	mux.Handle("GET /api/nodes/{id}/config/{filename}/backups", authMw(http.HandlerFunc(configHandler.HandleListBackups)))
+	mux.Handle("POST /api/nodes/{id}/config/restore", authMw(http.HandlerFunc(configHandler.HandleRestore)))
+	mux.Handle("POST /api/config/push", authMw(http.HandlerFunc(configHandler.HandleMultiPush)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)

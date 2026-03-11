@@ -92,6 +92,18 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		}
 	case "node.provision":
 		err = e.executeProvision(ctx, msg.Payload, result)
+	case "config.list":
+		err = e.executeConfigList(msg.Payload, result)
+	case "config.read":
+		err = e.executeConfigRead(msg.Payload, result)
+	case "config.write":
+		err = e.executeConfigWrite(msg.Payload, result)
+	case "config.backup":
+		err = e.executeConfigBackup(msg.Payload, result)
+	case "config.backups":
+		err = e.executeConfigBackups(msg.Payload, result)
+	case "config.restore":
+		err = e.executeConfigRestore(msg.Payload, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -249,6 +261,113 @@ func (e *Executor) executeProvision(ctx context.Context, payload any, result *mo
 	}
 
 	result.Output = fmt.Sprintf("node %s provisioned successfully (job: %s)", req.NodeName, jobID)
+	return nil
+}
+
+func (e *Executor) executeConfigList(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+
+	files, err := ListConfigFiles(dataDir)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(files)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeConfigRead(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	fileName := extractStringField(payload, "file_name")
+	if dataDir == "" || fileName == "" {
+		return fmt.Errorf("data_dir and file_name are required")
+	}
+
+	content, err := ReadConfigFile(dataDir, fileName)
+	if err != nil {
+		return err
+	}
+
+	result.Output = content
+	return nil
+}
+
+func (e *Executor) executeConfigWrite(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	fileName := extractStringField(payload, "file_name")
+	content := extractStringField(payload, "content")
+	if dataDir == "" || fileName == "" {
+		return fmt.Errorf("data_dir, file_name are required")
+	}
+
+	if err := WriteConfigFile(dataDir, fileName, content); err != nil {
+		return err
+	}
+
+	result.Output = "written: " + fileName
+
+	// Restart container if requested
+	restartContainer := extractStringField(payload, "restart_container")
+	if restartContainer != "" {
+		ctx := context.Background()
+		if err := e.docker.RestartContainer(ctx, restartContainer, defaultStopTimeout); err != nil {
+			result.Output += " (restart failed: " + err.Error() + ")"
+		} else {
+			result.Output += " (container restarted)"
+		}
+	}
+
+	return nil
+}
+
+func (e *Executor) executeConfigBackup(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	fileName := extractStringField(payload, "file_name")
+	if dataDir == "" || fileName == "" {
+		return fmt.Errorf("data_dir and file_name are required")
+	}
+
+	if err := BackupConfigFile(dataDir, fileName); err != nil {
+		return err
+	}
+
+	result.Output = "backup created for: " + fileName
+	return nil
+}
+
+func (e *Executor) executeConfigBackups(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	fileName := extractStringField(payload, "file_name")
+	if dataDir == "" || fileName == "" {
+		return fmt.Errorf("data_dir and file_name are required")
+	}
+
+	backups, err := ListConfigBackups(dataDir, fileName)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(backups)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeConfigRestore(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	backupName := extractStringField(payload, "backup_name")
+	if dataDir == "" || backupName == "" {
+		return fmt.Errorf("data_dir and backup_name are required")
+	}
+
+	if err := RestoreConfigBackup(dataDir, backupName); err != nil {
+		return err
+	}
+
+	result.Output = "restored from: " + backupName
 	return nil
 }
 
