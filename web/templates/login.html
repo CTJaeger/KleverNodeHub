@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Login</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <h1>Klever Node Hub</h1>
+            <p class="subtitle">Manage your validator nodes</p>
+
+            <!-- Error display -->
+            <div id="error-alert" class="alert alert-error hidden"></div>
+            <div id="success-alert" class="alert alert-success hidden"></div>
+
+            <!-- Setup section (first-run) -->
+            <div id="setup-section" class="hidden">
+                <p class="text-center mb-16 text-muted text-sm">
+                    Welcome! Register your first passkey to secure your dashboard.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="passkey-name">Passkey Name</label>
+                    <input type="text" id="passkey-name" class="form-input" placeholder="e.g. MacBook, iPhone" value="default">
+                </div>
+                <button id="btn-setup" class="btn btn-primary w-full" onclick="setupPasskey()">
+                    Register Passkey
+                </button>
+            </div>
+
+            <!-- Recovery codes display (after setup) -->
+            <div id="recovery-section" class="hidden">
+                <div class="alert alert-warning">
+                    Save these recovery codes! They won't be shown again.
+                </div>
+                <div id="recovery-codes" class="recovery-codes mt-8"></div>
+                <div class="btn-group mt-16">
+                    <button class="btn btn-secondary" onclick="copyRecoveryCodes()">Copy</button>
+                    <button class="btn btn-secondary" onclick="downloadRecoveryCodes()">Download</button>
+                    <button class="btn btn-primary" onclick="window.location.href='/overview'">Continue</button>
+                </div>
+            </div>
+
+            <!-- Login section (passkey exists) -->
+            <div id="login-section" class="hidden">
+                <button id="btn-passkey-login" class="btn btn-primary w-full" onclick="loginPasskey()">
+                    Sign in with Passkey
+                </button>
+
+                <div class="login-divider">or</div>
+
+                <!-- Recovery code login -->
+                <div id="recovery-login">
+                    <div class="form-group">
+                        <label class="form-label" for="recovery-code">Recovery Code</label>
+                        <input type="text" id="recovery-code" class="form-input" placeholder="XXXX-XXXX-XXXX">
+                    </div>
+                    <button class="btn btn-secondary w-full" onclick="loginRecovery()">
+                        Use Recovery Code
+                    </button>
+                </div>
+            </div>
+
+            <!-- No WebAuthn support -->
+            <div id="no-webauthn" class="hidden">
+                <div class="alert alert-error">
+                    Your browser does not support Passkeys (WebAuthn).
+                    Please use a modern browser like Chrome, Safari, or Firefox.
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="hidden text-center mt-16">
+                <div class="loading-text" style="justify-content:center;">
+                    <div class="spinner"></div>
+                    <span id="loading-text">Checking setup...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/passkey.js"></script>
+    <script>
+        let recoveryCodes = [];
+
+        async function init() {
+            show('loading');
+
+            if (!Passkey.isSupported()) {
+                hide('loading');
+                show('no-webauthn');
+                return;
+            }
+
+            const status = await API.getJSON('/api/setup/status');
+            hide('loading');
+
+            if (!status) {
+                showError('Failed to check setup status');
+                return;
+            }
+
+            if (status.setup_complete) {
+                show('login-section');
+            } else {
+                show('setup-section');
+            }
+        }
+
+        async function setupPasskey() {
+            const name = document.getElementById('passkey-name').value || 'default';
+            const btn = document.getElementById('btn-setup');
+            btn.disabled = true;
+            btn.textContent = 'Registering...';
+            clearAlerts();
+
+            try {
+                const result = await Passkey.register(name);
+                if (result.recovery_codes) {
+                    recoveryCodes = result.recovery_codes;
+                    displayRecoveryCodes(recoveryCodes);
+                    hide('setup-section');
+                    show('recovery-section');
+                } else {
+                    window.location.href = '/overview';
+                }
+            } catch (err) {
+                showError(err.message);
+                btn.disabled = false;
+                btn.textContent = 'Register Passkey';
+            }
+        }
+
+        async function loginPasskey() {
+            const btn = document.getElementById('btn-passkey-login');
+            btn.disabled = true;
+            btn.textContent = 'Authenticating...';
+            clearAlerts();
+
+            try {
+                await Passkey.login();
+                window.location.href = '/overview';
+            } catch (err) {
+                showError(err.message);
+                btn.disabled = false;
+                btn.textContent = 'Sign in with Passkey';
+            }
+        }
+
+        async function loginRecovery() {
+            const code = document.getElementById('recovery-code').value.trim();
+            if (!code) {
+                showError('Please enter a recovery code');
+                return;
+            }
+            clearAlerts();
+
+            const result = await API.postJSON('/api/auth/recovery', { code });
+            if (result && result.ok) {
+                API.setToken(result.data.access_token);
+                if (result.data.remaining <= 2) {
+                    showSuccess('Login successful. Warning: only ' + result.data.remaining + ' recovery codes remaining!');
+                    setTimeout(() => { window.location.href = '/overview'; }, 2000);
+                } else {
+                    window.location.href = '/overview';
+                }
+            } else {
+                showError(result?.data?.error || 'Invalid recovery code');
+            }
+        }
+
+        function displayRecoveryCodes(codes) {
+            const container = document.getElementById('recovery-codes');
+            container.innerHTML = codes.map(c => '<span>' + c + '</span>').join('');
+        }
+
+        function copyRecoveryCodes() {
+            navigator.clipboard.writeText(recoveryCodes.join('\n'))
+                .then(() => showSuccess('Copied to clipboard'))
+                .catch(() => showError('Copy failed'));
+        }
+
+        function downloadRecoveryCodes() {
+            const text = 'Klever Node Hub - Recovery Codes\n' +
+                         'Generated: ' + new Date().toISOString() + '\n\n' +
+                         recoveryCodes.join('\n') + '\n\n' +
+                         'Keep these codes safe. Each can only be used once.';
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'klever-node-hub-recovery-codes.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error-alert');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function showSuccess(msg) {
+            const el = document.getElementById('success-alert');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function clearAlerts() {
+            document.getElementById('error-alert').classList.add('hidden');
+            document.getElementById('success-alert').classList.add('hidden');
+        }
+
+        function show(id) { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+        init();
+    </script>
+</body>
+</html>

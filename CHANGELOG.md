@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #9**: Web UI shell — login, overview, and basic node list
+  - Embedded HTTPS server with auto-generated self-signed cert
+  - Security headers (CSP, X-Frame-Options, HSTS, XSS-Protection)
+  - Mobile-first responsive CSS framework (dark theme, 768px/1200px breakpoints)
+  - Login page: Passkey authentication, recovery code fallback, first-run setup
+  - Overview page: server/node cards, status badges, add-server flow
+  - Node detail page: status, actions (start/stop/restart), info display
+  - Frontend JS: API client with JWT auto-refresh, WebSocket client, Passkey helpers
+  - Auth API handlers: setup status, passkey begin/finish, recovery login, refresh, logout
+  - Server/node API handlers: list, get, filter by server
+  - Registration token API handler
+  - 18 new tests (server, auth handler, server handler)
+
 - **Issue #8**: Basic node operations — start, stop, restart via dashboard
   - Command whitelist with container name validation (injection prevention)
   - Docker operations: start, stop (graceful 30s), restart via Engine API
