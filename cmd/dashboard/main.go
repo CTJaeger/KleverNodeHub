@@ -17,6 +17,7 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/handlers"
+	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/scheduler"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
@@ -48,6 +49,7 @@ func main() {
 	serverStore := store.NewServerStore(db)
 	nodeStore := store.NewNodeStore(db)
 	settingsStore := store.NewSettingsStore(db)
+	metricsStore := store.NewMetricsStore(db)
 
 	// --- Certificate Authority ---
 	caDir := filepath.Join(*dataDir, "ca")
@@ -109,6 +111,10 @@ func main() {
 		log.Println("=============================================")
 	}
 
+	// --- Metrics Scheduler ---
+	metricsScheduler := scheduler.New(metricsStore)
+	metricsScheduler.Start()
+
 	// --- WebSocket Hub ---
 	hub := ws.NewHub(serverStore)
 	hub.StartHealthCheck(60 * time.Second)
@@ -117,6 +123,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr)
 	nodeHandler := handlers.NewNodeHandler(hub, nodeStore)
 	serverHandler := handlers.NewServerHandler(serverStore, nodeStore)
+	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
 	tokenManager := dashboard.NewTokenManager()
@@ -150,7 +157,7 @@ func main() {
 	mux.HandleFunc("POST /api/agent/register", regHandler.HandleRegisterAgent)
 
 	// WebSocket endpoint for agents (authenticated via mTLS cert, not JWT)
-	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore)
+	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore)
 	mux.HandleFunc("GET /ws/agent", wsHandler.HandleUpgrade)
 
 	// Protected routes (JWT required)
@@ -166,6 +173,8 @@ func main() {
 	mux.Handle("POST /api/nodes/{id}/upgrade", authMw(http.HandlerFunc(dockerHandler.HandleUpgrade)))
 	mux.Handle("POST /api/nodes/{id}/downgrade", authMw(http.HandlerFunc(dockerHandler.HandleDowngrade)))
 	mux.Handle("GET /api/docker/tags", authMw(http.HandlerFunc(dockerHandler.HandleListTags)))
+	mux.Handle("GET /api/nodes/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleNodeMetrics)))
+	mux.Handle("GET /api/servers/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleServerMetrics)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
@@ -174,6 +183,7 @@ func main() {
 	go func() {
 		sig := <-sigCh
 		log.Printf("received %s, shutting down...", sig)
+		metricsScheduler.Stop()
 		hub.Stop()
 		_ = db.Close()
 		os.Exit(0)

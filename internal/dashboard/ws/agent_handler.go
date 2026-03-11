@@ -16,17 +16,19 @@ import (
 
 // AgentHandler handles WebSocket connections from agents.
 type AgentHandler struct {
-	hub         *Hub
-	serverStore *store.ServerStore
-	nodeStore   *store.NodeStore
+	hub          *Hub
+	serverStore  *store.ServerStore
+	nodeStore    *store.NodeStore
+	metricsStore *store.MetricsStore
 }
 
 // NewAgentHandler creates a new WebSocket handler for agent connections.
-func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore) *AgentHandler {
+func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore) *AgentHandler {
 	return &AgentHandler{
-		hub:         hub,
-		serverStore: serverStore,
-		nodeStore:   nodeStore,
+		hub:          hub,
+		serverStore:  serverStore,
+		nodeStore:    nodeStore,
+		metricsStore: metricsStore,
 	}
 }
 
@@ -119,9 +121,16 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 
 		case "agent.heartbeat":
 			_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
+			h.handleHeartbeatMetrics(serverID, &msg)
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)
+
+		case "node.metrics":
+			h.handleNodeMetrics(&msg)
+
+		case "node.nonce_stall":
+			h.handleNonceStall(serverID, &msg)
 
 		case "command.result":
 			h.handleCommandResult(&msg)
@@ -187,6 +196,76 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 			})
 		}
 	}
+}
+
+// handleHeartbeatMetrics extracts system metrics from heartbeat and persists them.
+func (h *AgentHandler) handleHeartbeatMetrics(serverID string, msg *models.Message) {
+	if h.metricsStore == nil {
+		return
+	}
+
+	data, err := json.Marshal(msg.Payload)
+	if err != nil {
+		return
+	}
+
+	var hb models.HeartbeatPayload
+	if err := json.Unmarshal(data, &hb); err != nil || hb.Metrics == nil {
+		return
+	}
+
+	m := hb.Metrics
+	if err := h.metricsStore.InsertSystemMetrics(serverID, m.CPUPercent, m.MemPercent, m.DiskPercent, m.LoadAvg1, m.CollectedAt); err != nil {
+		log.Printf("store system metrics for %s: %v", serverID, err)
+	}
+}
+
+// handleNodeMetrics persists node metrics from agent polling.
+func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
+	if h.metricsStore == nil {
+		return
+	}
+
+	data, err := json.Marshal(msg.Payload)
+	if err != nil {
+		log.Printf("marshal node metrics: %v", err)
+		return
+	}
+
+	var evt models.NodeMetricsEvent
+	if err := json.Unmarshal(data, &evt); err != nil {
+		log.Printf("unmarshal node metrics: %v", err)
+		return
+	}
+
+	if evt.Error != "" {
+		return // Node was unreachable, nothing to store
+	}
+
+	numeric := store.ExtractNumericMetrics(evt.Metrics)
+	if len(numeric) == 0 {
+		return
+	}
+
+	if err := h.metricsStore.InsertNodeMetrics(evt.NodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
+		log.Printf("store node metrics for %s: %v", evt.NodeID, err)
+	}
+}
+
+// handleNonceStall logs nonce stall events (future: trigger notifications).
+func (h *AgentHandler) handleNonceStall(serverID string, msg *models.Message) {
+	data, err := json.Marshal(msg.Payload)
+	if err != nil {
+		return
+	}
+
+	var evt models.NodeNonceStallEvent
+	if err := json.Unmarshal(data, &evt); err != nil {
+		return
+	}
+
+	log.Printf("ALERT: nonce stall on node %s (server %s) — stuck at nonce %d for %.0fs",
+		evt.NodeID, serverID, evt.StuckNonce, evt.StallDuration)
 }
 
 // handleCommandResult processes a command result from an agent.

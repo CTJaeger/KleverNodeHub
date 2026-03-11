@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 2026-03-12
+- **Issue #16**: Metrics storage — hot/cold tables with retention and decimation
+  - Migration 2: `metrics_recent`, `metrics_archive`, `system_metrics` tables with indexes
+  - `MetricsStore` with batch insert, query (recent/archive/auto-resolution), decimation, purge
+  - `Scheduler` with 3 background jobs: decimation (1h), archive purge (24h), system cleanup (6h)
+  - WebSocket agent handler persists `node.metrics` and heartbeat system metrics to DB
+  - Metrics query API: `GET /api/nodes/{id}/metrics`, `GET /api/servers/{id}/metrics`
+  - Auto-resolution: recent queries use hot table, older use archive, spans merge both
+  - 10 unit tests for store operations
+
 ### 2026-03-11
 - **Issue #15**: Klever node metrics polling from `/node/status` endpoint
   - New `NodeMetricsCollector` polls each discovered node's REST API
