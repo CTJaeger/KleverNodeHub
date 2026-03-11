@@ -44,7 +44,7 @@ func setupServerHandler(t *testing.T) (*ServerHandler, func()) {
 	})
 
 	handler := NewServerHandler(serverStore, nodeStore)
-	return handler, func() { db.Close() }
+	return handler, func() { _ = db.Close() }
 }
 
 func TestHandleListServers(t *testing.T) {
