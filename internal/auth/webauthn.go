@@ -240,7 +240,7 @@ func (wm *WebAuthnManager) buildUser() *dashboardUser {
 
 func generateSessionID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	// Add timestamp for uniqueness
 	ts := make([]byte, 8)
 	binary.BigEndian.PutUint64(ts, uint64(time.Now().UnixNano()))

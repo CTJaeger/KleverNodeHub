@@ -79,3 +79,21 @@ type DiscoveredNode struct {
 type DiscoveryReport struct {
 	Nodes []DiscoveredNode `json:"nodes"`
 }
+
+// NodeMetricsEvent contains metrics polled from a single Klever node's /node/status endpoint.
+type NodeMetricsEvent struct {
+	NodeID      string         `json:"node_id"`
+	ServerID    string         `json:"server_id"`
+	Metrics     map[string]any `json:"metrics,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	CollectedAt int64          `json:"collected_at"`
+}
+
+// NodeNonceStallEvent is sent when a node's nonce stops incrementing.
+type NodeNonceStallEvent struct {
+	NodeID        string  `json:"node_id"`
+	ServerID      string  `json:"server_id"`
+	StuckNonce    uint64  `json:"stuck_nonce"`
+	StallDuration float64 `json:"stall_duration_seconds"`
+	DetectedAt    int64   `json:"detected_at"`
+}

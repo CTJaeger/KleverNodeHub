@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	heartbeatInterval  = 30 * time.Second
-	discoveryInterval  = 5 * time.Minute
-	reconnectBaseDelay = 1 * time.Second
-	reconnectMaxDelay  = 60 * time.Second
+	heartbeatInterval    = 30 * time.Second
+	discoveryInterval    = 5 * time.Minute
+	nodeMetricsInterval  = 15 * time.Second
+	reconnectBaseDelay   = 1 * time.Second
+	reconnectMaxDelay    = 60 * time.Second
 )
 
 func main() {
@@ -70,6 +71,11 @@ func main() {
 	// --- Metrics collector ---
 	metricsCollector := agent.NewMetricsCollector(nil)
 
+	// --- Node metrics collector ---
+	nodeMetrics := agent.NewNodeMetricsCollector(
+		agent.WithPollInterval(nodeMetricsInterval),
+	)
+
 	// --- Graceful shutdown ---
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -89,7 +95,7 @@ func main() {
 	for ctx.Err() == nil {
 
 		log.Printf("connecting to %s...", wsURL)
-		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, *dockerSocket)
+		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, nodeMetrics, *dockerSocket)
 		if ctx.Err() != nil {
 			break
 		}
@@ -111,7 +117,7 @@ func main() {
 }
 
 // runAgentLoop connects to the dashboard and runs the message pump until disconnected.
-func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, dockerSocket string) error {
+func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string) error {
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer dialCancel()
 
@@ -139,6 +145,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 			log.Printf("send discovery: %v", err)
 		}
 		log.Printf("initial discovery: %d nodes found", len(report.Nodes))
+		nodeMetrics.UpdateNodes(report)
 	}()
 
 	// Heartbeat ticker
@@ -152,7 +159,14 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	// Result channel for async command execution
 	resultCh := make(chan *models.Message, 16)
 
-	// Heartbeat + discovery sender
+	// Node metrics channels
+	nodeMetricsCh := make(chan *models.Message, 32)
+	nodeStallCh := make(chan *models.Message, 8)
+
+	// Start node metrics poller
+	go nodeMetrics.RunPoller(ctx, ag.Config().ServerID, nodeMetricsCh, nodeStallCh)
+
+	// Heartbeat + discovery + node metrics sender
 	go func() {
 		for {
 			select {
@@ -178,6 +192,18 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 				discoveryMsg := ag.BuildDiscoveryMessage(report)
 				if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
 					log.Printf("send discovery: %v", err)
+					return
+				}
+				nodeMetrics.UpdateNodes(report)
+			case msg := <-nodeMetricsCh:
+				if err := writeMessage(ctx, conn, msg); err != nil {
+					log.Printf("send node metrics: %v", err)
+					return
+				}
+			case msg := <-nodeStallCh:
+				log.Printf("ALERT: nonce stall detected — %s", msg.ID)
+				if err := writeMessage(ctx, conn, msg); err != nil {
+					log.Printf("send stall alert: %v", err)
 					return
 				}
 			case msg := <-resultCh:
