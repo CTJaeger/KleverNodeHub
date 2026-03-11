@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **CI Fix**: Updated Go version from 1.22 to 1.26 in CI workflow (matching project go.mod 1.25+)
+  - Removed `-race` flag (requires CGO, we use CGO_ENABLED=0)
+  - Added explicit `CGO_ENABLED=0` for cross-compilation builds
+  - Fixes lint, security scan, and test job failures
+
 - **Issue #10**: Docker operations — pull image, create/remove containers, upgrade/downgrade
   - Docker image pull via Engine API with progress streaming
   - Container creation with validated params (matching KleverNodeManagement script)
