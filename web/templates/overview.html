@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Overview</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>Klever Node Hub</h1>
+                <span class="version">v0.1.0</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/overview" class="active">Overview</a>
+                <a href="#" onclick="showAddServer()">Add Server</a>
+                <a href="#" onclick="API.logout()">Logout</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Mobile Top Bar -->
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Klever Node Hub</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <!-- Connection Status -->
+            <div id="connection-status" class="alert alert-warning hidden">
+                Dashboard connection lost. Reconnecting...
+            </div>
+
+            <!-- Stats Summary -->
+            <div class="card mb-16">
+                <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <div>
+                        <div class="text-muted text-sm">Servers</div>
+                        <div style="font-size:24px;font-weight:700;" id="stat-servers">-</div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-sm">Nodes</div>
+                        <div style="font-size:24px;font-weight:700;" id="stat-nodes">-</div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-sm">Online</div>
+                        <div style="font-size:24px;font-weight:700;color:var(--success);" id="stat-online">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server List -->
+            <div class="card-header">
+                <h2>Servers</h2>
+                <button class="btn btn-primary btn-sm" onclick="showAddServer()">+ Add Server</button>
+            </div>
+
+            <div id="server-list" class="card-grid">
+                <div class="empty-state">
+                    <div class="loading-text" style="justify-content:center;">
+                        <div class="spinner"></div>
+                        <span>Loading servers...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Server Modal -->
+            <div id="add-server-modal" class="hidden">
+                <div class="card mt-16">
+                    <div class="card-header">
+                        <h3>Add New Server</h3>
+                        <button class="btn btn-sm btn-secondary" onclick="hideAddServer()">Close</button>
+                    </div>
+                    <p class="text-sm text-muted mb-16">
+                        Generate a one-time registration token and run the install script on your server.
+                    </p>
+                    <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
+                    <div id="token-display" class="hidden mt-16">
+                        <div class="form-group">
+                            <label class="form-label">Install Command</label>
+                            <div style="background:var(--bg-primary);padding:12px;border-radius:var(--radius);font-family:monospace;font-size:12px;word-break:break-all;border:1px solid var(--border);">
+                                <span id="install-command"></span>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-secondary" onclick="copyInstallCommand()">Copy Command</button>
+                        <p class="text-sm text-muted mt-8">This token expires in 1 hour and can only be used once.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ws.js"></script>
+    <script>
+        let servers = [];
+        let nodes = [];
+        let refreshInterval = null;
+
+        async function init() {
+            await loadData();
+            refreshInterval = setInterval(loadData, 10000);
+
+            // WebSocket for real-time updates
+            WS.connect();
+            WS.on('server.update', () => loadData());
+            WS.on('node.update', () => loadData());
+            WS.on('connected', () => {
+                document.getElementById('connection-status').classList.add('hidden');
+            });
+            WS.on('disconnected', () => {
+                document.getElementById('connection-status').classList.remove('hidden');
+            });
+        }
+
+        async function loadData() {
+            const [serverData, nodeData] = await Promise.all([
+                API.getJSON('/api/servers'),
+                API.getJSON('/api/nodes'),
+            ]);
+
+            if (serverData) {
+                servers = serverData.servers || [];
+                nodes = nodeData?.nodes || [];
+                renderServers();
+                updateStats();
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('stat-servers').textContent = servers.length;
+            document.getElementById('stat-nodes').textContent = nodes.length;
+            const online = servers.filter(s => s.status === 'online').length;
+            document.getElementById('stat-online').textContent = online;
+        }
+
+        function renderServers() {
+            const container = document.getElementById('server-list');
+
+            if (servers.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No servers registered yet.</p>' +
+                    '<button class="btn btn-primary" onclick="showAddServer()">Add Your First Server</button></div>';
+                return;
+            }
+
+            container.innerHTML = servers.map(server => {
+                const serverNodes = nodes.filter(n => n.server_id === server.id);
+                const badgeClass = server.status === 'online' ? 'badge-online' : 'badge-offline';
+
+                return '<div class="card">' +
+                    '<div class="card-header">' +
+                        '<h3>' + esc(server.name || server.hostname) + '</h3>' +
+                        '<span class="badge ' + badgeClass + '">' + esc(server.status) + '</span>' +
+                    '</div>' +
+                    '<div class="info-row"><span class="info-label">Hostname</span><span class="info-value">' + esc(server.hostname) + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.ip_address) + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
+                    (serverNodes.length > 0 ? '<div class="mt-8">' + serverNodes.map(renderNodeBadge).join('') + '</div>' : '') +
+                '</div>';
+            }).join('');
+        }
+
+        function renderNodeBadge(node) {
+            const statusClass = 'badge-' + (node.status || 'stopped');
+            return '<a href="/node/' + esc(node.id) + '" style="display:inline-flex;margin:4px 4px 0 0;text-decoration:none;">' +
+                '<span class="badge ' + statusClass + '">' + esc(node.name || node.container_name) + '</span></a>';
+        }
+
+        function showAddServer() {
+            document.getElementById('add-server-modal').classList.remove('hidden');
+        }
+
+        function hideAddServer() {
+            document.getElementById('add-server-modal').classList.add('hidden');
+            document.getElementById('token-display').classList.add('hidden');
+        }
+
+        async function generateToken() {
+            const result = await API.postJSON('/api/registration/token', {});
+            if (result && result.ok) {
+                const token = result.data.token;
+                const dashboardURL = window.location.origin;
+                const cmd = 'curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh | sudo bash -s -- --token ' + token + ' --dashboard ' + dashboardURL;
+                document.getElementById('install-command').textContent = cmd;
+                document.getElementById('token-display').classList.remove('hidden');
+            }
+        }
+
+        function copyInstallCommand() {
+            const cmd = document.getElementById('install-command').textContent;
+            navigator.clipboard.writeText(cmd);
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        init();
+    </script>
+</body>
+</html>

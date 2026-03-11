@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Node Detail</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>Klever Node Hub</h1>
+                <span class="version">v0.1.0</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/overview">Overview</a>
+                <a href="#" onclick="API.logout()">Logout</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Mobile Top Bar -->
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Klever Node Hub</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <!-- Back link -->
+            <a href="/overview" class="text-sm" style="display:inline-block;margin-bottom:16px;">&larr; Back to Overview</a>
+
+            <!-- Node Header -->
+            <div class="card mb-16">
+                <div class="card-header">
+                    <div>
+                        <h2 id="node-name">Loading...</h2>
+                        <span class="text-sm text-muted" id="node-server"></span>
+                    </div>
+                    <span class="badge" id="node-status-badge"></span>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="btn-group mt-8">
+                    <button class="btn btn-sm btn-primary" onclick="nodeAction('start')" id="btn-start">Start</button>
+                    <button class="btn btn-sm btn-secondary" onclick="nodeAction('stop')" id="btn-stop">Stop</button>
+                    <button class="btn btn-sm btn-secondary" onclick="nodeAction('restart')" id="btn-restart">Restart</button>
+                </div>
+
+                <!-- Action result -->
+                <div id="action-result" class="hidden mt-8"></div>
+            </div>
+
+            <!-- Node Details -->
+            <div class="card mb-16">
+                <div class="card-header"><h3>Details</h3></div>
+                <div id="node-details">
+                    <div class="loading-text"><div class="spinner"></div><span>Loading...</span></div>
+                </div>
+            </div>
+
+            <!-- Metrics Placeholder (Phase 2) -->
+            <div class="card mb-16">
+                <div class="card-header"><h3>Metrics</h3></div>
+                <div class="empty-state">
+                    <p class="text-muted text-sm">Performance metrics and charts coming in Phase 2.</p>
+                </div>
+            </div>
+
+            <!-- Config Placeholder (Phase 3) -->
+            <div class="card mb-16">
+                <div class="card-header"><h3>Configuration</h3></div>
+                <div class="empty-state">
+                    <p class="text-muted text-sm">Configuration editor coming in Phase 3.</p>
+                </div>
+            </div>
+
+            <!-- Logs Placeholder (Phase 3) -->
+            <div class="card">
+                <div class="card-header"><h3>Logs</h3></div>
+                <div class="empty-state">
+                    <p class="text-muted text-sm">Live log viewer coming in Phase 3.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ws.js"></script>
+    <script>
+        let nodeId = '';
+        let node = null;
+
+        async function init() {
+            // Extract node ID from URL: /node/{id}
+            const parts = window.location.pathname.split('/');
+            nodeId = parts[parts.length - 1];
+
+            if (!nodeId) {
+                window.location.href = '/overview';
+                return;
+            }
+
+            await loadNode();
+
+            // Auto-refresh
+            setInterval(loadNode, 10000);
+
+            // WebSocket updates
+            WS.connect();
+            WS.on('node.update', (data) => {
+                if (data && data.id === nodeId) loadNode();
+            });
+        }
+
+        async function loadNode() {
+            const data = await API.getJSON('/api/nodes/' + nodeId);
+            if (!data) return;
+
+            node = data;
+            renderNode();
+        }
+
+        function renderNode() {
+            if (!node) return;
+
+            document.getElementById('node-name').textContent = node.display_name || node.name || node.container_name;
+            document.getElementById('node-server').textContent = 'Server: ' + (node.server_id || '-');
+
+            const badge = document.getElementById('node-status-badge');
+            badge.textContent = node.status || 'unknown';
+            badge.className = 'badge badge-' + (node.status || 'stopped');
+
+            // Update action buttons based on status
+            const isRunning = node.status === 'running';
+            document.getElementById('btn-start').disabled = isRunning;
+            document.getElementById('btn-stop').disabled = !isRunning;
+
+            // Details
+            document.getElementById('node-details').innerHTML =
+                infoRow('Container', node.container_name) +
+                infoRow('Type', node.node_type || 'validator') +
+                infoRow('Redundancy', node.redundancy_level === 0 ? 'Active' : 'Fallback (Level ' + node.redundancy_level + ')') +
+                infoRow('REST API Port', node.rest_api_port || '-') +
+                infoRow('Docker Image', node.docker_image_tag || '-') +
+                infoRow('Data Directory', node.data_directory || '-') +
+                infoRow('BLS Public Key', node.bls_public_key ? truncate(node.bls_public_key, 24) : '-');
+        }
+
+        async function nodeAction(action) {
+            const resultEl = document.getElementById('action-result');
+            resultEl.className = 'alert alert-warning mt-8';
+            resultEl.textContent = 'Sending ' + action + ' command...';
+            resultEl.classList.remove('hidden');
+
+            // Disable all buttons
+            ['btn-start', 'btn-stop', 'btn-restart'].forEach(id => {
+                document.getElementById(id).disabled = true;
+            });
+
+            const result = await API.postJSON('/api/nodes/' + nodeId + '/' + action, {});
+
+            if (result && result.ok && result.data.success) {
+                resultEl.className = 'alert alert-success mt-8';
+                resultEl.textContent = action.charAt(0).toUpperCase() + action.slice(1) + ' successful. Status: ' + (result.data.output || 'ok');
+            } else {
+                resultEl.className = 'alert alert-error mt-8';
+                resultEl.textContent = 'Failed: ' + (result?.data?.error || 'Unknown error');
+            }
+
+            // Reload node data
+            setTimeout(loadNode, 1000);
+
+            // Hide result after 5 seconds
+            setTimeout(() => { resultEl.classList.add('hidden'); }, 5000);
+        }
+
+        function infoRow(label, value) {
+            return '<div class="info-row"><span class="info-label">' + esc(label) +
+                   '</span><span class="info-value">' + esc(String(value)) + '</span></div>';
+        }
+
+        function truncate(str, len) {
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        init();
+    </script>
+</body>
+</html>
