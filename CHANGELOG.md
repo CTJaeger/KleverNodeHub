@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #15**: Klever node metrics polling from `/node/status` endpoint
+  - New `NodeMetricsCollector` polls each discovered node's REST API
+  - Parses all 76+ metrics from `/node/status` JSON response into `map[string]any`
+  - Configurable poll interval (default 15s) and HTTP timeout (5s)
+  - Nonce stall detection: alerts when `klv_nonce` stops incrementing (configurable threshold)
+  - `node.metrics` and `node.nonce_stall` WebSocket events
+  - Auto-updates node list from discovery reports
+  - `RunPoller()` background goroutine for continuous polling
+  - 15 unit tests with mock HTTP server (success, errors, stall detection, serialization)
+  - `NodeMetricsEvent` and `NodeNonceStallEvent` models
+  - Integrated into agent main loop with dedicated channels
+  - Fixed pre-existing lint issue in `webauthn.go` (unchecked `rand.Read`)
+
 - **Issue #14**: Agent system metrics collection (CPU, memory, disk, load average)
   - New `MetricsCollector` with `/proc` parsing for Linux, graceful fallback for macOS/Windows
   - CPU% via delta between two `/proc/stat` samples
