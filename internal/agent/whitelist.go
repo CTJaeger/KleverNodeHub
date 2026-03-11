@@ -25,6 +25,12 @@ var AllowedCommands = map[string]CommandSpec{
 	"config.backups": {Description: "List backups of a configuration file", RequiresContainer: false},
 	"config.restore": {Description: "Restore a configuration file from backup", RequiresContainer: false},
 	"node.logs":      {Description: "Fetch historical logs from a container", RequiresContainer: true},
+	"key.info":       {Description: "Get validator key info", RequiresContainer: false},
+	"key.generate":   {Description: "Generate a new BLS key pair", RequiresContainer: false},
+	"key.import":     {Description: "Import a validator key", RequiresContainer: false},
+	"key.export":     {Description: "Export a validator key", RequiresContainer: false},
+	"key.backup":     {Description: "Backup the validator key", RequiresContainer: false},
+	"key.backups":    {Description: "List validator key backups", RequiresContainer: false},
 }
 
 // CommandSpec defines constraints for a whitelisted command.

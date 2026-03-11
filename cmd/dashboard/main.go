@@ -128,6 +128,7 @@ func main() {
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
 	configHandler := handlers.NewConfigHandler(hub, nodeStore)
 	logHandler := handlers.NewLogHandler(hub, nodeStore)
+	keyHandler := handlers.NewKeyHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
@@ -187,6 +188,11 @@ func main() {
 	mux.Handle("POST /api/nodes/{id}/config/restore", authMw(http.HandlerFunc(configHandler.HandleRestore)))
 	mux.Handle("POST /api/config/push", authMw(http.HandlerFunc(configHandler.HandleMultiPush)))
 	mux.Handle("GET /api/nodes/{id}/logs", authMw(http.HandlerFunc(logHandler.HandleFetchLogs)))
+	mux.Handle("GET /api/nodes/{id}/keys", authMw(http.HandlerFunc(keyHandler.HandleGetKeyInfo)))
+	mux.Handle("POST /api/nodes/{id}/keys/generate", authMw(http.HandlerFunc(keyHandler.HandleGenerateKey)))
+	mux.Handle("POST /api/nodes/{id}/keys/import", authMw(http.HandlerFunc(keyHandler.HandleImportKey)))
+	mux.Handle("GET /api/nodes/{id}/keys/export", authMw(http.HandlerFunc(keyHandler.HandleExportKey)))
+	mux.Handle("GET /api/nodes/{id}/keys/backups", authMw(http.HandlerFunc(keyHandler.HandleListKeyBackups)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
