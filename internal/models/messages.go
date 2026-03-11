@@ -45,6 +45,7 @@ type RegistrationRequest struct {
 type RegistrationResponse struct {
 	ServerID  string `json:"server_id"`
 	CertPEM   string `json:"cert_pem"`
+	KeyPEM    string `json:"key_pem"`
 	CACertPEM string `json:"ca_cert_pem"`
 }
 

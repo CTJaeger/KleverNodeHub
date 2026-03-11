@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #12/#13 completion**: Implement missing acceptance criteria
+  - Added `HandlePasskeyFinishRegister` and `HandlePasskeyFinishLogin` to complete WebAuthn ceremony
+  - Added `POST /api/agent/register` endpoint — validates token, creates server, issues mTLS certificate
+  - Implemented `registerWithDashboard()` HTTP client in agent (replaces placeholder)
+  - Agent now saves `KeyPEM` from registration response
+  - CA initialization in dashboard main (load or create, encrypted private key storage)
+  - Passkey credential persistence via `onCredentialsChanged` callback
+  - Added `RegistrationResponse.KeyPEM` field for agent private key delivery
+  - 5 new registration handler tests (success, invalid token, single-use, invalid body, generate token)
+
 - **Lint fixes**: Resolve all 15 staticcheck issues
   - Migrated `nhooyr.io/websocket` → `github.com/coder/websocket` (SA1019 deprecated)
   - Merged `if ctx.Err() != nil { break }` into `for ctx.Err() == nil` loop condition (QF1006)

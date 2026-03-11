@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/auth"
+	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/handlers"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
@@ -47,6 +48,17 @@ func main() {
 	serverStore := store.NewServerStore(db)
 	nodeStore := store.NewNodeStore(db)
 	settingsStore := store.NewSettingsStore(db)
+
+	// --- Certificate Authority ---
+	caDir := filepath.Join(*dataDir, "ca")
+	encKey, err := loadOrCreateEncryptionKey(settingsStore)
+	if err != nil {
+		log.Fatalf("encryption key: %v", err)
+	}
+	ca, err := loadOrCreateCA(caDir, encKey)
+	if err != nil {
+		log.Fatalf("CA: %v", err)
+	}
 
 	// --- Auth: JWT ---
 	jwtKey, err := loadOrCreateJWTKey(settingsStore)
@@ -108,7 +120,12 @@ func main() {
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
 	tokenManager := dashboard.NewTokenManager()
-	regHandler := handlers.NewRegistrationHandler(tokenManager)
+	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
+
+	// Persist passkey credentials when they change
+	authHandler.SetOnCredentialsChanged(func(creds []auth.PasskeyCredential) {
+		savePasskeyCredentials(settingsStore, creds)
+	})
 
 	// --- Server + Routes ---
 	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr})
@@ -122,10 +139,15 @@ func main() {
 	// Public routes (no auth required)
 	mux.HandleFunc("GET /api/setup/status", authHandler.HandleSetupStatus)
 	mux.HandleFunc("POST /api/auth/passkey/register/begin", authHandler.HandlePasskeyBeginRegister)
+	mux.HandleFunc("POST /api/auth/passkey/register/finish", authHandler.HandlePasskeyFinishRegister)
 	mux.HandleFunc("POST /api/auth/passkey/login/begin", authHandler.HandlePasskeyBeginLogin)
+	mux.HandleFunc("POST /api/auth/passkey/login/finish", authHandler.HandlePasskeyFinishLogin)
 	mux.HandleFunc("POST /api/auth/recovery", authHandler.HandleRecoveryLogin)
 	mux.HandleFunc("POST /api/auth/refresh", authHandler.HandleRefresh)
 	mux.HandleFunc("POST /api/auth/logout", authHandler.HandleLogout)
+
+	// Agent registration (token-based, no JWT required)
+	mux.HandleFunc("POST /api/agent/register", regHandler.HandleRegisterAgent)
 
 	// WebSocket endpoint for agents (authenticated via mTLS cert, not JWT)
 	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore)
@@ -226,6 +248,63 @@ func loadRecoveryCodes(settings *store.SettingsStore) []auth.RecoveryCode {
 		return nil
 	}
 	return codes
+}
+
+// savePasskeyCredentials persists passkey credentials to the settings store.
+func savePasskeyCredentials(settings *store.SettingsStore, creds []auth.PasskeyCredential) {
+	data, err := json.Marshal(creds)
+	if err != nil {
+		log.Printf("WARNING: failed to marshal passkey credentials: %v", err)
+		return
+	}
+	if err := settings.Set("passkey_credentials", string(data)); err != nil {
+		log.Printf("WARNING: failed to save passkey credentials: %v", err)
+	}
+}
+
+// loadOrCreateEncryptionKey loads or generates the master encryption key for CA private key storage.
+func loadOrCreateEncryptionKey(settings *store.SettingsStore) ([]byte, error) {
+	keyHex, err := settings.Get("encryption_key")
+	if err != nil {
+		return nil, fmt.Errorf("read encryption key: %w", err)
+	}
+
+	if keyHex != "" {
+		return hex.DecodeString(keyHex)
+	}
+
+	// Generate new 32-byte key (reuses the JWT key generation which produces 32 bytes)
+	key, err := auth.GenerateSigningKey()
+	if err != nil {
+		return nil, err
+	}
+	if err := settings.Set("encryption_key", hex.EncodeToString(key)); err != nil {
+		return nil, fmt.Errorf("save encryption key: %w", err)
+	}
+	log.Println("generated new encryption key")
+	return key, nil
+}
+
+// loadOrCreateCA loads the CA from disk or creates a new one.
+func loadOrCreateCA(caDir string, encKey []byte) (*crypto.CA, error) {
+	ca, err := crypto.LoadCAFromDir(caDir, encKey)
+	if err == nil {
+		log.Println("loaded existing CA")
+		return ca, nil
+	}
+
+	// Create new CA
+	ca, err = crypto.NewCA()
+	if err != nil {
+		return nil, fmt.Errorf("create CA: %w", err)
+	}
+
+	if err := ca.SaveToDir(caDir, encKey); err != nil {
+		return nil, fmt.Errorf("save CA: %w", err)
+	}
+
+	log.Println("created new certificate authority")
+	return ca, nil
 }
 
 // saveRecoveryCodes persists recovery codes to the settings store.

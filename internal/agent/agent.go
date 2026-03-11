@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -109,6 +113,7 @@ func (a *Agent) Register(dashboardURL, token string) error {
 
 	a.config.ServerID = resp.ServerID
 	a.config.CertPEM = resp.CertPEM
+	a.config.KeyPEM = resp.KeyPEM
 	a.config.CACertPEM = resp.CACertPEM
 
 	if err := a.SaveConfig(); err != nil {
@@ -190,11 +195,38 @@ func (a *Agent) BuildDiscoveryMessage(report *models.DiscoveryReport) *models.Me
 	}
 }
 
-// registerWithDashboard performs the HTTP-based registration.
-// This is a placeholder — actual implementation will use the WebSocket connection.
+// registerWithDashboard performs the HTTP-based registration with the dashboard.
 func registerWithDashboard(dashboardURL string, req *models.RegistrationRequest) (*models.RegistrationResponse, error) {
-	// TODO: Implement actual HTTP/WebSocket registration
-	_ = dashboardURL
-	_ = req
-	return nil, fmt.Errorf("not yet implemented")
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := dashboardURL + "/api/agent/register"
+
+	// Skip TLS verification for initial registration (dashboard uses self-signed cert)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed cert during registration
+		},
+	}
+
+	httpResp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("POST %s: %w", url, err)
+	}
+	defer func() { _ = httpResp.Body.Close() }()
+
+	if httpResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("registration failed: HTTP %d: %s", httpResp.StatusCode, string(respBody))
+	}
+
+	var resp models.RegistrationResponse
+	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &resp, nil
 }
