@@ -27,7 +27,7 @@ func newMockDockerForExecutor(t *testing.T) (*DockerClient, func()) {
 			cj := containerJSON{ID: "test123", Name: "/test-container"}
 			cj.State.Running = true
 			cj.Config.Image = "kleverapp/klever-go:v0.60.0"
-			json.NewEncoder(w).Encode(cj)
+			_ = json.NewEncoder(w).Encode(cj)
 		default:
 			http.NotFound(w, r)
 		}

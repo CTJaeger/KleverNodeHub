@@ -3,6 +3,7 @@ module github.com/CTJaeger/KleverNodeHub
 go 1.26.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/go-webauthn/webauthn v0.16.0
 	golang.org/x/crypto v0.48.0
 	modernc.org/sqlite v1.46.1
@@ -25,5 +26,4 @@ require (
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	nhooyr.io/websocket v1.8.17 // indirect
 )

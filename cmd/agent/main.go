@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/agent"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
@@ -83,10 +83,7 @@ func main() {
 	wsURL := buildWSURL(config.DashboardURL, config.ServerID)
 	delay := reconnectBaseDelay
 
-	for {
-		if ctx.Err() != nil {
-			break
-		}
+	for ctx.Err() == nil {
 
 		log.Printf("connecting to %s...", wsURL)
 		err := runAgentLoop(ctx, wsURL, ag, executor, *dockerSocket)
@@ -98,7 +95,6 @@ func main() {
 		select {
 		case <-time.After(delay):
 		case <-ctx.Done():
-			break
 		}
 
 		// Exponential backoff

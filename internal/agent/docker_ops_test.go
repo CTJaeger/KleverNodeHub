@@ -22,7 +22,7 @@ func newMockDockerForOps(t *testing.T) (*DockerClient, func()) {
 		// Pull image
 		case r.Method == http.MethodPost && containsPath(path, "/images/create"):
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"Pull complete"}`))
+			_, _ = w.Write([]byte(`{"status":"Pull complete"}`))
 
 		// Create container
 		case r.Method == http.MethodPost && containsPath(path, "/containers/create"):
@@ -87,12 +87,12 @@ func newMockDockerForOps(t *testing.T) (*DockerClient, func()) {
 	}
 
 	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
+	go func() { _ = server.Serve(listener) }()
 
 	client := NewDockerClient(socketPath)
 	return client, func() {
-		server.Close()
-		listener.Close()
+		_ = server.Close()
+		_ = listener.Close()
 		sockCleanup()
 	}
 }

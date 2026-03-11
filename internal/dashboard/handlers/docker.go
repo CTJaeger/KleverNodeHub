@@ -108,7 +108,7 @@ func (h *DockerHandler) handleImageChange(w http.ResponseWriter, r *http.Request
 	// Update node in DB
 	if result.Success {
 		node.DockerImageTag = req.ImageTag
-		h.nodeStore.Update(node)
+		_ = h.nodeStore.Update(node)
 	}
 
 	writeJSON(w, http.StatusOK, result)

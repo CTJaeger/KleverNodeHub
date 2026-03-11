@@ -48,7 +48,7 @@ func (s *SettingsStore) GetAll() (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get all settings: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]string)
 	for rows.Next() {

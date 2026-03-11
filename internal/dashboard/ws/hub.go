@@ -77,7 +77,7 @@ func (h *Hub) Register(serverID string) *AgentConn {
 	}
 	h.connections[serverID] = conn
 
-	h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
+	_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
 
 	log.Printf("agent connected: %s", serverID)
 	return conn

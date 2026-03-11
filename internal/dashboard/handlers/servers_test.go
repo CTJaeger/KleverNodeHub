@@ -31,7 +31,7 @@ func setupServerHandler(t *testing.T) (*ServerHandler, func()) {
 		RegisteredAt: time.Now().Unix(),
 	})
 
-	nodeStore.Create(&models.Node{
+	_ = nodeStore.Create(&models.Node{
 		ID:            "node-1",
 		ServerID:      "srv-1",
 		Name:          "klever-node1",
