@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Lint fixes**: Resolve all 15 staticcheck issues
+  - Migrated `nhooyr.io/websocket` → `github.com/coder/websocket` (SA1019 deprecated)
+  - Merged `if ctx.Err() != nil { break }` into `for ctx.Err() == nil` loop condition (QF1006)
+  - Removed ineffective `break` in `select` case (SA4011)
+  - `docker_test.go` nolint directive already had `staticcheck` (QF1002 — no change needed)
+
 - **Issue #13**: Wire agent main() — lifecycle, WebSocket, and command execution
   - CLI flags: `--config-dir`, `--dashboard-url`, `--register-token`, `--docker-socket`
   - Config load/save with registration flow

@@ -25,7 +25,7 @@ func setupHandlerTest(t *testing.T) (*NodeHandler, *ws.Hub, func()) {
 	nodeStore := store.NewNodeStore(db)
 
 	// Create test server and node
-	serverStore.Create(&models.Server{
+	_ = serverStore.Create(&models.Server{
 		ID:           "srv-1",
 		Name:         "Test Server",
 		Hostname:     "test",
@@ -33,7 +33,7 @@ func setupHandlerTest(t *testing.T) (*NodeHandler, *ws.Hub, func()) {
 		RegisteredAt: time.Now().Unix(),
 	})
 
-	nodeStore.Create(&models.Node{
+	_ = nodeStore.Create(&models.Node{
 		ID:            "node-1",
 		ServerID:      "srv-1",
 		Name:          "klever-node1",
@@ -176,7 +176,7 @@ func TestHandleBatch_AgentOffline(t *testing.T) {
 	}
 
 	var resp map[string][]batchResultEntry
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp["results"]) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(resp["results"]))

@@ -25,7 +25,7 @@ func setupDockerHandler(t *testing.T) (*DockerHandler, *ws.Hub, func()) {
 	serverStore := store.NewServerStore(db)
 	nodeStore := store.NewNodeStore(db)
 
-	serverStore.Create(&models.Server{
+	_ = serverStore.Create(&models.Server{
 		ID:           "srv-1",
 		Name:         "Test Server",
 		Hostname:     "test",
@@ -33,7 +33,7 @@ func setupDockerHandler(t *testing.T) (*DockerHandler, *ws.Hub, func()) {
 		RegisteredAt: time.Now().Unix(),
 	})
 
-	nodeStore.Create(&models.Node{
+	_ = nodeStore.Create(&models.Node{
 		ID:             "node-1",
 		ServerID:       "srv-1",
 		Name:           "klever-node1",
@@ -125,7 +125,7 @@ func TestHandleUpgrade_Success(t *testing.T) {
 	go func() {
 		data := <-conn.SendCh
 		var msg models.Message
-		json.Unmarshal(data, &msg)
+		_ = json.Unmarshal(data, &msg)
 		hub.HandleResult(&models.CommandResult{
 			CommandID: msg.ID,
 			Success:   true,

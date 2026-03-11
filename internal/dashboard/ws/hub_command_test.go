@@ -18,7 +18,7 @@ func setupHubForCommand(t *testing.T) (*Hub, func()) {
 
 	serverStore := store.NewServerStore(db)
 	// Create a test server
-	serverStore.Create(&models.Server{
+	_ = serverStore.Create(&models.Server{
 		ID:           "srv-1",
 		Name:         "Test Server",
 		Hostname:     "test",
@@ -27,7 +27,7 @@ func setupHubForCommand(t *testing.T) (*Hub, func()) {
 	})
 
 	hub := NewHub(serverStore)
-	return hub, func() { db.Close() }
+	return hub, func() { _ = db.Close() }
 }
 
 func TestSendCommand_AgentOffline(t *testing.T) {
@@ -134,7 +134,7 @@ func TestPendingCount(t *testing.T) {
 	// Start a command but don't respond
 	msg := &models.Message{ID: "cmd-4", Type: "command", Action: "node.start"}
 	go func() {
-		hub.SendCommand("srv-1", msg, 2*time.Second)
+		_, _ = hub.SendCommand("srv-1", msg, 2*time.Second)
 	}()
 
 	time.Sleep(50 * time.Millisecond)

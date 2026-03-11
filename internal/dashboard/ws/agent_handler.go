@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
@@ -118,7 +118,7 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 			log.Printf("agent info from %s: %s", serverID, string(data))
 
 		case "agent.heartbeat":
-			h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
+			_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)

@@ -142,7 +142,7 @@ func (h *NodeHandler) executeNodeCommand(nodeID, action string) batchResultEntry
 
 	// Update node status in DB if successful
 	if cmdResult.Success && cmdResult.Output != "" {
-		h.nodeStore.UpdateStatus(nodeID, cmdResult.Output)
+		_ = h.nodeStore.UpdateStatus(nodeID, cmdResult.Output)
 	}
 
 	return result
@@ -165,5 +165,5 @@ func containsOffline(s string) bool {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }

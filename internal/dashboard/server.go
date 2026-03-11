@@ -82,7 +82,7 @@ func (s *Server) servePage(templatePath string) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(tmpl)
+		_, _ = w.Write(tmpl)
 	}
 }
 
@@ -98,7 +98,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Build:   version.Get(),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // setSecurityHeaders adds security headers to the response.

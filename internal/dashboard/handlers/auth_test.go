@@ -49,7 +49,7 @@ func TestHandleSetupStatus_NoPasskeys(t *testing.T) {
 	}
 
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if resp["setup_complete"] != false {
 		t.Error("setup_complete should be false without passkeys")
@@ -70,7 +70,7 @@ func TestHandleRecoveryLogin_Valid(t *testing.T) {
 	}
 
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if resp["access_token"] == nil || resp["access_token"] == "" {
 		t.Error("expected access_token in response")

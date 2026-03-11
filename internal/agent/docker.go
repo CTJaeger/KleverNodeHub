@@ -188,7 +188,7 @@ func (d *DockerClient) StartContainer(ctx context.Context, containerName string)
 	if err != nil {
 		return fmt.Errorf("start container %s: %w", containerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent, http.StatusOK:
@@ -214,7 +214,7 @@ func (d *DockerClient) StopContainer(ctx context.Context, containerName string, 
 	if err != nil {
 		return fmt.Errorf("stop container %s: %w", containerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent, http.StatusOK:
@@ -240,7 +240,7 @@ func (d *DockerClient) RestartContainer(ctx context.Context, containerName strin
 	if err != nil {
 		return fmt.Errorf("restart container %s: %w", containerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent, http.StatusOK:

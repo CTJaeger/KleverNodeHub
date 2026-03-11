@@ -17,10 +17,10 @@ func newTestHub(t *testing.T) (*Hub, *store.ServerStore) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	ss := store.NewServerStore(db)
-	ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
+	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
 
 	hub := NewHub(ss)
 	t.Cleanup(func() { hub.Stop() })
@@ -92,10 +92,10 @@ func TestSendToDisconnectedAgent(t *testing.T) {
 func TestBroadcast(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := store.Open(filepath.Join(dir, "test.db"))
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	ss := store.NewServerStore(db)
-	ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
-	ss.Create(&models.Server{ID: "srv-2", Name: "S2", Hostname: "h2", IPAddress: "5.6.7.8", Status: "offline"})
+	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
+	_ = ss.Create(&models.Server{ID: "srv-2", Name: "S2", Hostname: "h2", IPAddress: "5.6.7.8", Status: "offline"})
 
 	hub := NewHub(ss)
 	defer hub.Stop()

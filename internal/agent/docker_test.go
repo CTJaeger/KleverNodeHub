@@ -216,7 +216,7 @@ func TestDiscoverNodesWithMockDocker(t *testing.T) {
 	// Start mock server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch { //nolint:gocritic
+		switch { //nolint:gocritic,staticcheck
 		case r.URL.Path == "/v1.24/containers/json":
 			_ = json.NewEncoder(w).Encode(listResponse)
 		case r.URL.Path == "/v1.24/containers/container1/json":
@@ -230,11 +230,11 @@ func TestDiscoverNodesWithMockDocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen unix socket: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Close()
+	go func() { _ = server.Serve(listener) }()
+	defer func() { _ = server.Close() }()
 
 	// Test discovery
 	client := NewDockerClient(socketPath)
@@ -279,11 +279,11 @@ func TestDiscoverNodesEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen unix socket: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Close()
+	go func() { _ = server.Serve(listener) }()
+	defer func() { _ = server.Close() }()
 
 	client := NewDockerClient(socketPath)
 	nodes, err := client.DiscoverNodes(context.Background())
@@ -334,11 +334,11 @@ func TestDiscoverNodesMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen unix socket: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Close()
+	go func() { _ = server.Serve(listener) }()
+	defer func() { _ = server.Close() }()
 
 	client := NewDockerClient(socketPath)
 	nodes, err := client.DiscoverNodes(context.Background())
