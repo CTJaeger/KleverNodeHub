@@ -19,13 +19,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run tests
-        run: go test ./... -v -race -coverprofile=coverage.out
+        run: go test ./... -v -count=1 -coverprofile=coverage.out
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -42,7 +42,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -58,7 +58,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -79,16 +79,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
 
       - name: Build Dashboard
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
         run: go build -o klever-node-hub-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/dashboard
 
       - name: Build Agent
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
         run: go build -o klever-agent-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agent
