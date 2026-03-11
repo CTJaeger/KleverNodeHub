@@ -8,10 +8,15 @@ import (
 
 // AllowedCommands defines the set of commands the agent will execute.
 var AllowedCommands = map[string]CommandSpec{
-	"node.start":   {Description: "Start a Klever node container", RequiresContainer: true},
-	"node.stop":    {Description: "Stop a Klever node container", RequiresContainer: true},
-	"node.restart": {Description: "Restart a Klever node container", RequiresContainer: true},
-	"node.status":  {Description: "Get status of a Klever node container", RequiresContainer: true},
+	"node.start":     {Description: "Start a Klever node container", RequiresContainer: true},
+	"node.stop":      {Description: "Stop a Klever node container", RequiresContainer: true},
+	"node.restart":   {Description: "Restart a Klever node container", RequiresContainer: true},
+	"node.status":    {Description: "Get status of a Klever node container", RequiresContainer: true},
+	"node.create":    {Description: "Create a new Klever node container", RequiresContainer: false},
+	"node.remove":    {Description: "Remove a Klever node container", RequiresContainer: true},
+	"node.upgrade":   {Description: "Upgrade a Klever node to a new image tag", RequiresContainer: true},
+	"node.pull":      {Description: "Pull a Docker image", RequiresContainer: false},
+	"node.discovery": {Description: "Scan for existing Klever nodes", RequiresContainer: false},
 }
 
 // CommandSpec defines constraints for a whitelisted command.

@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #10**: Docker operations — pull image, create/remove containers, upgrade/downgrade
+  - Docker image pull via Engine API with progress streaming
+  - Container creation with validated params (matching KleverNodeManagement script)
+  - Container removal with graceful stop
+  - Upgrade/downgrade flow: inspect → pull → remove → create → start
+  - Docker Hub tag listing with 15-min cache (filters dev/testnet/alpine tags)
+  - Dashboard API: POST upgrade/downgrade, GET /api/docker/tags
+  - Port auto-assignment, data directory management
+  - Extended command whitelist: create, remove, upgrade, pull, discovery
+  - 25+ new tests (container ops, validation, upgrade, config parsing)
+
 - **Issue #9**: Web UI shell — login, overview, and basic node list
   - Embedded HTTPS server with auto-generated self-signed cert
   - Security headers (CSP, X-Frame-Options, HSTS, XSS-Protection)

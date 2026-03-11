@@ -288,13 +288,14 @@ func parseContainerToNode(cj *containerJSON) DiscoveredNode {
 	node.RedundancyLevel = parseIntArg(cj.Config.Cmd, "--redundancy-level", 0)
 
 	// Extract directories from mounts
+	// Supports both legacy (/node/config) and current (/opt/klever-blockchain/config/node) paths
 	for _, m := range cj.Mounts {
+		dest := m.Destination
 		switch {
-		case strings.HasSuffix(m.Destination, "/node/config"):
+		case strings.HasSuffix(dest, "/node/config") || strings.HasSuffix(dest, "/config/node"):
 			node.ConfigDirectory = m.Source
-			// Data directory is the parent of config mount's source
 			node.DataDirectory = parentDir(m.Source)
-		case strings.HasSuffix(m.Destination, "/node/db"):
+		case strings.HasSuffix(dest, "/node/db") || strings.HasSuffix(dest, "/db"):
 			if node.DataDirectory == "" {
 				node.DataDirectory = parentDir(m.Source)
 			}
@@ -305,10 +306,13 @@ func parseContainerToNode(cj *containerJSON) DiscoveredNode {
 	if node.ConfigDirectory == "" {
 		for _, bind := range cj.HostConfig.Binds {
 			parts := strings.SplitN(bind, ":", 3)
-			if len(parts) >= 2 && strings.HasSuffix(parts[1], "/node/config") {
-				node.ConfigDirectory = parts[0]
-				node.DataDirectory = parentDir(parts[0])
-				break
+			if len(parts) >= 2 {
+				dest := parts[1]
+				if strings.HasSuffix(dest, "/node/config") || strings.HasSuffix(dest, "/config/node") {
+					node.ConfigDirectory = parts[0]
+					node.DataDirectory = parentDir(parts[0])
+					break
+				}
 			}
 		}
 	}
