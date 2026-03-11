@@ -63,11 +63,73 @@
                 </div>
             </div>
 
-            <!-- Metrics Placeholder (Phase 2) -->
+            <!-- Node Status Metrics -->
+            <div class="card mb-16" id="node-metrics-card">
+                <div class="card-header"><h3>Node Status</h3></div>
+                <div class="node-status-grid" id="node-status-grid">
+                    <div class="node-stat">
+                        <div class="stat-value" id="ns-nonce">-</div>
+                        <div class="stat-label">Block Nonce</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="stat-value" id="ns-epoch">-</div>
+                        <div class="stat-label">Epoch</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="stat-value" id="ns-peers">-</div>
+                        <div class="stat-label">Peers</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="stat-value" id="ns-consensus">-</div>
+                        <div class="stat-label">Consensus</div>
+                    </div>
+                </div>
+                <div class="mt-8" id="sync-section" style="display:none;">
+                    <div class="text-sm text-muted">Sync Progress</div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill green" id="sync-bar" style="width:0%"></div>
+                    </div>
+                    <div class="text-sm text-muted mt-8" id="sync-text"></div>
+                </div>
+            </div>
+
+            <!-- Time-Series Charts -->
             <div class="card mb-16">
-                <div class="card-header"><h3>Metrics</h3></div>
-                <div class="empty-state">
-                    <p class="text-muted text-sm">Performance metrics and charts coming in Phase 2.</p>
+                <div class="card-header">
+                    <h3>Metrics</h3>
+                    <div class="time-range" id="time-range">
+                        <button onclick="setTimeRange(3600)" class="active">1h</button>
+                        <button onclick="setTimeRange(21600)">6h</button>
+                        <button onclick="setTimeRange(86400)">24h</button>
+                        <button onclick="setTimeRange(604800)">7d</button>
+                        <button onclick="setTimeRange(2592000)">30d</button>
+                    </div>
+                </div>
+                <div class="metrics-grid">
+                    <div>
+                        <div class="chart-header"><h4>Block Nonce</h4></div>
+                        <div class="chart-container"><canvas id="chart-nonce"></canvas></div>
+                    </div>
+                    <div>
+                        <div class="chart-header"><h4>Connected Peers</h4></div>
+                        <div class="chart-container"><canvas id="chart-peers"></canvas></div>
+                    </div>
+                    <div>
+                        <div class="chart-header"><h4>Transactions Processed</h4></div>
+                        <div class="chart-container"><canvas id="chart-txs"></canvas></div>
+                    </div>
+                    <div>
+                        <div class="chart-header"><h4>Network I/O (bps)</h4></div>
+                        <div class="chart-container"><canvas id="chart-network"></canvas></div>
+                    </div>
+                    <div>
+                        <div class="chart-header"><h4>CPU Load %</h4></div>
+                        <div class="chart-container"><canvas id="chart-cpu"></canvas></div>
+                    </div>
+                    <div>
+                        <div class="chart-header"><h4>Memory Load %</h4></div>
+                        <div class="chart-container"><canvas id="chart-mem"></canvas></div>
+                    </div>
                 </div>
             </div>
 
@@ -91,12 +153,13 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/ws.js"></script>
+    <script src="/static/js/charts.js"></script>
     <script>
         let nodeId = '';
         let node = null;
+        let currentRange = 3600; // default 1h
 
         async function init() {
-            // Extract node ID from URL: /node/{id}
             const parts = window.location.pathname.split('/');
             nodeId = parts[parts.length - 1];
 
@@ -106,21 +169,24 @@
             }
 
             await loadNode();
+            await loadMetrics();
 
-            // Auto-refresh
-            setInterval(loadNode, 10000);
+            setInterval(async () => {
+                await loadNode();
+                await loadMetrics();
+            }, 15000);
 
-            // WebSocket updates
             WS.connect();
             WS.on('node.update', (data) => {
                 if (data && data.id === nodeId) loadNode();
             });
+
+            window.addEventListener('resize', () => loadMetrics());
         }
 
         async function loadNode() {
             const data = await API.getJSON('/api/nodes/' + nodeId);
             if (!data) return;
-
             node = data;
             renderNode();
         }
@@ -135,12 +201,10 @@
             badge.textContent = node.status || 'unknown';
             badge.className = 'badge badge-' + (node.status || 'stopped');
 
-            // Update action buttons based on status
             const isRunning = node.status === 'running';
             document.getElementById('btn-start').disabled = isRunning;
             document.getElementById('btn-stop').disabled = !isRunning;
 
-            // Details
             document.getElementById('node-details').innerHTML =
                 infoRow('Container', node.container_name) +
                 infoRow('Type', node.node_type || 'validator') +
@@ -151,13 +215,140 @@
                 infoRow('BLS Public Key', node.bls_public_key ? truncate(node.bls_public_key, 24) : '-');
         }
 
+        async function loadMetrics() {
+            const now = Math.floor(Date.now() / 1000);
+            const from = now - currentRange;
+            const xFormat = currentRange > 86400 ? Charts._formatDateTime : Charts._formatTime;
+
+            // Load multiple metrics in parallel
+            const [nonceData, peersData, txData, recvData, sentData, cpuData, memData] = await Promise.all([
+                fetchMetric('klv_nonce', from, now),
+                fetchMetric('klv_num_connected_peers', from, now),
+                fetchMetric('klv_num_transactions_processed', from, now),
+                fetchMetric('klv_network_recv_bps', from, now),
+                fetchMetric('klv_network_sent_bps', from, now),
+                fetchMetric('klv_cpu_load_percent', from, now),
+                fetchMetric('klv_mem_load_percent', from, now),
+            ]);
+
+            // Update status header from latest metrics
+            if (nonceData && nonceData.length > 0) {
+                const latest = nonceData[nonceData.length - 1];
+                document.getElementById('ns-nonce').textContent = Charts._formatNumber(latest.value);
+            }
+
+            // Try to get epoch, peers, consensus from latest data
+            updateStatusFromLatest('klv_epoch_number', 'ns-epoch', from, now);
+            if (peersData && peersData.length > 0) {
+                document.getElementById('ns-peers').textContent = Math.round(peersData[peersData.length - 1].value);
+            }
+            updateStatusFromLatest('klv_consensus_state', 'ns-consensus', from, now);
+
+            // Render charts
+            renderChart('chart-nonce', nonceData, { color: '#4fc3f7', xFormat });
+            renderChart('chart-peers', peersData, { color: '#3fb950', xFormat });
+            renderChart('chart-txs', txData, { color: '#d29922', xFormat });
+            renderMultiChart('chart-network', [
+                { data: recvData, label: 'Recv', color: '#4fc3f7' },
+                { data: sentData, label: 'Sent', color: '#f85149' },
+            ], { xFormat, yFormat: Charts.formatBps });
+            renderChart('chart-cpu', cpuData, { color: '#f85149', yLabel: '%', xFormat });
+            renderChart('chart-mem', memData, { color: '#d29922', yLabel: '%', xFormat });
+
+            // Sync progress
+            updateSyncProgress(nonceData);
+        }
+
+        async function fetchMetric(name, from, to) {
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/metrics?name=' + name + '&from=' + from + '&to=' + to);
+                if (Array.isArray(data)) return data;
+                if (data && data.recent) return data.recent;
+                return data || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function updateStatusFromLatest(metricName, elementId, from, to) {
+            try {
+                const data = await fetchMetric(metricName, from, to);
+                if (data && data.length > 0) {
+                    const val = data[data.length - 1].value;
+                    const el = document.getElementById(elementId);
+                    if (typeof val === 'number' && val === Math.floor(val)) {
+                        el.textContent = val.toLocaleString();
+                    } else {
+                        el.textContent = String(val);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderChart(canvasId, data, opts = {}) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas || !data || data.length < 2) return;
+
+            Charts.timeSeries(canvas, {
+                labels: data.map(p => p.collected_at),
+                datasets: [{ values: data.map(p => p.value), color: opts.color || '#4fc3f7' }]
+            }, {
+                yLabel: opts.yLabel,
+                yFormat: opts.yFormat,
+                xFormat: opts.xFormat
+            });
+        }
+
+        function renderMultiChart(canvasId, datasets, opts = {}) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            // Use longest dataset for labels
+            let longestData = [];
+            datasets.forEach(ds => { if (ds.data && ds.data.length > longestData.length) longestData = ds.data; });
+            if (longestData.length < 2) return;
+
+            Charts.timeSeries(canvas, {
+                labels: longestData.map(p => p.collected_at),
+                datasets: datasets.filter(ds => ds.data && ds.data.length > 0).map(ds => ({
+                    values: ds.data.map(p => p.value),
+                    label: ds.label,
+                    color: ds.color
+                }))
+            }, {
+                yFormat: opts.yFormat,
+                xFormat: opts.xFormat
+            });
+        }
+
+        function updateSyncProgress(nonceData) {
+            const section = document.getElementById('sync-section');
+            // Show sync progress if node is syncing
+            if (node && node.status === 'syncing' && nonceData && nonceData.length > 0) {
+                section.style.display = 'block';
+                const current = nonceData[nonceData.length - 1].value;
+                // Use a rough estimate for the highest nonce
+                const pct = 99; // will be refined when we have klv_probable_highest_nonce
+                document.getElementById('sync-bar').style.width = pct + '%';
+                document.getElementById('sync-text').textContent = 'Block ' + Charts._formatNumber(current);
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
+        function setTimeRange(seconds) {
+            currentRange = seconds;
+            document.querySelectorAll('#time-range button').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            loadMetrics();
+        }
+
         async function nodeAction(action) {
             const resultEl = document.getElementById('action-result');
             resultEl.className = 'alert alert-warning mt-8';
             resultEl.textContent = 'Sending ' + action + ' command...';
             resultEl.classList.remove('hidden');
 
-            // Disable all buttons
             ['btn-start', 'btn-stop', 'btn-restart'].forEach(id => {
                 document.getElementById(id).disabled = true;
             });
@@ -172,10 +363,7 @@
                 resultEl.textContent = 'Failed: ' + (result?.data?.error || 'Unknown error');
             }
 
-            // Reload node data
             setTimeout(loadNode, 1000);
-
-            // Hide result after 5 seconds
             setTimeout(() => { resultEl.classList.add('hidden'); }, 5000);
         }
 
