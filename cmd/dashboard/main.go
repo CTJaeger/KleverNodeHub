@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 	"github.com/CTJaeger/KleverNodeHub/web"
 )
 
 func main() {
-	fmt.Println("Klever Node Hub - Dashboard")
+	info := version.Get()
+	fmt.Printf("Klever Node Hub - Dashboard %s (%s)\n", info.Version, info.GitCommit)
 
 	staticFS, err := fs.Sub(web.StaticFS, "static")
 	if err != nil {

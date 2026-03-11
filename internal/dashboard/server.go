@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 	"github.com/CTJaeger/KleverNodeHub/web"
 )
 
@@ -56,6 +58,9 @@ func (s *Server) SetupRoutes() error {
 	}
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
+	// Health endpoint (unauthenticated)
+	s.mux.HandleFunc("GET /health", s.handleHealth)
+
 	// Page routes — serve HTML templates
 	s.mux.HandleFunc("GET /", s.servePage("templates/login.html"))
 	s.mux.HandleFunc("GET /login", s.servePage("templates/login.html"))
@@ -79,6 +84,21 @@ func (s *Server) servePage(templatePath string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(tmpl)
 	}
+}
+
+// handleHealth returns build info and uptime. Unauthenticated, used for monitoring.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	resp := struct {
+		Status  string       `json:"status"`
+		Uptime  string       `json:"uptime"`
+		Build   version.Info `json:"build"`
+	}{
+		Status:  "ok",
+		Uptime:  version.Uptime().Round(time.Second).String(),
+		Build:   version.Get(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 // setSecurityHeaders adds security headers to the response.
