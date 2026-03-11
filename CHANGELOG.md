@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Lint Fix**: Fixed all 53 golangci-lint issues (50 errcheck, 2 staticcheck, 1 unused)
+  - `internal/store/`: Checked rows.Close, tx.Rollback, json.Unmarshal, db.Close returns
+  - `internal/agent/`: Checked resp.Body.Close, io.Copy, StopContainer; replaced loop with append spread
+  - `internal/crypto/mtls_test.go`: Checked all deferred Close, Serve, Write, Fprintf calls
+  - `internal/dashboard/`: Checked SetupRoutes, w.Write returns
+  - `internal/dashboard/handlers/nodes.go`: Removed unused `nodeActionRequest` type
+
 - **CI Fix**: Updated Go version from 1.22 to 1.26 in CI workflow (matching project go.mod 1.25+)
   - Removed `-race` flag (requires CGO, we use CGO_ENABLED=0)
   - Added explicit `CGO_ENABLED=0` for cross-compilation builds

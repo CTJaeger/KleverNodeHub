@@ -67,7 +67,7 @@ func (s *NodeStore) ListByServer(serverID string) ([]models.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list nodes by server: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanNodes(rows)
 }
@@ -90,7 +90,7 @@ func (s *NodeStore) ListAll(statusFilter string) ([]models.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list all nodes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanNodes(rows)
 }
@@ -179,7 +179,7 @@ func scanNodeFromScanner(s scanner) (*models.Node, error) {
 	}
 
 	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &node.Metadata)
+		_ = json.Unmarshal([]byte(metadataStr), &node.Metadata)
 	}
 
 	return &node, nil

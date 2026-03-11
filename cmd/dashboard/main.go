@@ -28,7 +28,7 @@ func main() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(tmpl)
+		_, _ = w.Write(tmpl)
 	})
 
 	addr := ":9443"

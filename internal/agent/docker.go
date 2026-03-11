@@ -93,7 +93,7 @@ func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, erro
 	if err != nil {
 		return nil, fmt.Errorf("list containers: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -125,7 +125,7 @@ func (d *DockerClient) InspectContainer(ctx context.Context, containerID string)
 	if err != nil {
 		return nil, fmt.Errorf("inspect container %s: %w", containerID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

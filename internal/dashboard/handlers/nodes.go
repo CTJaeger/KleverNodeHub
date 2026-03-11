@@ -27,11 +27,6 @@ func NewNodeHandler(hub *ws.Hub, nodeStore *store.NodeStore) *NodeHandler {
 	}
 }
 
-// nodeActionRequest is the request body for node actions.
-type nodeActionRequest struct {
-	Action string `json:"action,omitempty"` // Used only for batch
-}
-
 // batchRequest is the request body for batch operations.
 type batchRequest struct {
 	Action  string   `json:"action"`   // "node.start", "node.stop", "node.restart"

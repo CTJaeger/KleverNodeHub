@@ -30,26 +30,26 @@ func Open(dbPath string) (*DB, error) {
 
 	// Enable WAL mode for better concurrent read performance
 	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
 	// Enable foreign keys
 	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	// Set busy timeout for concurrent access (5 seconds)
 	if _, err := sqlDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}
 
 	store := &DB{db: sqlDB}
 
 	if err := store.migrate(); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
@@ -95,12 +95,12 @@ func (d *DB) migrate() error {
 		}
 
 		if _, err := tx.Exec(migration); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("run migration %d: %w", version, err)
 		}
 
 		if _, err := tx.Exec("INSERT INTO schema_version (version) VALUES (?)", version); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %d: %w", version, err)
 		}
 

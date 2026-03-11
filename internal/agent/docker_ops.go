@@ -70,7 +70,7 @@ func (d *DockerClient) PullImage(ctx context.Context, image string) error {
 	}
 
 	// Docker streams JSON progress — consume it all
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (d *DockerClient) CreateContainer(ctx context.Context, cfg *ContainerConfig
 // RemoveContainer stops and removes a container.
 func (d *DockerClient) RemoveContainer(ctx context.Context, containerName string, force bool) error {
 	// Stop first (ignore errors if already stopped)
-	d.StopContainer(ctx, containerName, 30)
+	_ = d.StopContainer(ctx, containerName, 30)
 
 	forceParam := ""
 	if force {
@@ -325,9 +325,7 @@ func (d *DockerClient) ListLocalImages(ctx context.Context) ([]string, error) {
 
 	var tags []string
 	for _, img := range images {
-		for _, tag := range img.RepoTags {
-			tags = append(tags, tag)
-		}
+		tags = append(tags, img.RepoTags...)
 	}
 	return tags, nil
 }
@@ -340,7 +338,7 @@ func IsPortAvailable(port int) bool {
 	if err != nil {
 		return true // Can't connect = port is free
 	}
-	ln.Close()
+	_ = ln.Close()
 	return false
 }
 

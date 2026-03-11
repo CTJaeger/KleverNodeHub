@@ -216,11 +216,11 @@ func TestDiscoverNodesWithMockDocker(t *testing.T) {
 	// Start mock server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch {
+		switch { //nolint:gocritic
 		case r.URL.Path == "/v1.24/containers/json":
-			json.NewEncoder(w).Encode(listResponse)
+			_ = json.NewEncoder(w).Encode(listResponse)
 		case r.URL.Path == "/v1.24/containers/container1/json":
-			json.NewEncoder(w).Encode(inspectResponse)
+			_ = json.NewEncoder(w).Encode(inspectResponse)
 		default:
 			http.NotFound(w, r)
 		}
@@ -272,7 +272,7 @@ func TestDiscoverNodesEmpty(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]containerListEntry{})
+		_ = json.NewEncoder(w).Encode([]containerListEntry{})
 	})
 
 	listener, err := net.Listen("unix", socketPath)
@@ -320,11 +320,11 @@ func TestDiscoverNodesMultiple(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1.24/containers/json":
-			json.NewEncoder(w).Encode(listResponse)
+			_ = json.NewEncoder(w).Encode(listResponse)
 		case "/v1.24/containers/c1/json":
-			json.NewEncoder(w).Encode(inspectC1)
+			_ = json.NewEncoder(w).Encode(inspectC1)
 		case "/v1.24/containers/c2/json":
-			json.NewEncoder(w).Encode(inspectC2)
+			_ = json.NewEncoder(w).Encode(inspectC2)
 		default:
 			http.NotFound(w, r)
 		}
