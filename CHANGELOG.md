@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #17**: Metrics dashboard UI — charts, gauges, and historical graphs
+  - Custom lightweight charting module (`charts.js`) — SVG ring gauges, Canvas time-series, sparklines
+  - Overview page: CPU/Memory/Disk gauges per server, node status breakdown (running/stopped/syncing)
+  - Node detail page: status header (nonce, epoch, peers, consensus), sync progress bar
+  - 6 time-series charts: block nonce, peers, transactions, network I/O, CPU, memory
+  - Time range selector (1h, 6h, 24h, 7d, 30d), charts auto-resize on window resize
+  - Auto-refresh every 15s, WebSocket push for real-time updates
+  - Responsive layout: charts stack vertically on mobile, 2-column grid on desktop
+  - No external dependencies, all embedded via Go `embed.FS`
+
 - **Issue #16**: Metrics storage — hot/cold tables with retention and decimation
   - Migration 2: `metrics_recent`, `metrics_archive`, `system_metrics` tables with indexes
   - `MetricsStore` with batch insert, query (recent/archive/auto-resolution), decimation, purge

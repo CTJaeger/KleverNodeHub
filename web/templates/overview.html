@@ -52,6 +52,18 @@
                         <div class="text-muted text-sm">Online</div>
                         <div style="font-size:24px;font-weight:700;color:var(--success);" id="stat-online">-</div>
                     </div>
+                    <div>
+                        <div class="text-muted text-sm">Running Nodes</div>
+                        <div style="font-size:24px;font-weight:700;color:var(--success);" id="stat-running">-</div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-sm">Stopped</div>
+                        <div style="font-size:24px;font-weight:700;color:var(--text-secondary);" id="stat-stopped">-</div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-sm">Syncing</div>
+                        <div style="font-size:24px;font-weight:700;color:var(--warning);" id="stat-syncing">-</div>
+                    </div>
                 </div>
             </div>
 
@@ -98,6 +110,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/ws.js"></script>
+    <script src="/static/js/charts.js"></script>
     <script>
         let servers = [];
         let nodes = [];
@@ -105,7 +118,11 @@
 
         async function init() {
             await loadData();
-            refreshInterval = setInterval(loadData, 10000);
+            await loadServerMetrics();
+            refreshInterval = setInterval(async () => {
+                await loadData();
+                await loadServerMetrics();
+            }, 10000);
 
             // WebSocket for real-time updates
             WS.connect();
@@ -138,7 +155,16 @@
             document.getElementById('stat-nodes').textContent = nodes.length;
             const online = servers.filter(s => s.status === 'online').length;
             document.getElementById('stat-online').textContent = online;
+
+            const running = nodes.filter(n => n.status === 'running').length;
+            const stopped = nodes.filter(n => n.status === 'stopped').length;
+            const syncing = nodes.filter(n => n.status === 'syncing').length;
+            document.getElementById('stat-running').textContent = running;
+            document.getElementById('stat-stopped').textContent = stopped;
+            document.getElementById('stat-syncing').textContent = syncing;
         }
+
+        let serverMetrics = {}; // serverID → latest system metrics
 
         function renderServers() {
             const container = document.getElementById('server-list');
@@ -152,6 +178,7 @@
             container.innerHTML = servers.map(server => {
                 const serverNodes = nodes.filter(n => n.server_id === server.id);
                 const badgeClass = server.status === 'online' ? 'badge-online' : 'badge-offline';
+                const m = serverMetrics[server.id];
 
                 return '<div class="card">' +
                     '<div class="card-header">' +
@@ -162,9 +189,35 @@
                     '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.ip_address) + '</span></div>' +
                     '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
                     '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
+                    '<div class="gauge-row">' +
+                        '<div class="gauge-item" id="gauge-cpu-' + server.id + '"></div>' +
+                        '<div class="gauge-item" id="gauge-mem-' + server.id + '"></div>' +
+                        '<div class="gauge-item" id="gauge-disk-' + server.id + '"></div>' +
+                    '</div>' +
                     (serverNodes.length > 0 ? '<div class="mt-8">' + serverNodes.map(renderNodeBadge).join('') + '</div>' : '') +
                 '</div>';
             }).join('');
+
+            // Render gauges after DOM is updated
+            servers.forEach(server => {
+                const m = serverMetrics[server.id];
+                Charts.gauge(document.getElementById('gauge-cpu-' + server.id), m ? m.cpu_percent : 0, { label: 'CPU', size: 70 });
+                Charts.gauge(document.getElementById('gauge-mem-' + server.id), m ? m.mem_percent : 0, { label: 'Memory', size: 70 });
+                Charts.gauge(document.getElementById('gauge-disk-' + server.id), m ? m.disk_percent : 0, { label: 'Disk', size: 70 });
+            });
+        }
+
+        async function loadServerMetrics() {
+            for (const server of servers) {
+                if (server.status !== 'online') continue;
+                try {
+                    const data = await API.getJSON('/api/servers/' + server.id + '/metrics?from=' + (Math.floor(Date.now()/1000) - 300));
+                    if (data && data.length > 0) {
+                        serverMetrics[server.id] = data[data.length - 1]; // latest
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            renderServers();
         }
 
         function renderNodeBadge(node) {
