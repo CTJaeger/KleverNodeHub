@@ -3,6 +3,27 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #13**: Wire agent main() — lifecycle, WebSocket, and command execution
+  - CLI flags: `--config-dir`, `--dashboard-url`, `--register-token`, `--docker-socket`
+  - Config load/save with registration flow
+  - WebSocket connection to dashboard with auto-reconnect (exponential backoff)
+  - Message pump: read commands, execute via Executor, send results back
+  - Heartbeat every 30s, auto-discovery every 5 min
+  - Graceful shutdown on SIGINT/SIGTERM
+  - Added `Agent.Config()` getter
+
+- **Issue #12**: Wire dashboard main() — connect all Phase 1 components
+  - CLI flags: `--addr`, `--data-dir` (default `~/.klever-node-hub/`)
+  - Full dependency chain: DB → stores → auth → hub → handlers → routes
+  - JWT signing key persisted in settings store (auto-generated on first run)
+  - WebAuthn + recovery codes loaded from settings store
+  - Initial recovery codes printed to console on first run
+  - Auth middleware on all protected API routes
+  - WebSocket agent handler (`/ws/agent`) with message dispatch
+  - Discovery report processing: creates/updates nodes in DB
+  - Graceful shutdown on SIGINT/SIGTERM
+  - Added `nhooyr.io/websocket` dependency for WebSocket support
+
 - **Lint Fix**: Fixed all 53 golangci-lint issues (50 errcheck, 2 staticcheck, 1 unused)
   - `internal/store/`: Checked rows.Close, tx.Rollback, json.Unmarshal, db.Close returns
   - `internal/agent/`: Checked resp.Body.Close, io.Copy, StopContainer; replaced loop with append spread

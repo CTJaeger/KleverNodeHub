@@ -41,6 +41,11 @@ func New(configDir string) *Agent {
 	}
 }
 
+// Config returns the agent's current configuration.
+func (a *Agent) Config() *Config {
+	return a.config
+}
+
 // LoadConfig loads the agent configuration from disk.
 func (a *Agent) LoadConfig() error {
 	path := filepath.Join(a.configDir, configFileName)
