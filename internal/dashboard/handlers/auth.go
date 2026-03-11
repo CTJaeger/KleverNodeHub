@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/auth"
+	"github.com/go-webauthn/webauthn/protocol"
 )
 
 // AuthHandler handles authentication API requests.
@@ -13,6 +14,10 @@ type AuthHandler struct {
 	jwt      *auth.JWTManager
 	webauthn *auth.WebAuthnManager
 	recovery *auth.RecoveryManager
+
+	// onCredentialsChanged is called when passkey credentials are added or updated.
+	// Used to persist credentials to the settings store.
+	onCredentialsChanged func([]auth.PasskeyCredential)
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -22,6 +27,11 @@ func NewAuthHandler(jwt *auth.JWTManager, webauthn *auth.WebAuthnManager, recove
 		webauthn: webauthn,
 		recovery: recovery,
 	}
+}
+
+// SetOnCredentialsChanged sets the callback for credential persistence.
+func (h *AuthHandler) SetOnCredentialsChanged(fn func([]auth.PasskeyCredential)) {
+	h.onCredentialsChanged = fn
 }
 
 // HandleSetupStatus returns whether initial setup has been completed.
@@ -56,6 +66,74 @@ func (h *AuthHandler) HandlePasskeyBeginRegister(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"options":    options,
 		"session_id": sessionID,
+	})
+}
+
+// HandlePasskeyFinishRegister completes the WebAuthn registration ceremony.
+// POST /api/auth/passkey/register/finish
+func (h *AuthHandler) HandlePasskeyFinishRegister(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.URL.Query().Get("session_id")
+	name := r.URL.Query().Get("name")
+	if sessionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id query parameter required"})
+		return
+	}
+	if name == "" {
+		name = "default"
+	}
+
+	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid credential: " + err.Error()})
+		return
+	}
+
+	if err := h.webauthn.FinishRegistration(sessionID, parsedResponse, name); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onCredentialsChanged != nil {
+		h.onCredentialsChanged(h.webauthn.Credentials())
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "registered"})
+}
+
+// HandlePasskeyFinishLogin completes the WebAuthn login ceremony and issues JWT tokens.
+// POST /api/auth/passkey/login/finish
+func (h *AuthHandler) HandlePasskeyFinishLogin(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id query parameter required"})
+		return
+	}
+
+	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid assertion: " + err.Error()})
+		return
+	}
+
+	if err := h.webauthn.FinishLogin(sessionID, parsedResponse); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onCredentialsChanged != nil {
+		h.onCredentialsChanged(h.webauthn.Credentials())
+	}
+
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+		return
+	}
+
+	setAuthCookies(w, tokens)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
 	})
 }
 
