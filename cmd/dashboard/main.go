@@ -19,6 +19,7 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/handlers"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/scheduler"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
+	"github.com/CTJaeger/KleverNodeHub/internal/notify"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
@@ -130,6 +131,9 @@ func main() {
 	logHandler := handlers.NewLogHandler(hub, nodeStore)
 	keyHandler := handlers.NewKeyHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
+	notifyManager := notify.NewManager()
+	handlers.LoadSavedChannels(settingsStore, notifyManager)
+	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -193,6 +197,11 @@ func main() {
 	mux.Handle("POST /api/nodes/{id}/keys/import", authMw(http.HandlerFunc(keyHandler.HandleImportKey)))
 	mux.Handle("GET /api/nodes/{id}/keys/export", authMw(http.HandlerFunc(keyHandler.HandleExportKey)))
 	mux.Handle("GET /api/nodes/{id}/keys/backups", authMw(http.HandlerFunc(keyHandler.HandleListKeyBackups)))
+	mux.Handle("GET /api/notifications/channels", authMw(http.HandlerFunc(notifyHandler.HandleListChannels)))
+	mux.Handle("POST /api/notifications/channels", authMw(http.HandlerFunc(notifyHandler.HandleAddChannel)))
+	mux.Handle("DELETE /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleRemoveChannel)))
+	mux.Handle("POST /api/notifications/channels/{name}/test", authMw(http.HandlerFunc(notifyHandler.HandleTestChannel)))
+	mux.Handle("GET /api/notifications/history", authMw(http.HandlerFunc(notifyHandler.HandleHistory)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
