@@ -65,7 +65,7 @@ func (s *ServerStore) List() ([]models.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var servers []models.Server
 	for rows.Next() {
@@ -166,7 +166,7 @@ func scanServerFromScanner(s scanner) (*models.Server, error) {
 
 	srv.Certificate = cert
 	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &srv.Metadata)
+		_ = json.Unmarshal([]byte(metadataStr), &srv.Metadata)
 	}
 
 	return &srv, nil

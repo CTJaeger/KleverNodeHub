@@ -27,7 +27,7 @@ func TestServerSetupRoutes(t *testing.T) {
 
 func TestServerSecurityHeaders(t *testing.T) {
 	srv := NewServer(&ServerConfig{Addr: ":9443"})
-	srv.SetupRoutes()
+	_ = srv.SetupRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	w := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestServerSecurityHeaders(t *testing.T) {
 
 func TestServerOverviewPage(t *testing.T) {
 	srv := NewServer(&ServerConfig{Addr: ":9443"})
-	srv.SetupRoutes()
+	_ = srv.SetupRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, "/overview", nil)
 	w := httptest.NewRecorder()
@@ -68,7 +68,7 @@ func TestServerOverviewPage(t *testing.T) {
 
 func TestServerNodePage(t *testing.T) {
 	srv := NewServer(&ServerConfig{Addr: ":9443"})
-	srv.SetupRoutes()
+	_ = srv.SetupRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, "/node/test-id", nil)
 	w := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestServerNodePage(t *testing.T) {
 
 func TestServerStaticAssets(t *testing.T) {
 	srv := NewServer(&ServerConfig{Addr: ":9443"})
-	srv.SetupRoutes()
+	_ = srv.SetupRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, "/static/css/style.css", nil)
 	w := httptest.NewRecorder()

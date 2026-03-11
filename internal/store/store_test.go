@@ -17,7 +17,7 @@ func newTestDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -31,7 +31,7 @@ func TestOpenCreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Error("database file was not created")
@@ -47,13 +47,13 @@ func TestMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open 1: %v", err)
 	}
-	db1.Close()
+	_ = db1.Close()
 
 	db2, err := Open(dbPath)
 	if err != nil {
 		t.Fatalf("open 2: %v", err)
 	}
-	db2.Close()
+	_ = db2.Close()
 }
 
 func TestWALMode(t *testing.T) {
@@ -105,8 +105,8 @@ func TestSettingsUpsert(t *testing.T) {
 	db := newTestDB(t)
 	ss := NewSettingsStore(db)
 
-	ss.Set("key1", "v1")
-	ss.Set("key1", "v2")
+	_ = ss.Set("key1", "v1")
+	_ = ss.Set("key1", "v2")
 
 	val, _ := ss.Get("key1")
 	if val != "v2" {
@@ -118,8 +118,8 @@ func TestSettingsGetAll(t *testing.T) {
 	db := newTestDB(t)
 	ss := NewSettingsStore(db)
 
-	ss.Set("a", "1")
-	ss.Set("b", "2")
+	_ = ss.Set("a", "1")
+	_ = ss.Set("b", "2")
 
 	all, err := ss.GetAll()
 	if err != nil {
@@ -137,8 +137,8 @@ func TestSettingsDelete(t *testing.T) {
 	db := newTestDB(t)
 	ss := NewSettingsStore(db)
 
-	ss.Set("key1", "val")
-	ss.Delete("key1")
+	_ = ss.Set("key1", "val")
+	_ = ss.Delete("key1")
 
 	val, _ := ss.Get("key1")
 	if val != "" {
@@ -193,7 +193,7 @@ func TestServerCRUD(t *testing.T) {
 	}
 
 	// List
-	ss.Create(&models.Server{ID: "srv-2", Name: "Server 2", Hostname: "host2", IPAddress: "10.0.0.2", Status: "online"})
+	_ = ss.Create(&models.Server{ID: "srv-2", Name: "Server 2", Hostname: "host2", IPAddress: "10.0.0.2", Status: "online"})
 	servers, err := ss.List()
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -226,7 +226,7 @@ func TestServerUpdateHeartbeat(t *testing.T) {
 	db := newTestDB(t)
 	ss := NewServerStore(db)
 
-	ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
+	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
 
 	if err := ss.UpdateHeartbeat("srv-1", 1234567890); err != nil {
 		t.Fatalf("heartbeat: %v", err)
@@ -256,7 +256,7 @@ func TestServerWithCertificate(t *testing.T) {
 	ss := NewServerStore(db)
 
 	cert := []byte("fake-certificate-data")
-	ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online", Certificate: cert})
+	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online", Certificate: cert})
 
 	srv, _ := ss.GetByID("srv-1")
 	if string(srv.Certificate) != "fake-certificate-data" {
@@ -268,7 +268,7 @@ func TestServerWithMetadata(t *testing.T) {
 	db := newTestDB(t)
 	ss := NewServerStore(db)
 
-	ss.Create(&models.Server{
+	_ = ss.Create(&models.Server{
 		ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online",
 		Metadata: map[string]any{"region": "eu-west", "cpu_cores": float64(8)},
 	})
@@ -287,7 +287,7 @@ func TestNodeCRUD(t *testing.T) {
 	nodeStore := NewNodeStore(db)
 
 	// Create server first (foreign key)
-	serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
+	_ = serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
 
 	// Create node
 	node := &models.Node{
@@ -330,7 +330,7 @@ func TestNodeCRUD(t *testing.T) {
 	}
 
 	// List by server
-	nodeStore.Create(&models.Node{ID: "node-2", ServerID: "srv-1", Name: "node2", ContainerName: "klever-node2", NodeType: "validator", RestAPIPort: 8081, DataDirectory: "/opt/node2", Status: "stopped"})
+	_ = nodeStore.Create(&models.Node{ID: "node-2", ServerID: "srv-1", Name: "node2", ContainerName: "klever-node2", NodeType: "validator", RestAPIPort: 8081, DataDirectory: "/opt/node2", Status: "stopped"})
 	nodes, err := nodeStore.ListByServer("srv-1")
 	if err != nil {
 		t.Fatalf("list by server: %v", err)
@@ -366,8 +366,8 @@ func TestNodeUpdateStatus(t *testing.T) {
 	serverStore := NewServerStore(db)
 	nodeStore := NewNodeStore(db)
 
-	serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
-	nodeStore.Create(&models.Node{ID: "node-1", ServerID: "srv-1", Name: "n1", ContainerName: "kn1", NodeType: "validator", RestAPIPort: 8080, DataDirectory: "/opt/n1", Status: "stopped"})
+	_ = serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
+	_ = nodeStore.Create(&models.Node{ID: "node-1", ServerID: "srv-1", Name: "n1", ContainerName: "kn1", NodeType: "validator", RestAPIPort: 8080, DataDirectory: "/opt/n1", Status: "stopped"})
 
 	if err := nodeStore.UpdateStatus("node-1", "running"); err != nil {
 		t.Fatalf("update status: %v", err)
@@ -384,11 +384,11 @@ func TestNodeCascadeDelete(t *testing.T) {
 	serverStore := NewServerStore(db)
 	nodeStore := NewNodeStore(db)
 
-	serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
-	nodeStore.Create(&models.Node{ID: "node-1", ServerID: "srv-1", Name: "n1", ContainerName: "kn1", NodeType: "validator", RestAPIPort: 8080, DataDirectory: "/opt/n1", Status: "running"})
+	_ = serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
+	_ = nodeStore.Create(&models.Node{ID: "node-1", ServerID: "srv-1", Name: "n1", ContainerName: "kn1", NodeType: "validator", RestAPIPort: 8080, DataDirectory: "/opt/n1", Status: "running"})
 
 	// Deleting server should cascade delete nodes
-	serverStore.Delete("srv-1")
+	_ = serverStore.Delete("srv-1")
 
 	nodes, _ := nodeStore.ListAll("")
 	if len(nodes) != 0 {

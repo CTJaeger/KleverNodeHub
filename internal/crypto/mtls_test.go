@@ -107,23 +107,22 @@ func TestMTLSHandshake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	tlsListener := tls.NewListener(listener, serverConfig)
 
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Verify client cert was presented
 			if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
 				http.Error(w, "no client cert", http.StatusUnauthorized)
 				return
 			}
-			fmt.Fprintf(w, "hello %s", r.TLS.PeerCertificates[0].Subject.CommonName)
+			_, _ = fmt.Fprintf(w, "hello %s", r.TLS.PeerCertificates[0].Subject.CommonName)
 		}),
 	}
 
-	go server.Serve(tlsListener)
-	defer server.Close()
+	go func() { _ = server.Serve(tlsListener) }()
+	defer func() { _ = server.Close() }()
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
@@ -139,7 +138,7 @@ func TestMTLSHandshake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "hello test-agent" {
@@ -162,16 +161,16 @@ func TestMTLSHandshake_NoClientCert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	tlsListener := tls.NewListener(listener, serverConfig)
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("should not reach here"))
+			_, _ = w.Write([]byte("should not reach here"))
 		}),
 	}
-	go server.Serve(tlsListener)
-	defer server.Close()
+	go func() { _ = server.Serve(tlsListener) }()
+	defer func() { _ = server.Close() }()
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -232,16 +231,16 @@ func TestMTLSHandshake_WrongCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	tlsListener := tls.NewListener(listener, serverConfig)
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("should not reach here"))
+			_, _ = w.Write([]byte("should not reach here"))
 		}),
 	}
-	go server.Serve(tlsListener)
-	defer server.Close()
+	go func() { _ = server.Serve(tlsListener) }()
+	defer func() { _ = server.Close() }()
 
 	time.Sleep(50 * time.Millisecond)
 

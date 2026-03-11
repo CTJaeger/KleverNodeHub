@@ -27,7 +27,7 @@ func newMockDockerForOps(t *testing.T) (*DockerClient, func()) {
 		// Create container
 		case r.Method == http.MethodPost && containsPath(path, "/containers/create"):
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(containerCreateResponse{
+			_ = json.NewEncoder(w).Encode(containerCreateResponse{
 				ID: "new-container-id-1234567890ab",
 			})
 
@@ -60,11 +60,11 @@ func newMockDockerForOps(t *testing.T) (*DockerClient, func()) {
 				{Source: "/opt/klever/config", Destination: "/opt/klever-blockchain/config/node"},
 				{Source: "/opt/klever/db", Destination: "/opt/klever-blockchain/db"},
 			}
-			json.NewEncoder(w).Encode(cj)
+			_ = json.NewEncoder(w).Encode(cj)
 
 		// List images
 		case r.Method == http.MethodGet && containsPath(path, "/images/json"):
-			json.NewEncoder(w).Encode([]struct {
+			_ = json.NewEncoder(w).Encode([]struct {
 				RepoTags []string `json:"RepoTags"`
 			}{
 				{RepoTags: []string{"kleverapp/klever-go:v0.60.0", "kleverapp/klever-go:latest"}},
@@ -72,7 +72,7 @@ func newMockDockerForOps(t *testing.T) (*DockerClient, func()) {
 
 		// List containers
 		case r.Method == http.MethodGet && containsPath(path, "/containers/json"):
-			json.NewEncoder(w).Encode([]containerListEntry{
+			_ = json.NewEncoder(w).Encode([]containerListEntry{
 				{ID: "test123", Names: []string{"/klever-node1"}, State: "running"},
 			})
 

@@ -16,6 +16,6 @@ func shortSocketPath(t *testing.T) (string, func()) {
 		t.Fatalf("create temp dir: %v", err)
 	}
 	sockPath := filepath.Join(dir, "d.sock")
-	cleanup := func() { os.RemoveAll(dir) }
+	cleanup := func() { _ = os.RemoveAll(dir) }
 	return sockPath, cleanup
 }
