@@ -43,7 +43,25 @@ type RegistrationRequest struct {
 
 // RegistrationResponse is sent by the dashboard after successful registration.
 type RegistrationResponse struct {
-	ServerID string `json:"server_id"`
-	CertPEM  string `json:"cert_pem"`
+	ServerID  string `json:"server_id"`
+	CertPEM   string `json:"cert_pem"`
 	CACertPEM string `json:"ca_cert_pem"`
+}
+
+// DiscoveredNode is a node found during agent auto-discovery.
+type DiscoveredNode struct {
+	ContainerID     string `json:"container_id"`
+	ContainerName   string `json:"container_name"`
+	Status          string `json:"status"`
+	RestAPIPort     int    `json:"rest_api_port"`
+	DisplayName     string `json:"display_name,omitempty"`
+	RedundancyLevel int    `json:"redundancy_level"`
+	DockerImageTag  string `json:"docker_image_tag,omitempty"`
+	DataDirectory   string `json:"data_directory,omitempty"`
+	BLSPublicKey    string `json:"bls_public_key,omitempty"`
+}
+
+// DiscoveryReport is sent by the agent after scanning for Klever nodes.
+type DiscoveryReport struct {
+	Nodes []DiscoveredNode `json:"nodes"`
 }

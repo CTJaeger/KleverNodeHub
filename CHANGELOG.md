@@ -1,0 +1,24 @@
+# Changelog
+
+## [Unreleased]
+
+### 2026-03-11
+- **Issue #7**: Agent auto-discovery — scan existing Klever nodes on server
+  - Docker Engine API client via Unix socket (no CLI dependency)
+  - Node discovery: list containers, extract params (port, display name, redundancy, image tag, data dir)
+  - BLS public key extraction from `validatorKey.pem`
+  - Discovery report message type for WebSocket communication
+  - 19 tests (mock Docker socket, parsing, BLS extraction, edge cases)
+
+- **Issue #6**: Agent registration — one-time token, certificate issuance, WebSocket connection
+  - WebSocket message envelope and payload types
+  - Connection hub for tracking active agent connections
+  - One-time token manager for secure registration
+  - Agent config persistence and registration flow
+  - Install script for automated Linux deployment (systemd)
+
+### 2026-03-10
+- **Issue #5**: SQLite store with models and migrations
+- **Issue #4**: Auth module — JWT, recovery codes, WebAuthn, middleware
+- **Issue #3**: Crypto module — Ed25519, AES-256-GCM, mTLS, CA management
+- **Issue #2**: Project scaffolding — Go module, directory structure, Makefile, Dockerfiles

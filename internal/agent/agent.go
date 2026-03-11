@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -130,6 +131,56 @@ func (a *Agent) BuildInfoMessage() *models.Message {
 		Type:      "event",
 		Action:    "agent.info",
 		Payload:   a.BuildAgentInfo(),
+		Timestamp: time.Now().Unix(),
+	}
+}
+
+// RunDiscovery scans the server for Klever nodes and returns a discovery report.
+func (a *Agent) RunDiscovery(dockerSocket string) *models.DiscoveryReport {
+	client := NewDockerClient(dockerSocket)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	discovered, err := client.DiscoverNodes(ctx)
+	if err != nil {
+		log.Printf("discovery failed: %v", err)
+		return &models.DiscoveryReport{Nodes: []models.DiscoveredNode{}}
+	}
+
+	nodes := make([]models.DiscoveredNode, 0, len(discovered))
+	for _, d := range discovered {
+		mn := models.DiscoveredNode{
+			ContainerID:     d.ContainerID,
+			ContainerName:   d.ContainerName,
+			Status:          d.Status,
+			RestAPIPort:     d.RestAPIPort,
+			DisplayName:     d.DisplayName,
+			RedundancyLevel: d.RedundancyLevel,
+			DockerImageTag:  d.DockerImageTag,
+			DataDirectory:   d.DataDirectory,
+		}
+
+		// Try to extract BLS public key from config directory
+		if d.ConfigDirectory != "" {
+			if blsKey, err := ExtractBLSPublicKey(d.ConfigDirectory); err == nil {
+				mn.BLSPublicKey = blsKey
+			}
+		}
+
+		nodes = append(nodes, mn)
+	}
+
+	return &models.DiscoveryReport{Nodes: nodes}
+}
+
+// BuildDiscoveryMessage creates a discovery report message.
+func (a *Agent) BuildDiscoveryMessage(report *models.DiscoveryReport) *models.Message {
+	return &models.Message{
+		ID:        fmt.Sprintf("discovery-%d", time.Now().UnixNano()),
+		Type:      "event",
+		Action:    "agent.discovery",
+		Payload:   report,
 		Timestamp: time.Now().Unix(),
 	}
 }
