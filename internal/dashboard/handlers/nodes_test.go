@@ -47,7 +47,7 @@ func setupHandlerTest(t *testing.T) (*NodeHandler, *ws.Hub, func()) {
 
 	hub := ws.NewHub(serverStore)
 	handler := NewNodeHandler(hub, nodeStore)
-	return handler, hub, func() { db.Close() }
+	return handler, hub, func() { _ = db.Close() }
 }
 
 func TestHandleStart_AgentOffline(t *testing.T) {

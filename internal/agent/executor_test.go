@@ -39,12 +39,12 @@ func newMockDockerForExecutor(t *testing.T) (*DockerClient, func()) {
 	}
 
 	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
+	go func() { _ = server.Serve(listener) }()
 
 	client := NewDockerClient(socketPath)
 	return client, func() {
-		server.Close()
-		listener.Close()
+		_ = server.Close()
+		_ = listener.Close()
 		sockCleanup()
 	}
 }

@@ -22,7 +22,7 @@ func setupServerHandler(t *testing.T) (*ServerHandler, func()) {
 	serverStore := store.NewServerStore(db)
 	nodeStore := store.NewNodeStore(db)
 
-	serverStore.Create(&models.Server{
+	_ = serverStore.Create(&models.Server{
 		ID:           "srv-1",
 		Name:         "Server 1",
 		Hostname:     "host1",
@@ -61,7 +61,7 @@ func TestHandleListServers(t *testing.T) {
 	}
 
 	var resp map[string][]models.Server
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp["servers"]) != 1 {
 		t.Errorf("expected 1 server, got %d", len(resp["servers"]))
@@ -112,7 +112,7 @@ func TestHandleListNodes(t *testing.T) {
 	}
 
 	var resp map[string][]models.Node
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp["nodes"]) != 1 {
 		t.Errorf("expected 1 node, got %d", len(resp["nodes"]))

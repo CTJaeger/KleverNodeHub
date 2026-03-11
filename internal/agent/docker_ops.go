@@ -62,7 +62,7 @@ func (d *DockerClient) PullImage(ctx context.Context, image string) error {
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", image, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -88,7 +88,7 @@ func (d *DockerClient) PullImageWithProgress(ctx context.Context, image string, 
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", image, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -183,7 +183,7 @@ func (d *DockerClient) CreateContainer(ctx context.Context, cfg *ContainerConfig
 	if err != nil {
 		return "", fmt.Errorf("create container %s: %w", cfg.Name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -220,7 +220,7 @@ func (d *DockerClient) RemoveContainer(ctx context.Context, containerName string
 	if err != nil {
 		return fmt.Errorf("remove container %s: %w", containerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent, http.StatusOK:
@@ -309,7 +309,7 @@ func (d *DockerClient) ListLocalImages(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list images: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

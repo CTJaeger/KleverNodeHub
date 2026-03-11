@@ -49,7 +49,7 @@ func setupDockerHandler(t *testing.T) (*DockerHandler, *ws.Hub, func()) {
 	hub := ws.NewHub(serverStore)
 	tagCache := dashboard.NewTagCache()
 	handler := NewDockerHandler(hub, nodeStore, tagCache)
-	return handler, hub, func() { db.Close() }
+	return handler, hub, func() { _ = db.Close() }
 }
 
 func TestHandleUpgrade_AgentOffline(t *testing.T) {
