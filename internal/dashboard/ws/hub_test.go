@@ -138,7 +138,7 @@ func TestNewHub_CreatesDBFile(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	db, _ := store.Open(dbPath)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ss := store.NewServerStore(db)
 	hub := NewHub(ss)
