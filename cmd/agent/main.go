@@ -67,6 +67,9 @@ func main() {
 	// --- Executor ---
 	executor := agent.NewExecutor(*dockerSocket)
 
+	// --- Metrics collector ---
+	metricsCollector := agent.NewMetricsCollector(nil)
+
 	// --- Graceful shutdown ---
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,7 +89,7 @@ func main() {
 	for ctx.Err() == nil {
 
 		log.Printf("connecting to %s...", wsURL)
-		err := runAgentLoop(ctx, wsURL, ag, executor, *dockerSocket)
+		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, *dockerSocket)
 		if ctx.Err() != nil {
 			break
 		}
@@ -108,7 +111,7 @@ func main() {
 }
 
 // runAgentLoop connects to the dashboard and runs the message pump until disconnected.
-func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, dockerSocket string) error {
+func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, dockerSocket string) error {
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer dialCancel()
 
@@ -162,6 +165,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					Action: "agent.heartbeat",
 					Payload: &models.HeartbeatPayload{
 						Timestamp: time.Now().Unix(),
+						Metrics:   metrics.Collect(),
 					},
 					Timestamp: time.Now().Unix(),
 				}

@@ -19,10 +19,23 @@ type AgentInfo struct {
 
 // HeartbeatPayload is sent periodically by the agent.
 type HeartbeatPayload struct {
-	Timestamp int64   `json:"timestamp"`
-	CPU       float64 `json:"cpu"`
-	Mem       float64 `json:"mem"`
-	Disk      float64 `json:"disk"`
+	Timestamp int64          `json:"timestamp"`
+	Metrics   *SystemMetrics `json:"metrics,omitempty"`
+}
+
+// SystemMetrics holds system-level resource usage data collected by the agent.
+type SystemMetrics struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemTotal    uint64  `json:"mem_total"`
+	MemUsed     uint64  `json:"mem_used"`
+	MemPercent  float64 `json:"mem_percent"`
+	DiskTotal   uint64  `json:"disk_total"`
+	DiskUsed    uint64  `json:"disk_used"`
+	DiskPercent float64 `json:"disk_percent"`
+	LoadAvg1    float64 `json:"load_avg_1"`
+	LoadAvg5    float64 `json:"load_avg_5"`
+	LoadAvg15   float64 `json:"load_avg_15"`
+	CollectedAt int64   `json:"collected_at"`
 }
 
 // CommandResult is sent by the agent after executing a command.

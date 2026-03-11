@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #14**: Agent system metrics collection (CPU, memory, disk, load average)
+  - New `MetricsCollector` with `/proc` parsing for Linux, graceful fallback for macOS/Windows
+  - CPU% via delta between two `/proc/stat` samples
+  - Memory from `/proc/meminfo` (MemTotal, MemAvailable)
+  - Disk via `syscall.Statfs` (build tags: unix vs windows)
+  - Load average from `/proc/loadavg`
+  - Metrics attached to heartbeat payload (`HeartbeatPayload.Metrics`)
+  - `SystemMetrics` model with all fields
+  - 8 unit tests including mock `/proc` data tests (skip on non-Linux)
+
 - **Issue #12/#13 completion**: Implement missing acceptance criteria
   - Added `HandlePasskeyFinishRegister` and `HandlePasskeyFinishLogin` to complete WebAuthn ceremony
   - Added `POST /api/agent/register` endpoint — validates token, creates server, issues mTLS certificate
