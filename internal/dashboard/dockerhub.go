@@ -75,7 +75,7 @@ func fetchDockerHubTags() ([]DockerTag, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch tags: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch tags: HTTP %d", resp.StatusCode)
