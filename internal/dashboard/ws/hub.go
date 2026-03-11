@@ -33,12 +33,21 @@ func (ac *AgentConn) LastHeartbeat() time.Time {
 	return ac.lastHeartbeat
 }
 
+// pendingCommand tracks a command awaiting a response from an agent.
+type pendingCommand struct {
+	resultCh chan *models.CommandResult
+	timer    *time.Timer
+}
+
 // Hub manages all active agent connections.
 type Hub struct {
 	mu          sync.RWMutex
 	connections map[string]*AgentConn // serverID -> connection
 	serverStore *store.ServerStore
 	stopCh      chan struct{}
+
+	pendingMu sync.Mutex
+	pending   map[string]*pendingCommand // commandID -> pending
 }
 
 // NewHub creates a new connection hub.
@@ -47,6 +56,7 @@ func NewHub(serverStore *store.ServerStore) *Hub {
 		connections: make(map[string]*AgentConn),
 		serverStore: serverStore,
 		stopCh:      make(chan struct{}),
+		pending:     make(map[string]*pendingCommand),
 	}
 }
 
@@ -164,6 +174,86 @@ func (h *Hub) StartHealthCheck(timeout time.Duration) {
 // Stop stops the health check goroutine.
 func (h *Hub) Stop() {
 	close(h.stopCh)
+}
+
+// SendCommand sends a command to an agent and waits for the result.
+// Returns the result or an error if the agent is offline or the command times out.
+func (h *Hub) SendCommand(serverID string, msg *models.Message, timeout time.Duration) (*models.CommandResult, error) {
+	if !h.IsConnected(serverID) {
+		return nil, fmt.Errorf("agent offline: %s", serverID)
+	}
+
+	// Create pending entry
+	pc := &pendingCommand{
+		resultCh: make(chan *models.CommandResult, 1),
+	}
+
+	h.pendingMu.Lock()
+	h.pending[msg.ID] = pc
+	h.pendingMu.Unlock()
+
+	// Set timeout timer
+	pc.timer = time.AfterFunc(timeout, func() {
+		h.pendingMu.Lock()
+		if p, ok := h.pending[msg.ID]; ok {
+			delete(h.pending, msg.ID)
+			p.resultCh <- &models.CommandResult{
+				CommandID: msg.ID,
+				Error:     "command timed out",
+			}
+		}
+		h.pendingMu.Unlock()
+	})
+
+	// Send the command
+	if err := h.Send(serverID, msg); err != nil {
+		h.pendingMu.Lock()
+		delete(h.pending, msg.ID)
+		h.pendingMu.Unlock()
+		pc.timer.Stop()
+		return nil, err
+	}
+
+	// Wait for result
+	result := <-pc.resultCh
+	pc.timer.Stop()
+	return result, nil
+}
+
+// HandleResult processes a command result from an agent.
+// Matches the result to a pending command by command ID.
+func (h *Hub) HandleResult(result *models.CommandResult) {
+	h.pendingMu.Lock()
+	pc, ok := h.pending[result.CommandID]
+	if ok {
+		delete(h.pending, result.CommandID)
+	}
+	h.pendingMu.Unlock()
+
+	if ok {
+		pc.timer.Stop()
+		pc.resultCh <- result
+	} else {
+		log.Printf("received result for unknown command: %s", result.CommandID)
+	}
+}
+
+// PendingCount returns the number of commands awaiting responses.
+func (h *Hub) PendingCount() int {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	return len(h.pending)
+}
+
+// PendingCommandIDs returns the IDs of all pending commands (for testing).
+func (h *Hub) PendingCommandIDs() []string {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	ids := make([]string, 0, len(h.pending))
+	for id := range h.pending {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (h *Hub) checkHeartbeats(timeout time.Duration) {

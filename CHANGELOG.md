@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### 2026-03-11
+- **Issue #8**: Basic node operations — start, stop, restart via dashboard
+  - Command whitelist with container name validation (injection prevention)
+  - Docker operations: start, stop (graceful 30s), restart via Engine API
+  - Command executor/dispatcher with timeout handling (60s default)
+  - WebSocket hub: SendCommand with pending tracking, timeout, result matching
+  - Dashboard API handlers: POST start/stop/restart + batch operations
+  - End-to-end flow: API → WebSocket → Agent → Docker → result back
+  - 30+ new tests (whitelist, executor, hub commands, handler HTTP tests)
+
 - **Issue #7**: Agent auto-discovery — scan existing Klever nodes on server
   - Docker Engine API client via Unix socket (no CLI dependency)
   - Node discovery: list containers, extract params (port, display name, redundancy, image tag, data dir)
