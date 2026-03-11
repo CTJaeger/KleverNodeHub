@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
 const (
-	agentVersion   = "0.1.0"
 	configFileName = "agent.json"
 )
 
@@ -118,7 +118,7 @@ func (a *Agent) Register(dashboardURL, token string) error {
 func (a *Agent) BuildAgentInfo() *models.AgentInfo {
 	hostname, _ := os.Hostname()
 	return &models.AgentInfo{
-		Version:  agentVersion,
+		Version:  version.Version,
 		OS:       runtime.GOOS + "/" + runtime.GOARCH,
 		Hostname: hostname,
 	}

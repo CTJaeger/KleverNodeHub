@@ -183,16 +183,11 @@ func (h *Hub) SendCommand(serverID string, msg *models.Message, timeout time.Dur
 		return nil, fmt.Errorf("agent offline: %s", serverID)
 	}
 
-	// Create pending entry
+	// Create pending entry with timer set before adding to map
+	// to avoid a race between SendCommand and HandleResult on pc.timer.
 	pc := &pendingCommand{
 		resultCh: make(chan *models.CommandResult, 1),
 	}
-
-	h.pendingMu.Lock()
-	h.pending[msg.ID] = pc
-	h.pendingMu.Unlock()
-
-	// Set timeout timer
 	pc.timer = time.AfterFunc(timeout, func() {
 		h.pendingMu.Lock()
 		if p, ok := h.pending[msg.ID]; ok {
@@ -204,6 +199,10 @@ func (h *Hub) SendCommand(serverID string, msg *models.Message, timeout time.Dur
 		}
 		h.pendingMu.Unlock()
 	})
+
+	h.pendingMu.Lock()
+	h.pending[msg.ID] = pc
+	h.pendingMu.Unlock()
 
 	// Send the command
 	if err := h.Send(serverID, msg); err != nil {

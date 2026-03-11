@@ -1,13 +1,12 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   GO_VERSION: '1.26'
@@ -26,55 +25,11 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test ./... -v -race -count=1 -coverprofile=coverage.out
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: latest
-
-      - name: Run go vet
-        run: go vet ./...
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run govulncheck
-        run: govulncheck ./...
+        run: go test ./... -v -race
 
   build:
     name: Build
-    needs: [test, lint]
+    needs: [test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -92,9 +47,14 @@ jobs:
       - name: Set build variables
         id: vars
         run: |
-          echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            EXT=".exe"
+          fi
+          echo "ext=$EXT" >> "$GITHUB_OUTPUT"
 
       - name: Build Dashboard
         env:
@@ -106,7 +66,7 @@ jobs:
           -X github.com/CTJaeger/KleverNodeHub/internal/version.Version=${{ steps.vars.outputs.version }}
           -X github.com/CTJaeger/KleverNodeHub/internal/version.GitCommit=${{ steps.vars.outputs.commit }}
           -X github.com/CTJaeger/KleverNodeHub/internal/version.BuildTime=${{ steps.vars.outputs.build_time }}"
-          -o klever-node-hub-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/dashboard
+          -o bin/klever-node-hub-${{ matrix.goos }}-${{ matrix.goarch }}${{ steps.vars.outputs.ext }} ./cmd/dashboard
 
       - name: Build Agent
         env:
@@ -118,4 +78,35 @@ jobs:
           -X github.com/CTJaeger/KleverNodeHub/internal/version.Version=${{ steps.vars.outputs.version }}
           -X github.com/CTJaeger/KleverNodeHub/internal/version.GitCommit=${{ steps.vars.outputs.commit }}
           -X github.com/CTJaeger/KleverNodeHub/internal/version.BuildTime=${{ steps.vars.outputs.build_time }}"
-          -o klever-agent-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agent
+          -o bin/klever-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ steps.vars.outputs.ext }} ./cmd/agent
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/
+
+  release:
+    name: Create Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: binaries-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: artifacts
+        run: sha256sum * > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/*
