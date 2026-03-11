@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #18**: Node provisioning wizard — install Klever node from scratch
+  - Multi-step `Provisioner` (7 steps): preflight, pull, dirs, config, container, start, verify
+  - Progress reporting, cleanup on failure, `node.provision` executor command
+  - Dashboard handler `POST /api/nodes/provision`, UI wizard with live progress bar
+  - Config download from official Klever backup endpoints (mainnet/testnet)
+
 - **Issue #17**: Metrics dashboard UI — charts, gauges, and historical graphs
   - Custom lightweight charting module (`charts.js`) — SVG ring gauges, Canvas time-series, sparklines
   - Overview page: CPU/Memory/Disk gauges per server, node status breakdown (running/stopped/syncing)

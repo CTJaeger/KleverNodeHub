@@ -126,6 +126,7 @@ func main() {
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
+	provisionHandler := handlers.NewProvisionHandler(hub)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -175,6 +176,7 @@ func main() {
 	mux.Handle("GET /api/docker/tags", authMw(http.HandlerFunc(dockerHandler.HandleListTags)))
 	mux.Handle("GET /api/nodes/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleNodeMetrics)))
 	mux.Handle("GET /api/servers/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleServerMetrics)))
+	mux.Handle("POST /api/nodes/provision", authMw(http.HandlerFunc(provisionHandler.HandleProvision)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
