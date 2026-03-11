@@ -156,4 +156,42 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_nodes_server ON nodes(server_id);`,
+
+	// Migration 2: Phase 2 — metrics storage tables
+	`CREATE TABLE IF NOT EXISTS metrics_recent (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		node_id      TEXT NOT NULL,
+		server_id    TEXT NOT NULL,
+		metric_name  TEXT NOT NULL,
+		metric_value REAL NOT NULL,
+		collected_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_metrics_recent_node_time ON metrics_recent(node_id, collected_at);
+	CREATE INDEX IF NOT EXISTS idx_metrics_recent_collected ON metrics_recent(collected_at);
+	CREATE INDEX IF NOT EXISTS idx_metrics_recent_name_time ON metrics_recent(node_id, metric_name, collected_at);
+
+	CREATE TABLE IF NOT EXISTS metrics_archive (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		node_id      TEXT NOT NULL,
+		server_id    TEXT NOT NULL,
+		metric_name  TEXT NOT NULL,
+		avg_value    REAL NOT NULL,
+		min_value    REAL NOT NULL,
+		max_value    REAL NOT NULL,
+		sample_count INTEGER NOT NULL,
+		bucket_start INTEGER NOT NULL,
+		bucket_end   INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_metrics_archive_node_bucket ON metrics_archive(node_id, metric_name, bucket_start);
+
+	CREATE TABLE IF NOT EXISTS system_metrics (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		server_id    TEXT NOT NULL,
+		cpu_percent  REAL,
+		mem_percent  REAL,
+		disk_percent REAL,
+		load_avg_1   REAL,
+		collected_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_system_metrics_server_time ON system_metrics(server_id, collected_at);`,
 }
