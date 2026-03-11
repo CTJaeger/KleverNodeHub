@@ -1,0 +1,24 @@
+# Binaries
+klever-node-hub
+klever-agent
+*.exe
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out
+
+# Config (may contain secrets)
+*.pem
+*.key
+config.enc
