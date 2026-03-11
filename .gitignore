@@ -1,6 +1,5 @@
 # Binaries
-klever-node-hub
-klever-agent
+bin/
 *.exe
 
 # Go
@@ -25,3 +24,8 @@ config.enc
 
 # Chat context (local only)
 _chatcontext/
+
+# Claude code
+.claude/
+CLAUDE.md
+
