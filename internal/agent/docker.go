@@ -175,6 +175,94 @@ func (d *DockerClient) DiscoverNodes(ctx context.Context) ([]DiscoveredNode, err
 	return nodes, nil
 }
 
+// StartContainer starts a stopped container.
+func (d *DockerClient) StartContainer(ctx context.Context, containerName string) error {
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/start", dockerAPIVersion, containerName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("start container %s: %w", containerName, err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusOK:
+		return nil // Success
+	case http.StatusNotModified:
+		return nil // Already running
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("start container %s: HTTP %d: %s", containerName, resp.StatusCode, string(body))
+	}
+}
+
+// StopContainer stops a running container with a graceful timeout.
+func (d *DockerClient) StopContainer(ctx context.Context, containerName string, timeoutSec int) error {
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/stop?t=%d", dockerAPIVersion, containerName, timeoutSec)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("stop container %s: %w", containerName, err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusOK:
+		return nil // Success
+	case http.StatusNotModified:
+		return nil // Already stopped
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("stop container %s: HTTP %d: %s", containerName, resp.StatusCode, string(body))
+	}
+}
+
+// RestartContainer restarts a container with a graceful timeout.
+func (d *DockerClient) RestartContainer(ctx context.Context, containerName string, timeoutSec int) error {
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/restart?t=%d", dockerAPIVersion, containerName, timeoutSec)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("restart container %s: %w", containerName, err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusOK:
+		return nil
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("restart container %s: HTTP %d: %s", containerName, resp.StatusCode, string(body))
+	}
+}
+
+// GetContainerStatus returns the current status of a container ("running", "exited", etc.).
+func (d *DockerClient) GetContainerStatus(ctx context.Context, containerName string) (string, error) {
+	cj, err := d.InspectContainer(ctx, containerName)
+	if err != nil {
+		return "", err
+	}
+	if cj.State.Running {
+		return "running", nil
+	}
+	return "stopped", nil
+}
+
 // parseContainerToNode extracts node parameters from a container inspect result.
 func parseContainerToNode(cj *containerJSON) DiscoveredNode {
 	node := DiscoveredNode{
