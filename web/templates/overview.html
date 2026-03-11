@@ -70,7 +70,10 @@
             <!-- Server List -->
             <div class="card-header">
                 <h2>Servers</h2>
-                <button class="btn btn-primary btn-sm" onclick="showAddServer()">+ Add Server</button>
+                <div class="btn-group">
+                    <button class="btn btn-primary btn-sm" onclick="showProvision()">+ Provision Node</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showAddServer()">+ Add Server</button>
+                </div>
             </div>
 
             <div id="server-list" class="card-grid">
@@ -102,6 +105,59 @@
                         </div>
                         <button class="btn btn-sm btn-secondary" onclick="copyInstallCommand()">Copy Command</button>
                         <p class="text-sm text-muted mt-8">This token expires in 1 hour and can only be used once.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Provision Node Wizard -->
+            <div id="provision-modal" class="hidden">
+                <div class="card mt-16">
+                    <div class="card-header">
+                        <h3>Provision New Node</h3>
+                        <button class="btn btn-sm btn-secondary" onclick="hideProvision()">Close</button>
+                    </div>
+
+                    <!-- Step 1: Server + Config -->
+                    <div id="prov-step-config">
+                        <div class="form-group">
+                            <label class="form-label">Server</label>
+                            <select class="form-input" id="prov-server"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Node Name</label>
+                            <input class="form-input" id="prov-name" placeholder="e.g. validator-01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Network</label>
+                            <select class="form-input" id="prov-network">
+                                <option value="mainnet">Mainnet</option>
+                                <option value="testnet">Testnet</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Image Tag</label>
+                            <select class="form-input" id="prov-tag">
+                                <option value="latest">latest</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">REST API Port</label>
+                            <input class="form-input" id="prov-port" type="number" value="8080">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Display Name (optional)</label>
+                            <input class="form-input" id="prov-display-name" placeholder="My Validator">
+                        </div>
+                        <button class="btn btn-primary" onclick="startProvision()">Deploy Node</button>
+                    </div>
+
+                    <!-- Step 2: Progress -->
+                    <div id="prov-step-progress" class="hidden">
+                        <div class="progress-bar mb-8">
+                            <div class="progress-bar-fill green" id="prov-progress-bar" style="width:0%"></div>
+                        </div>
+                        <div id="prov-steps-list"></div>
+                        <div id="prov-result" class="hidden mt-16"></div>
                     </div>
                 </div>
             </div>
@@ -249,6 +305,105 @@
         function copyInstallCommand() {
             const cmd = document.getElementById('install-command').textContent;
             navigator.clipboard.writeText(cmd);
+        }
+
+        // --- Provision Wizard ---
+        function showProvision() {
+            document.getElementById('provision-modal').classList.remove('hidden');
+            document.getElementById('prov-step-config').classList.remove('hidden');
+            document.getElementById('prov-step-progress').classList.add('hidden');
+
+            // Populate server dropdown
+            const sel = document.getElementById('prov-server');
+            sel.innerHTML = servers
+                .filter(s => s.status === 'online')
+                .map(s => '<option value="' + esc(s.id) + '">' + esc(s.name || s.hostname) + '</option>')
+                .join('');
+
+            // Load tags
+            loadDockerTags();
+        }
+
+        function hideProvision() {
+            document.getElementById('provision-modal').classList.add('hidden');
+        }
+
+        async function loadDockerTags() {
+            try {
+                const data = await API.getJSON('/api/docker/tags');
+                if (data && data.tags) {
+                    const sel = document.getElementById('prov-tag');
+                    sel.innerHTML = data.tags.slice(0, 20).map(t =>
+                        '<option value="' + esc(t) + '">' + esc(t) + '</option>'
+                    ).join('');
+                }
+            } catch (e) { /* keep default "latest" */ }
+        }
+
+        async function startProvision() {
+            const req = {
+                server_id: document.getElementById('prov-server').value,
+                node_name: document.getElementById('prov-name').value,
+                network: document.getElementById('prov-network').value,
+                image_tag: document.getElementById('prov-tag').value,
+                port: parseInt(document.getElementById('prov-port').value) || 8080,
+                config_overrides: {}
+            };
+
+            const displayName = document.getElementById('prov-display-name').value;
+            if (displayName) req.config_overrides.NodeDisplayName = displayName;
+
+            if (!req.node_name) {
+                alert('Node name is required');
+                return;
+            }
+
+            // Switch to progress view
+            document.getElementById('prov-step-config').classList.add('hidden');
+            document.getElementById('prov-step-progress').classList.remove('hidden');
+            document.getElementById('prov-result').classList.add('hidden');
+
+            const steps = ['Pre-flight checks', 'Pull Docker image', 'Create directory structure',
+                'Download configuration', 'Create container', 'Start container', 'Verify node'];
+            document.getElementById('prov-steps-list').innerHTML = steps.map((s, i) =>
+                '<div class="info-row" id="prov-step-' + i + '">' +
+                '<span class="info-label">' + esc(s) + '</span>' +
+                '<span class="info-value text-muted">pending</span></div>'
+            ).join('');
+
+            // Animate progress
+            let currentStep = 0;
+            const progressInterval = setInterval(() => {
+                if (currentStep < steps.length) {
+                    const el = document.getElementById('prov-step-' + currentStep);
+                    if (el) el.querySelector('.info-value').textContent = 'running...';
+                    document.getElementById('prov-progress-bar').style.width =
+                        ((currentStep + 1) / steps.length * 100) + '%';
+                    currentStep++;
+                }
+            }, 2000);
+
+            // Send provision request
+            const result = await API.postJSON('/api/nodes/provision', req);
+            clearInterval(progressInterval);
+
+            const resultEl = document.getElementById('prov-result');
+            resultEl.classList.remove('hidden');
+
+            if (result && result.ok && result.data.success) {
+                document.getElementById('prov-progress-bar').style.width = '100%';
+                steps.forEach((_, i) => {
+                    const el = document.getElementById('prov-step-' + i);
+                    if (el) el.querySelector('.info-value').textContent = 'done';
+                });
+                resultEl.className = 'alert alert-success mt-16';
+                resultEl.textContent = 'Node provisioned successfully! ' + (result.data.output || '');
+                loadData(); // Refresh server/node list
+            } else {
+                document.getElementById('prov-progress-bar').className = 'progress-bar-fill red';
+                resultEl.className = 'alert alert-error mt-16';
+                resultEl.textContent = 'Provisioning failed: ' + (result?.data?.error || 'Unknown error');
+            }
         }
 
         function toggleSidebar() {

@@ -90,6 +90,8 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 				result.Output = "pulled " + image
 			}
 		}
+	case "node.provision":
+		err = e.executeProvision(ctx, msg.Payload, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -204,6 +206,55 @@ func extractStringField(payload any, field string) string {
 	}
 	if p, ok := payload.(map[string]string); ok {
 		return p[field]
+	}
+	return ""
+}
+
+// executeProvision handles the node.provision command.
+func (e *Executor) executeProvision(ctx context.Context, payload any, result *models.CommandResult) error {
+	p, ok := payload.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid provision payload")
+	}
+
+	req := &models.ProvisionRequest{
+		ServerID: extractStringFromMap(p, "server_id"),
+		NodeName: extractStringFromMap(p, "node_name"),
+		Network:  extractStringFromMap(p, "network"),
+		ImageTag: extractStringFromMap(p, "image_tag"),
+	}
+	if v, ok := p["port"].(float64); ok {
+		req.Port = int(v)
+	}
+	if v, ok := p["generate_keys"].(bool); ok {
+		req.GenerateKeys = v
+	}
+	if overrides, ok := p["config_overrides"].(map[string]any); ok {
+		req.ConfigOverrides = make(map[string]string)
+		for k, v := range overrides {
+			if s, ok := v.(string); ok {
+				req.ConfigOverrides[k] = s
+			}
+		}
+	}
+
+	jobID := fmt.Sprintf("prov-%d", time.Now().UnixNano())
+
+	// Progress is reported via the result output for now
+	// In future, this will be sent via WebSocket events
+	provisioner := NewProvisioner(e.docker, req, jobID, nil)
+
+	if err := provisioner.Run(ctx); err != nil {
+		return err
+	}
+
+	result.Output = fmt.Sprintf("node %s provisioned successfully (job: %s)", req.NodeName, jobID)
+	return nil
+}
+
+func extractStringFromMap(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
 	}
 	return ""
 }

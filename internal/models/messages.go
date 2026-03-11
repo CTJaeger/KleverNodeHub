@@ -97,3 +97,26 @@ type NodeNonceStallEvent struct {
 	StallDuration float64 `json:"stall_duration_seconds"`
 	DetectedAt    int64   `json:"detected_at"`
 }
+
+// ProvisionRequest is the request body for provisioning a new Klever node.
+type ProvisionRequest struct {
+	ServerID        string            `json:"server_id"`
+	NodeName        string            `json:"node_name"`
+	Network         string            `json:"network"`          // "mainnet" or "testnet"
+	ImageTag        string            `json:"image_tag"`
+	Port            int               `json:"port"`
+	GenerateKeys    bool              `json:"generate_keys"`
+	ConfigOverrides map[string]string `json:"config_overrides,omitempty"`
+}
+
+// ProvisionProgress is sent during provisioning to report step status.
+type ProvisionProgress struct {
+	JobID      string `json:"job_id"`
+	ServerID   string `json:"server_id"`
+	Step       int    `json:"step"`
+	TotalSteps int    `json:"total_steps"`
+	StepName   string `json:"step_name"`
+	Status     string `json:"status"` // "running", "completed", "failed"
+	Message    string `json:"message,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
