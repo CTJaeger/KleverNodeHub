@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #20**: Remote node configuration management (read/write/diff)
+  - Agent-side config ops: `ListConfigFiles`, `ReadConfigFile`, `WriteConfigFile`, `BackupConfigFile`, `RestoreConfigBackup`
+  - Path traversal prevention, allowed extension whitelist (.toml, .json, .pem, .yaml, .yml, .cfg)
+  - Auto-backup before every write, timestamped backup files in `config/backups/`
+  - 6 new executor commands: `config.list`, `config.read`, `config.write`, `config.backup`, `config.backups`, `config.restore`
+  - Dashboard API: GET/PUT config files, GET backups, POST restore, POST multi-push
+  - Config editor UI on node detail page: file selector, textarea editor, Save & Restart, backup/restore
+  - Multi-node config push: `POST /api/config/push` with optional container restart
+  - 12 unit tests (list, read, write with backup, traversal prevention, extension validation, restore)
+
 - **Issue #19**: Complete upgrade/downgrade flow with progress tracking
   - `UpgradeContainerWithRollback`: 6-step upgrade with health verification and automatic rollback
   - Progress callback (`UpgradeProgress`) reports each step: snapshot, pulling, stopping, removing, creating, verifying
