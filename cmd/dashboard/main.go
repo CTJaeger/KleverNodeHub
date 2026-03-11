@@ -127,6 +127,7 @@ func main() {
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
 	configHandler := handlers.NewConfigHandler(hub, nodeStore)
+	logHandler := handlers.NewLogHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
@@ -185,6 +186,7 @@ func main() {
 	mux.Handle("GET /api/nodes/{id}/config/{filename}/backups", authMw(http.HandlerFunc(configHandler.HandleListBackups)))
 	mux.Handle("POST /api/nodes/{id}/config/restore", authMw(http.HandlerFunc(configHandler.HandleRestore)))
 	mux.Handle("POST /api/config/push", authMw(http.HandlerFunc(configHandler.HandleMultiPush)))
+	mux.Handle("GET /api/nodes/{id}/logs", authMw(http.HandlerFunc(logHandler.HandleFetchLogs)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)

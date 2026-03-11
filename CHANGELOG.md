@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #21**: Real-time log streaming from node containers
+  - `FetchLogs`: Docker API log reader with multiplexed stream parsing (stdout/stderr)
+  - `StreamLogs`: Live log follow with context cancellation and 30-min timeout
+  - `LogStreamManager`: Manages active streams (one per container, auto-cleanup)
+  - `node.logs` executor command with tail and since parameters
+  - Dashboard API: `GET /api/nodes/{id}/logs?tail=100&since=<timestamp>`
+  - Log viewer UI: terminal-style display, log level highlighting (ERROR/WARN/INFO/DEBUG)
+  - Text search filter, timestamp toggle, line count selector, auto-scroll
+  - Download logs as text file
+  - 5 unit tests (timestamp parsing, Docker stream parsing, empty stream, manager lifecycle)
+
 - **Issue #20**: Remote node configuration management (read/write/diff)
   - Agent-side config ops: `ListConfigFiles`, `ReadConfigFile`, `WriteConfigFile`, `BackupConfigFile`, `RestoreConfigBackup`
   - Path traversal prevention, allowed extension whitelist (.toml, .json, .pem, .yaml, .yml, .cfg)

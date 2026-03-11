@@ -104,6 +104,8 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeConfigBackups(msg.Payload, result)
 	case "config.restore":
 		err = e.executeConfigRestore(msg.Payload, result)
+	case "node.logs":
+		err = e.executeFetchLogs(ctx, msg.Payload, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -368,6 +370,36 @@ func (e *Executor) executeConfigRestore(payload any, result *models.CommandResul
 	}
 
 	result.Output = "restored from: " + backupName
+	return nil
+}
+
+func (e *Executor) executeFetchLogs(ctx context.Context, payload any, result *models.CommandResult) error {
+	containerName := extractStringField(payload, "container_name")
+	if containerName == "" {
+		return fmt.Errorf("container_name is required")
+	}
+
+	tail := 100
+	if v, ok := payload.(map[string]any); ok {
+		if t, ok := v["tail"].(float64); ok && t > 0 {
+			tail = int(t)
+		}
+	}
+
+	var since int64
+	if v, ok := payload.(map[string]any); ok {
+		if s, ok := v["since"].(float64); ok && s > 0 {
+			since = int64(s)
+		}
+	}
+
+	lines, err := e.docker.FetchLogs(ctx, containerName, tail, since)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(lines)
+	result.Output = string(jsonBytes)
 	return nil
 }
 
