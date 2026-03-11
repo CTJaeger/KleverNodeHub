@@ -106,6 +106,18 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeConfigRestore(msg.Payload, result)
 	case "node.logs":
 		err = e.executeFetchLogs(ctx, msg.Payload, result)
+	case "key.info":
+		err = e.executeKeyInfo(msg.Payload, result)
+	case "key.generate":
+		err = e.executeKeyGenerate(ctx, msg.Payload, result)
+	case "key.import":
+		err = e.executeKeyImport(msg.Payload, result)
+	case "key.export":
+		err = e.executeKeyExport(msg.Payload, result)
+	case "key.backup":
+		err = e.executeKeyBackup(msg.Payload, result)
+	case "key.backups":
+		err = e.executeKeyBackups(msg.Payload, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -399,6 +411,89 @@ func (e *Executor) executeFetchLogs(ctx context.Context, payload any, result *mo
 	}
 
 	jsonBytes, _ := json.Marshal(lines)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeKeyInfo(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	info, err := GetKeyInfo(dataDir)
+	if err != nil {
+		return err
+	}
+	jsonBytes, _ := json.Marshal(info)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeKeyGenerate(ctx context.Context, payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	imageTag := extractStringField(payload, "image_tag")
+	if dataDir == "" || imageTag == "" {
+		return fmt.Errorf("data_dir and image_tag are required")
+	}
+	info, err := e.docker.GenerateKey(ctx, dataDir, imageTag)
+	if err != nil {
+		return err
+	}
+	jsonBytes, _ := json.Marshal(info)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeKeyImport(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	pemContent := extractStringField(payload, "pem_content")
+	if dataDir == "" || pemContent == "" {
+		return fmt.Errorf("data_dir and pem_content are required")
+	}
+	info, err := ImportKey(dataDir, pemContent)
+	if err != nil {
+		return err
+	}
+	jsonBytes, _ := json.Marshal(info)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeKeyExport(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	pem, err := ExportKey(dataDir)
+	if err != nil {
+		return err
+	}
+	result.Output = pem
+	return nil
+}
+
+func (e *Executor) executeKeyBackup(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	if err := BackupKey(dataDir); err != nil {
+		return err
+	}
+	result.Output = "key backed up"
+	return nil
+}
+
+func (e *Executor) executeKeyBackups(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	backups, err := ListKeyBackups(dataDir)
+	if err != nil {
+		return err
+	}
+	jsonBytes, _ := json.Marshal(backups)
 	result.Output = string(jsonBytes)
 	return nil
 }

@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #22**: Validator key management — generate, import, export
+  - Key generation via klever-go keygenerator Docker entrypoint
+  - Import/export with PEM format validation (BLS public key extraction)
+  - Auto-backup before key operations, timestamped backups in `config/key-backups/`
+  - 6 executor commands: `key.info`, `key.generate`, `key.import`, `key.export`, `key.backup`, `key.backups`
+  - Dashboard API: GET key info, POST generate, POST import, GET export, GET backups
+  - Key management UI: generate/import/export buttons, key info display on node detail page
+  - 10 unit tests (get info, import, invalid PEM, backup on import, export, backup/list)
+
 - **Issue #21**: Real-time log streaming from node containers
   - `FetchLogs`: Docker API log reader with multiplexed stream parsing (stdout/stderr)
   - `StreamLogs`: Live log follow with context cancellation and 30-min timeout

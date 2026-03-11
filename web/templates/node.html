@@ -176,6 +176,23 @@
                 </div>
             </div>
 
+            <!-- Key Management -->
+            <div class="card mb-16">
+                <div class="card-header">
+                    <h3>Validator Key</h3>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-sm btn-primary" onclick="generateKey()">Generate</button>
+                        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('key-import-file').click()">Import</button>
+                        <button class="btn btn-sm btn-secondary" onclick="exportKey()" id="btn-export-key">Export</button>
+                    </div>
+                </div>
+                <input type="file" id="key-import-file" accept=".pem" style="display:none" onchange="importKeyFile(event)">
+                <div id="key-info">
+                    <div class="loading-text"><div class="spinner"></div><span>Loading key info...</span></div>
+                </div>
+                <div id="key-result" class="hidden mt-8"></div>
+            </div>
+
             <!-- Log Viewer -->
             <div class="card">
                 <div class="card-header">
@@ -439,6 +456,85 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        }
+
+        async function loadKeyInfo() {
+            try {
+                const data = await API.getJSON('/api/nodes/' + nodeId + '/keys');
+                if (data) {
+                    let html = '';
+                    if (data.bls_public_key) {
+                        html += infoRow('BLS Public Key', truncate(data.bls_public_key, 32));
+                        html += infoRow('Key File', data.key_file || 'validatorKey.pem');
+                        html += infoRow('File Size', formatFileSize(data.file_size || 0));
+                        if (data.has_backup) {
+                            html += infoRow('Backups', 'Available');
+                        }
+                    } else {
+                        html = '<div class="empty-state"><p class="text-muted text-sm">No validator key found. Use Generate or Import.</p></div>';
+                    }
+                    document.getElementById('key-info').innerHTML = html;
+                }
+            } catch (e) {
+                document.getElementById('key-info').innerHTML = '<div class="text-muted text-sm">Unable to load key info.</div>';
+            }
+        }
+
+        async function generateKey() {
+            if (!node || !node.docker_image_tag) {
+                showKeyResult('Node image tag unknown. Cannot generate key.', true);
+                return;
+            }
+            showKeyResult('Generating key...', false);
+            const result = await API.postJSON('/api/nodes/' + nodeId + '/keys/generate', { image_tag: node.docker_image_tag });
+            if (result && result.ok && result.data && result.data.success) {
+                showKeyResult('Key generated successfully!', false);
+                loadKeyInfo();
+            } else {
+                showKeyResult('Generate failed: ' + (result?.data?.error || 'Unknown error'), true);
+            }
+        }
+
+        function importKeyFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const pemContent = e.target.result;
+                showKeyResult('Importing key...', false);
+                const result = await API.postJSON('/api/nodes/' + nodeId + '/keys/import', { pem_content: pemContent });
+                if (result && result.ok && result.data && result.data.success) {
+                    showKeyResult('Key imported successfully!', false);
+                    loadKeyInfo();
+                } else {
+                    showKeyResult('Import failed: ' + (result?.data?.error || 'Unknown error'), true);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        async function exportKey() {
+            const result = await API.getJSON('/api/nodes/' + nodeId + '/keys/export');
+            if (result && result.pem_content) {
+                const blob = new Blob([result.pem_content], { type: 'application/x-pem-file' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'validatorKey.pem';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                showKeyResult('Key exported.', false);
+            } else {
+                showKeyResult('Export failed: ' + (result?.error || 'No key data'), true);
+            }
+        }
+
+        function showKeyResult(msg, isError) {
+            const el = document.getElementById('key-result');
+            el.className = isError ? 'alert alert-error mt-8' : 'alert alert-success mt-8';
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
         }
 
         let logData = [];
@@ -715,6 +811,7 @@
         init();
         loadDockerTags();
         loadConfigFiles();
+        loadKeyInfo();
     </script>
 </body>
 </html>
