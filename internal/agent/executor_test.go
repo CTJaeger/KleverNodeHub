@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"path/filepath"
 	"testing"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
@@ -13,8 +12,7 @@ import (
 
 func newMockDockerForExecutor(t *testing.T) (*DockerClient, func()) {
 	t.Helper()
-	tmpDir := t.TempDir()
-	socketPath := filepath.Join(tmpDir, "docker.sock")
+	socketPath, sockCleanup := shortSocketPath(t)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +45,7 @@ func newMockDockerForExecutor(t *testing.T) (*DockerClient, func()) {
 	return client, func() {
 		server.Close()
 		listener.Close()
+		sockCleanup()
 	}
 }
 

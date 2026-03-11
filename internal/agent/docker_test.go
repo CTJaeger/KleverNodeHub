@@ -193,9 +193,9 @@ func TestParentDir(t *testing.T) {
 
 // TestDiscoverNodesWithMockDocker uses a mock Docker API server over Unix socket.
 func TestDiscoverNodesWithMockDocker(t *testing.T) {
-	// Create a temporary Unix socket
-	tmpDir := t.TempDir()
-	socketPath := filepath.Join(tmpDir, "docker.sock")
+	// Create a temporary Unix socket with short path (macOS 104 char limit)
+	socketPath, sockCleanup := shortSocketPath(t)
+	defer sockCleanup()
 
 	// Mock data
 	listResponse := []containerListEntry{
@@ -267,8 +267,8 @@ func TestDiscoverNodesWithMockDocker(t *testing.T) {
 
 // TestDiscoverNodesEmpty tests discovery on a server with no Klever containers.
 func TestDiscoverNodesEmpty(t *testing.T) {
-	tmpDir := t.TempDir()
-	socketPath := filepath.Join(tmpDir, "docker.sock")
+	socketPath, sockCleanup := shortSocketPath(t)
+	defer sockCleanup()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -298,8 +298,8 @@ func TestDiscoverNodesEmpty(t *testing.T) {
 
 // TestDiscoverNodesMultiple tests discovery with multiple containers.
 func TestDiscoverNodesMultiple(t *testing.T) {
-	tmpDir := t.TempDir()
-	socketPath := filepath.Join(tmpDir, "docker.sock")
+	socketPath, sockCleanup := shortSocketPath(t)
+	defer sockCleanup()
 
 	listResponse := []containerListEntry{
 		{ID: "c1", Names: []string{"/klever-node1"}, State: "running"},

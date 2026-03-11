@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
 func TestNewAgent(t *testing.T) {
@@ -75,8 +77,8 @@ func TestBuildAgentInfo(t *testing.T) {
 	a.config = &Config{}
 
 	info := a.BuildAgentInfo()
-	if info.Version != agentVersion {
-		t.Errorf("version = %q, want %q", info.Version, agentVersion)
+	if info.Version != version.Version {
+		t.Errorf("version = %q, want %q", info.Version, version.Version)
 	}
 	if info.OS == "" {
 		t.Error("OS should not be empty")

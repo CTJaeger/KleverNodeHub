@@ -1,7 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
+)
 
 func main() {
-	fmt.Println("Klever Node Hub - Agent")
+	info := version.Get()
+	fmt.Printf("Klever Node Hub - Agent %s (%s)\n", info.Version, info.GitCommit)
 }

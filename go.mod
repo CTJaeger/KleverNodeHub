@@ -1,6 +1,6 @@
 module github.com/CTJaeger/KleverNodeHub
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/go-webauthn/webauthn v0.16.0
