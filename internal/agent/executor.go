@@ -75,7 +75,7 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 			err = fmt.Errorf("image_tag is required for upgrade")
 		} else {
 			var newID string
-			newID, err = e.docker.UpgradeContainer(ctx, containerName, imageTag)
+			newID, err = e.docker.UpgradeContainerWithRollback(ctx, containerName, imageTag)
 			if err == nil {
 				result.Output = "upgraded to " + imageTag + " (container: " + newID[:12] + ")"
 			}

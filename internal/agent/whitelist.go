@@ -16,6 +16,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"node.remove":    {Description: "Remove a Klever node container", RequiresContainer: true},
 	"node.upgrade":   {Description: "Upgrade a Klever node to a new image tag", RequiresContainer: true},
 	"node.pull":      {Description: "Pull a Docker image", RequiresContainer: false},
+	"node.provision": {Description: "Provision a new Klever node from scratch", RequiresContainer: false},
 	"node.discovery": {Description: "Scan for existing Klever nodes", RequiresContainer: false},
 }
 

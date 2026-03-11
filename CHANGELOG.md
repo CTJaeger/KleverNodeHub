@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #19**: Complete upgrade/downgrade flow with progress tracking
+  - `UpgradeContainerWithRollback`: 6-step upgrade with health verification and automatic rollback
+  - Progress callback (`UpgradeProgress`) reports each step: snapshot, pulling, stopping, removing, creating, verifying
+  - Executor uses rollback-aware upgrade (replaces plain `UpgradeContainer`)
+  - Batch upgrade: `POST /api/nodes/batch/upgrade` — sequential upgrade to maintain quorum
+  - Node detail UI: version selector dropdown, upgrade/downgrade buttons, progress bar
+  - Added `node.provision` to command whitelist
+  - 5 new tests: success with progress, create-fail rollback, no-progress, total steps, rollback helper
+
 - **Issue #18**: Node provisioning wizard — install Klever node from scratch
   - Multi-step `Provisioner` (7 steps): preflight, pull, dirs, config, container, start, verify
   - Progress reporting, cleanup on failure, `node.provision` executor command

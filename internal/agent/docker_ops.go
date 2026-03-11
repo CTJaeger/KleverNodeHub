@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // ContainerConfig defines parameters for creating a Klever node container.
@@ -289,6 +290,152 @@ func (d *DockerClient) UpgradeContainer(ctx context.Context, containerName, newT
 	}
 
 	return containerID, nil
+}
+
+// UpgradeProgress is a callback for reporting upgrade step progress.
+type UpgradeProgress func(step int, totalSteps int, stepName string, status string)
+
+// UpgradeContainerWithRollback upgrades a container and rolls back on failure.
+// It verifies the new container is running after startup, and if not,
+// recreates the container with the original image tag.
+// The optional onProgress callback reports each step.
+func (d *DockerClient) UpgradeContainerWithRollback(ctx context.Context, containerName, newTag string, onProgress ...UpgradeProgress) (string, error) {
+	const totalSteps = 6
+	report := func(step int, name, status string) {
+		for _, fn := range onProgress {
+			if fn != nil {
+				fn(step, totalSteps, name, status)
+			}
+		}
+	}
+
+	// Step 1: Snapshot current config
+	report(1, "snapshot", "running")
+	cj, err := d.InspectContainer(ctx, containerName)
+	if err != nil {
+		report(1, "snapshot", "failed")
+		return "", fmt.Errorf("snapshot for upgrade: %w", err)
+	}
+	snapshot := parseContainerToNode(cj)
+	oldTag := snapshot.DockerImageTag
+	report(1, "snapshot", "completed")
+
+	// Step 2: Pull new image
+	report(2, "pulling", "running")
+	newImage := fmt.Sprintf("%s:%s", kleverImage, newTag)
+	if err := d.PullImage(ctx, newImage); err != nil {
+		report(2, "pulling", "failed")
+		return "", fmt.Errorf("pull new image: %w", err)
+	}
+	report(2, "pulling", "completed")
+
+	// Step 3: Stop old container
+	report(3, "stopping", "running")
+	_ = d.StopContainer(ctx, containerName, 30)
+	report(3, "stopping", "completed")
+
+	// Step 4: Remove old container
+	report(4, "removing", "running")
+	if err := d.RemoveContainer(ctx, containerName, false); err != nil {
+		report(4, "removing", "failed")
+		// Try rollback
+		if oldTag != "" {
+			rollbackErr := d.rollback(ctx, containerName, oldTag, &snapshot)
+			if rollbackErr != nil {
+				return "", fmt.Errorf("upgrade failed: %w; rollback also failed: %v", err, rollbackErr)
+			}
+			return "", fmt.Errorf("upgrade failed (rolled back to %s): %w", oldTag, err)
+		}
+		return "", err
+	}
+	report(4, "removing", "completed")
+
+	// Step 5: Create and start new container
+	report(5, "creating", "running")
+	cfg := &ContainerConfig{
+		Name:            snapshot.ContainerName,
+		ImageTag:        newTag,
+		DataDir:         snapshot.DataDirectory,
+		RestAPIPort:     snapshot.RestAPIPort,
+		DisplayName:     snapshot.DisplayName,
+		RedundancyLevel: snapshot.RedundancyLevel,
+	}
+	containerID, err := d.CreateContainer(ctx, cfg)
+	if err != nil {
+		report(5, "creating", "failed")
+		if oldTag != "" {
+			rollbackErr := d.rollback(ctx, containerName, oldTag, &snapshot)
+			if rollbackErr != nil {
+				return "", fmt.Errorf("create failed: %w; rollback also failed: %v", err, rollbackErr)
+			}
+			return "", fmt.Errorf("create failed (rolled back to %s): %w", oldTag, err)
+		}
+		return "", err
+	}
+	if err := d.StartContainer(ctx, containerID); err != nil {
+		report(5, "creating", "failed")
+		if oldTag != "" {
+			_ = d.RemoveContainer(ctx, containerName, true)
+			rollbackErr := d.rollback(ctx, containerName, oldTag, &snapshot)
+			if rollbackErr != nil {
+				return "", fmt.Errorf("start failed: %w; rollback also failed: %v", err, rollbackErr)
+			}
+			return "", fmt.Errorf("start failed (rolled back to %s): %w", oldTag, err)
+		}
+		return "", err
+	}
+	report(5, "creating", "completed")
+
+	// Step 6: Verify new container is running
+	report(6, "verifying", "running")
+	verifyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	for {
+		status, statusErr := d.GetContainerStatus(verifyCtx, containerName)
+		if statusErr == nil && strings.Contains(status, "running") {
+			report(6, "verifying", "completed")
+			return containerID, nil
+		}
+
+		select {
+		case <-verifyCtx.Done():
+			report(6, "verifying", "failed")
+			if oldTag != "" {
+				_ = d.RemoveContainer(ctx, containerName, true)
+				rollbackErr := d.rollback(ctx, containerName, oldTag, &snapshot)
+				if rollbackErr != nil {
+					return "", fmt.Errorf("new container not healthy; rollback failed: %v", rollbackErr)
+				}
+				return "", fmt.Errorf("new container not healthy after 30s; rolled back to %s", oldTag)
+			}
+			return "", fmt.Errorf("new container not healthy after 30s")
+		case <-time.After(2 * time.Second):
+			continue
+		}
+	}
+}
+
+func (d *DockerClient) rollback(ctx context.Context, containerName, oldTag string, snapshot *DiscoveredNode) error {
+	cfg := &ContainerConfig{
+		Name:            containerName,
+		ImageTag:        oldTag,
+		DataDir:         snapshot.DataDirectory,
+		RestAPIPort:     snapshot.RestAPIPort,
+		DisplayName:     snapshot.DisplayName,
+		RedundancyLevel: snapshot.RedundancyLevel,
+	}
+
+	containerID, err := d.CreateContainer(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("rollback create: %w", err)
+	}
+
+	if err := d.StartContainer(ctx, containerID); err != nil {
+		return fmt.Errorf("rollback start: %w", err)
+	}
+
+	return nil
 }
 
 // ListLocalImages returns images matching the klever-go image.

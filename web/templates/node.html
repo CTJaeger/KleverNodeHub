@@ -51,6 +51,23 @@
                     <button class="btn btn-sm btn-secondary" onclick="nodeAction('restart')" id="btn-restart">Restart</button>
                 </div>
 
+                <!-- Upgrade/Downgrade -->
+                <div class="mt-8" id="upgrade-section">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <select id="upgrade-tag" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:140px;">
+                            <option value="">Select version...</option>
+                        </select>
+                        <button class="btn btn-sm btn-primary" onclick="doUpgrade()" id="btn-upgrade">Upgrade</button>
+                        <button class="btn btn-sm btn-secondary" onclick="doUpgrade()" id="btn-downgrade">Downgrade</button>
+                    </div>
+                    <div id="upgrade-progress" class="hidden mt-8">
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill green" id="upgrade-bar" style="width:0%"></div>
+                        </div>
+                        <div class="text-sm text-muted mt-8" id="upgrade-status"></div>
+                    </div>
+                </div>
+
                 <!-- Action result -->
                 <div id="action-result" class="hidden mt-8"></div>
             </div>
@@ -388,7 +405,89 @@
             return div.innerHTML;
         }
 
+        async function loadDockerTags() {
+            try {
+                const data = await API.getJSON('/api/docker/tags');
+                const select = document.getElementById('upgrade-tag');
+                if (data && data.tags) {
+                    data.tags.forEach(tag => {
+                        const opt = document.createElement('option');
+                        opt.value = tag;
+                        opt.textContent = tag;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function doUpgrade() {
+            const tag = document.getElementById('upgrade-tag').value;
+            if (!tag) {
+                showResult('Please select a version first.', true);
+                return;
+            }
+
+            const currentTag = node ? node.docker_image_tag : '';
+            const action = tag < currentTag ? 'downgrade' : 'upgrade';
+            const endpoint = '/api/nodes/' + nodeId + '/' + action;
+
+            // Show progress
+            const progressEl = document.getElementById('upgrade-progress');
+            const barEl = document.getElementById('upgrade-bar');
+            const statusEl = document.getElementById('upgrade-status');
+            progressEl.classList.remove('hidden');
+            barEl.style.width = '10%';
+            statusEl.textContent = 'Sending ' + action + ' command...';
+
+            document.getElementById('btn-upgrade').disabled = true;
+            document.getElementById('btn-downgrade').disabled = true;
+
+            // Animate progress while waiting
+            let pct = 10;
+            const animInterval = setInterval(() => {
+                if (pct < 90) { pct += 5; barEl.style.width = pct + '%'; }
+            }, 3000);
+
+            const result = await API.postJSON(endpoint, { image_tag: tag });
+
+            clearInterval(animInterval);
+
+            if (result && result.ok && result.data && result.data.success) {
+                barEl.style.width = '100%';
+                statusEl.textContent = action.charAt(0).toUpperCase() + action.slice(1) + ' successful: ' + (result.data.output || 'ok');
+                showResult(action.charAt(0).toUpperCase() + action.slice(1) + ' to ' + tag + ' successful!', false);
+            } else {
+                barEl.style.width = '100%';
+                barEl.className = 'progress-bar-fill';
+                barEl.style.background = 'var(--danger)';
+                const errMsg = result?.data?.error || 'Unknown error';
+                statusEl.textContent = 'Failed: ' + errMsg;
+                showResult('Failed: ' + errMsg, true);
+            }
+
+            document.getElementById('btn-upgrade').disabled = false;
+            document.getElementById('btn-downgrade').disabled = false;
+
+            setTimeout(() => {
+                progressEl.classList.add('hidden');
+                barEl.style.width = '0%';
+                barEl.className = 'progress-bar-fill green';
+                barEl.style.background = '';
+            }, 8000);
+
+            setTimeout(loadNode, 1000);
+        }
+
+        function showResult(msg, isError) {
+            const el = document.getElementById('action-result');
+            el.className = isError ? 'alert alert-error mt-8' : 'alert alert-success mt-8';
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
+        }
+
         init();
+        loadDockerTags();
     </script>
 </body>
 </html>

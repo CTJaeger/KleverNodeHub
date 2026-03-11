@@ -173,6 +173,7 @@ func main() {
 	mux.Handle("POST /api/nodes/batch", authMw(http.HandlerFunc(nodeHandler.HandleBatch)))
 	mux.Handle("POST /api/nodes/{id}/upgrade", authMw(http.HandlerFunc(dockerHandler.HandleUpgrade)))
 	mux.Handle("POST /api/nodes/{id}/downgrade", authMw(http.HandlerFunc(dockerHandler.HandleDowngrade)))
+	mux.Handle("POST /api/nodes/batch/upgrade", authMw(http.HandlerFunc(dockerHandler.HandleBatchUpgrade)))
 	mux.Handle("GET /api/docker/tags", authMw(http.HandlerFunc(dockerHandler.HandleListTags)))
 	mux.Handle("GET /api/nodes/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleNodeMetrics)))
 	mux.Handle("GET /api/servers/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleServerMetrics)))
