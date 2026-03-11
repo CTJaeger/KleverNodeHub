@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #23**: Notification system — Telegram, Pushover, and webhook channels
+  - `Channel` interface with `Send`, `Validate`, `Name` methods
+  - `TelegramChannel`: Bot API, Markdown formatting, rate limiting (20 msg/min)
+  - `PushoverChannel`: Priority mapping (critical=emergency, warning=high, info=normal)
+  - `WebhookChannel`: Configurable URL/headers, retry with exponential backoff (3 attempts)
+  - `Manager`: Fan-out to all enabled channels, test endpoint, in-memory history (500 entries)
+  - Dashboard API: CRUD channels, test send, history
+  - Channel config persisted in settings store, auto-loaded on startup
+  - 15 unit tests (manager ops, fan-out, partial failure, history, validation, webhook send/retry)
+
 - **Issue #22**: Validator key management — generate, import, export
   - Key generation via klever-go keygenerator Docker entrypoint
   - Import/export with PEM format validation (BLS public key extraction)
