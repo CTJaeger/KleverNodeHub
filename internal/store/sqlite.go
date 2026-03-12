@@ -230,4 +230,8 @@ var migrations = []string{
 	CREATE INDEX IF NOT EXISTS idx_alerts_state ON alerts(state);
 	CREATE INDEX IF NOT EXISTS idx_alerts_rule ON alerts(rule_id);
 	CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts(created_at);`,
+
+	// Migration 4: Add public IP and region columns to servers
+	`ALTER TABLE servers ADD COLUMN public_ip TEXT DEFAULT '';
+	ALTER TABLE servers ADD COLUMN region TEXT DEFAULT '';`,
 }

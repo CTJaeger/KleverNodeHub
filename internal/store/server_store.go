@@ -36,9 +36,10 @@ func (s *ServerStore) Create(server *models.Server) error {
 	}
 
 	_, err = s.db.db.Exec(`
-		INSERT INTO servers (id, name, hostname, ip_address, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO servers (id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		server.ID, server.Name, server.Hostname, server.IPAddress,
+		server.PublicIP, server.Region,
 		server.OSInfo, server.AgentVersion, server.Status, server.LastHeartbeat,
 		server.Certificate, server.RegisteredAt, server.UpdatedAt, string(metadata),
 	)
@@ -51,7 +52,7 @@ func (s *ServerStore) Create(server *models.Server) error {
 // GetByID retrieves a server by ID.
 func (s *ServerStore) GetByID(id string) (*models.Server, error) {
 	row := s.db.db.QueryRow(`
-		SELECT id, name, hostname, ip_address, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
+		SELECT id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
 		FROM servers WHERE id = ?`, id)
 
 	return scanServer(row)
@@ -60,7 +61,7 @@ func (s *ServerStore) GetByID(id string) (*models.Server, error) {
 // List retrieves all servers.
 func (s *ServerStore) List() ([]models.Server, error) {
 	rows, err := s.db.db.Query(`
-		SELECT id, name, hostname, ip_address, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
+		SELECT id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
 		FROM servers ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)
@@ -91,10 +92,10 @@ func (s *ServerStore) Update(server *models.Server) error {
 	}
 
 	result, err := s.db.db.Exec(`
-		UPDATE servers SET name=?, hostname=?, ip_address=?, os_info=?, agent_version=?, status=?, last_heartbeat=?, certificate=?, updated_at=?, metadata=?
+		UPDATE servers SET name=?, hostname=?, ip_address=?, public_ip=?, region=?, os_info=?, agent_version=?, status=?, last_heartbeat=?, certificate=?, updated_at=?, metadata=?
 		WHERE id=?`,
-		server.Name, server.Hostname, server.IPAddress, server.OSInfo,
-		server.AgentVersion, server.Status, server.LastHeartbeat,
+		server.Name, server.Hostname, server.IPAddress, server.PublicIP, server.Region,
+		server.OSInfo, server.AgentVersion, server.Status, server.LastHeartbeat,
 		server.Certificate, server.UpdatedAt, string(metadata), server.ID,
 	)
 	if err != nil {
@@ -121,6 +122,21 @@ func (s *ServerStore) Delete(id string) error {
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("server not found: %s", id)
+	}
+	return nil
+}
+
+// UpdatePublicIP updates the server's public IP and region.
+func (s *ServerStore) UpdatePublicIP(id, publicIP, region string) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+
+	_, err := s.db.db.Exec(
+		"UPDATE servers SET public_ip=?, region=?, updated_at=? WHERE id=?",
+		publicIP, region, time.Now().Unix(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update public ip: %w", err)
 	}
 	return nil
 }
@@ -157,6 +173,7 @@ func scanServerFromScanner(s scanner) (*models.Server, error) {
 
 	err := s.Scan(
 		&srv.ID, &srv.Name, &srv.Hostname, &srv.IPAddress,
+		&srv.PublicIP, &srv.Region,
 		&srv.OSInfo, &srv.AgentVersion, &srv.Status, &srv.LastHeartbeat,
 		&cert, &srv.RegisteredAt, &srv.UpdatedAt, &metadataStr,
 	)

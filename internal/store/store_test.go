@@ -279,6 +279,25 @@ func TestServerWithMetadata(t *testing.T) {
 	}
 }
 
+func TestServerUpdatePublicIP(t *testing.T) {
+	db := newTestDB(t)
+	ss := NewServerStore(db)
+
+	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
+
+	if err := ss.UpdatePublicIP("srv-1", "203.0.113.42", "Frankfurt, Germany"); err != nil {
+		t.Fatalf("update public ip: %v", err)
+	}
+
+	srv, _ := ss.GetByID("srv-1")
+	if srv.PublicIP != "203.0.113.42" {
+		t.Errorf("public_ip = %q, want %q", srv.PublicIP, "203.0.113.42")
+	}
+	if srv.Region != "Frankfurt, Germany" {
+		t.Errorf("region = %q, want %q", srv.Region, "Frankfurt, Germany")
+	}
+}
+
 // --- Node Tests ---
 
 func TestNodeCRUD(t *testing.T) {

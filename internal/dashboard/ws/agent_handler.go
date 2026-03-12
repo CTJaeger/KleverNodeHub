@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
@@ -20,15 +21,17 @@ type AgentHandler struct {
 	serverStore  *store.ServerStore
 	nodeStore    *store.NodeStore
 	metricsStore *store.MetricsStore
+	geoResolver  *dashboard.GeoIPResolver
 }
 
 // NewAgentHandler creates a new WebSocket handler for agent connections.
-func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore) *AgentHandler {
+func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore, geoResolver *dashboard.GeoIPResolver) *AgentHandler {
 	return &AgentHandler{
 		hub:          hub,
 		serverStore:  serverStore,
 		nodeStore:    nodeStore,
 		metricsStore: metricsStore,
+		geoResolver:  geoResolver,
 	}
 }
 
@@ -118,10 +121,12 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 		switch msg.Action {
 		case "agent.info":
 			log.Printf("agent info from %s: %s", serverID, string(data))
+			h.handleAgentInfo(ctx, serverID, &msg)
 
 		case "agent.heartbeat":
 			_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
 			h.handleHeartbeatMetrics(serverID, &msg)
+			h.handleHeartbeatIP(ctx, serverID, &msg)
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)
@@ -283,4 +288,62 @@ func (h *AgentHandler) handleCommandResult(msg *models.Message) {
 	}
 
 	h.hub.HandleResult(&result)
+}
+
+// handleAgentInfo processes agent.info and updates public IP + region.
+func (h *AgentHandler) handleAgentInfo(ctx context.Context, serverID string, msg *models.Message) {
+	data, err := json.Marshal(msg.Payload)
+	if err != nil {
+		return
+	}
+
+	var info models.AgentInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return
+	}
+
+	if info.PublicIP == "" {
+		return
+	}
+
+	h.updateServerIPAndRegion(ctx, serverID, info.PublicIP)
+}
+
+// handleHeartbeatIP updates public IP from heartbeat if changed.
+func (h *AgentHandler) handleHeartbeatIP(ctx context.Context, serverID string, msg *models.Message) {
+	data, err := json.Marshal(msg.Payload)
+	if err != nil {
+		return
+	}
+
+	var hb models.HeartbeatPayload
+	if err := json.Unmarshal(data, &hb); err != nil {
+		return
+	}
+
+	if hb.PublicIP == "" {
+		return
+	}
+
+	// Only update if IP changed
+	srv, err := h.serverStore.GetByID(serverID)
+	if err != nil || srv.PublicIP == hb.PublicIP {
+		return
+	}
+
+	h.updateServerIPAndRegion(ctx, serverID, hb.PublicIP)
+}
+
+// updateServerIPAndRegion resolves the region and persists IP + region.
+func (h *AgentHandler) updateServerIPAndRegion(ctx context.Context, serverID, publicIP string) {
+	region := ""
+	if h.geoResolver != nil {
+		region = h.geoResolver.Resolve(ctx, publicIP)
+	}
+
+	if err := h.serverStore.UpdatePublicIP(serverID, publicIP, region); err != nil {
+		log.Printf("update public IP for %s: %v", serverID, err)
+	} else {
+		log.Printf("server %s: public IP %s, region %s", serverID, publicIP, region)
+	}
 }

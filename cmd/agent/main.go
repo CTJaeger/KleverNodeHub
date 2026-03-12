@@ -88,6 +88,12 @@ func main() {
 		cancel()
 	}()
 
+	// --- Detect public IP ---
+	publicIP := agent.DetectPublicIP(ctx)
+	if publicIP != "" {
+		log.Printf("public IP: %s", publicIP)
+	}
+
 	// --- WebSocket connection loop with auto-reconnect ---
 	wsURL := buildWSURL(config.DashboardURL, config.ServerID)
 	delay := reconnectBaseDelay
@@ -95,7 +101,7 @@ func main() {
 	for ctx.Err() == nil {
 
 		log.Printf("connecting to %s...", wsURL)
-		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, nodeMetrics, *dockerSocket)
+		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, nodeMetrics, *dockerSocket, publicIP)
 		if ctx.Err() != nil {
 			break
 		}
@@ -117,7 +123,7 @@ func main() {
 }
 
 // runAgentLoop connects to the dashboard and runs the message pump until disconnected.
-func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string) error {
+func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string, publicIP string) error {
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer dialCancel()
 
@@ -132,7 +138,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	log.Println("connected to dashboard")
 
 	// Send agent info on connect
-	infoMsg := ag.BuildInfoMessage()
+	infoMsg := ag.BuildInfoMessage(publicIP)
 	if err := writeMessage(ctx, conn, infoMsg); err != nil {
 		return fmt.Errorf("send agent info: %w", err)
 	}
@@ -180,6 +186,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					Payload: &models.HeartbeatPayload{
 						Timestamp: time.Now().Unix(),
 						Metrics:   metrics.Collect(),
+						PublicIP:  publicIP,
 					},
 					Timestamp: time.Now().Unix(),
 				}
