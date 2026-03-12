@@ -46,6 +46,10 @@ const API = {
         return this.request('POST', path, body);
     },
 
+    async put(path, body) {
+        return this.request('PUT', path, body);
+    },
+
     async delete(path) {
         return this.request('DELETE', path);
     },

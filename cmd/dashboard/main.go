@@ -142,6 +142,7 @@ func main() {
 	alertEvaluator.Start()
 	updateStore := dashboard.NewUpdateStore(*dataDir)
 	updateHandler := handlers.NewUpdateHandler(hub, updateStore, serverStore)
+	settingsHandler := handlers.NewSettingsHandler(settingsStore)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -221,6 +222,11 @@ func main() {
 	mux.Handle("GET /api/agent/version", authMw(http.HandlerFunc(updateHandler.HandleLatestVersion)))
 	mux.Handle("POST /api/agent/update/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleUpdateAgent)))
 	mux.Handle("POST /api/agent/update/all", authMw(http.HandlerFunc(updateHandler.HandleUpdateAll)))
+	mux.Handle("GET /api/settings", authMw(http.HandlerFunc(settingsHandler.HandleGetAll)))
+	mux.Handle("PUT /api/settings", authMw(http.HandlerFunc(settingsHandler.HandleUpdate)))
+	mux.Handle("GET /api/settings/{key}", authMw(http.HandlerFunc(settingsHandler.HandleGetSingle)))
+	mux.Handle("PUT /api/settings/{key}", authMw(http.HandlerFunc(settingsHandler.HandleUpdateSingle)))
+	mux.Handle("POST /api/settings/reset", authMw(http.HandlerFunc(settingsHandler.HandleResetDefaults)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Settings</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+        .tab { padding: 10px 16px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; font-size: 14px; background: none; border-top: none; border-left: none; border-right: none; }
+        .tab:hover { color: var(--text-primary); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .settings-section { margin-bottom: 24px; }
+        .settings-section h4 { margin-bottom: 12px; color: var(--text-primary); }
+        .setting-row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; margin-bottom: 12px; }
+        .setting-label { color: var(--text-secondary); font-size: 13px; }
+        .setting-desc { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+        .section-actions { display: flex; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+        @media (max-width: 768px) {
+            .setting-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>Klever Node Hub</h1>
+                <span class="version">v0.1.0</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/overview">Overview</a>
+                <a href="/settings" class="active">Settings</a>
+                <a href="#" onclick="API.logout()">Logout</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Settings</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <div id="status-msg" class="hidden mb-16"></div>
+
+            <div class="card">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('general')">General</button>
+                    <button class="tab" onclick="switchTab('metrics')">Metrics</button>
+                    <button class="tab" onclick="switchTab('notifications')">Notifications</button>
+                    <button class="tab" onclick="switchTab('agents')">Agents</button>
+                </div>
+
+                <!-- General -->
+                <div id="tab-general" class="tab-content active">
+                    <div class="settings-section">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Dashboard Name</div>
+                                <div class="setting-desc">Display name shown in the header</div>
+                            </div>
+                            <input class="form-input" id="s-dashboard_name" placeholder="Klever Node Hub">
+                        </div>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveSection('general')">Save</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetSection('general')">Reset to Defaults</button>
+                    </div>
+                </div>
+
+                <!-- Metrics -->
+                <div id="tab-metrics" class="tab-content">
+                    <div class="settings-section">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">System Metrics Interval</div>
+                                <div class="setting-desc">Seconds between system metric collections</div>
+                            </div>
+                            <input class="form-input" id="s-metrics_interval_sec" type="number" min="10" max="3600">
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Node Poll Interval</div>
+                                <div class="setting-desc">Seconds between node status checks</div>
+                            </div>
+                            <input class="form-input" id="s-node_poll_interval_sec" type="number" min="10" max="3600">
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Hot Data Retention</div>
+                                <div class="setting-desc">Days to keep detailed metrics</div>
+                            </div>
+                            <input class="form-input" id="s-hot_retention_days" type="number" min="1" max="365">
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Archive Retention</div>
+                                <div class="setting-desc">Days to keep aggregated metrics</div>
+                            </div>
+                            <input class="form-input" id="s-archive_retention_days" type="number" min="1" max="3650">
+                        </div>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveSection('metrics')">Save</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetSection('metrics')">Reset to Defaults</button>
+                    </div>
+                </div>
+
+                <!-- Notifications -->
+                <div id="tab-notifications" class="tab-content">
+                    <div class="settings-section">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Default Severity Filter</div>
+                                <div class="setting-desc">Minimum severity for notifications</div>
+                            </div>
+                            <select class="form-input" id="s-notify_default_severity">
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveSection('notifications')">Save</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetSection('notifications')">Reset to Defaults</button>
+                        <a href="/overview" class="btn btn-secondary btn-sm" style="margin-left:auto;">Manage Channels</a>
+                    </div>
+                </div>
+
+                <!-- Agents -->
+                <div id="tab-agents" class="tab-content">
+                    <div class="settings-section">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Heartbeat Timeout</div>
+                                <div class="setting-desc">Seconds before marking agent offline</div>
+                            </div>
+                            <input class="form-input" id="s-heartbeat_timeout_sec" type="number" min="30" max="600">
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Discovery Interval</div>
+                                <div class="setting-desc">Seconds between agent discovery scans</div>
+                            </div>
+                            <input class="form-input" id="s-agent_discovery_interval_sec" type="number" min="60" max="3600">
+                        </div>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveSection('agents')">Save</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetSection('agents')">Reset to Defaults</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        let settingsData = {};
+        let defaults = {};
+
+        const categoryKeys = {
+            general: ['dashboard_name'],
+            metrics: ['metrics_interval_sec', 'node_poll_interval_sec', 'hot_retention_days', 'archive_retention_days'],
+            notifications: ['notify_default_severity'],
+            agents: ['heartbeat_timeout_sec', 'agent_discovery_interval_sec']
+        };
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector('.tab[onclick*="' + name + '"]').classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        function showStatus(msg, isError) {
+            const el = document.getElementById('status-msg');
+            el.className = isError ? 'alert alert-error mb-16' : 'alert alert-success mb-16';
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 3000);
+        }
+
+        async function loadSettings() {
+            const data = await API.getJSON('/api/settings');
+            if (!data) return;
+
+            defaults = data.defaults || {};
+            settingsData = {};
+
+            // Flatten grouped settings
+            for (const [, group] of Object.entries(data.settings || {})) {
+                for (const [key, val] of Object.entries(group)) {
+                    settingsData[key] = val;
+                }
+            }
+
+            // Populate form fields
+            for (const [key, val] of Object.entries(settingsData)) {
+                const input = document.getElementById('s-' + key);
+                if (input) input.value = val;
+            }
+        }
+
+        async function saveSection(category) {
+            const keys = categoryKeys[category];
+            if (!keys) return;
+
+            const updates = {};
+            for (const key of keys) {
+                const input = document.getElementById('s-' + key);
+                if (input) updates[key] = input.value;
+            }
+
+            const resp = await API.put('/api/settings', updates);
+            if (!resp || !resp.ok) {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed to save'), true);
+                return;
+            }
+            showStatus('Settings saved');
+        }
+
+        async function resetSection(category) {
+            if (!confirm('Reset ' + category + ' settings to defaults?')) return;
+
+            const resp = await API.post('/api/settings/reset?category=' + category);
+            if (!resp || !resp.ok) {
+                showStatus('Error resetting settings', true);
+                return;
+            }
+
+            // Reload to show defaults
+            await loadSettings();
+            showStatus(category + ' settings reset to defaults');
+        }
+
+        // Init
+        loadSettings();
+    </script>
+</body>
+</html>

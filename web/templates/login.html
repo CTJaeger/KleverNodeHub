@@ -16,10 +16,24 @@
             <div id="error-alert" class="alert alert-error hidden"></div>
             <div id="success-alert" class="alert alert-success hidden"></div>
 
-            <!-- Setup section (first-run) -->
+            <!-- Setup wizard step 1: Dashboard Name (first-run) -->
+            <div id="setup-name-section" class="hidden">
+                <p class="text-center mb-16 text-muted text-sm">
+                    Welcome! Let's set up your dashboard.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="setup-dashboard-name">Dashboard Name</label>
+                    <input type="text" id="setup-dashboard-name" class="form-input" placeholder="Klever Node Hub" value="Klever Node Hub">
+                </div>
+                <button class="btn btn-primary w-full" onclick="setupDashboardName()">
+                    Continue
+                </button>
+            </div>
+
+            <!-- Setup wizard step 2: Register Passkey -->
             <div id="setup-section" class="hidden">
                 <p class="text-center mb-16 text-muted text-sm">
-                    Welcome! Register your first passkey to secure your dashboard.
+                    Register your first passkey to secure your dashboard.
                 </p>
                 <div class="form-group">
                     <label class="form-label" for="passkey-name">Passkey Name</label>
@@ -39,8 +53,42 @@
                 <div class="btn-group mt-16">
                     <button class="btn btn-secondary" onclick="copyRecoveryCodes()">Copy</button>
                     <button class="btn btn-secondary" onclick="downloadRecoveryCodes()">Download</button>
-                    <button class="btn btn-primary" onclick="window.location.href='/overview'">Continue</button>
+                    <button class="btn btn-primary" onclick="showSetupNotify()">Continue</button>
                 </div>
+            </div>
+
+            <!-- Setup wizard step 4: Optional notification channel -->
+            <div id="setup-notify-section" class="hidden">
+                <p class="text-center mb-16 text-muted text-sm">
+                    Optionally configure a notification channel to receive alerts.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Channel Type</label>
+                    <select id="setup-notify-type" class="form-input" onchange="toggleSetupNotifyFields()">
+                        <option value="">Skip (configure later)</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="webhook">Webhook</option>
+                    </select>
+                </div>
+                <div id="setup-notify-telegram" class="hidden">
+                    <div class="form-group">
+                        <label class="form-label">Bot Token</label>
+                        <input type="text" id="setup-tg-token" class="form-input" placeholder="123456:ABC-DEF...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Chat ID</label>
+                        <input type="text" id="setup-tg-chatid" class="form-input" placeholder="-100123456789">
+                    </div>
+                </div>
+                <div id="setup-notify-webhook" class="hidden">
+                    <div class="form-group">
+                        <label class="form-label">Webhook URL</label>
+                        <input type="text" id="setup-wh-url" class="form-input" placeholder="https://...">
+                    </div>
+                </div>
+                <button class="btn btn-primary w-full" onclick="finishSetup()">
+                    Finish Setup
+                </button>
             </div>
 
             <!-- Login section (passkey exists) -->
@@ -106,7 +154,7 @@
             if (status.setup_complete) {
                 show('login-section');
             } else {
-                show('setup-section');
+                show('setup-name-section');
             }
         }
 
@@ -216,6 +264,54 @@
 
         function show(id) { document.getElementById(id).classList.remove('hidden'); }
         function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+        async function setupDashboardName() {
+            const name = document.getElementById('setup-dashboard-name').value.trim() || 'Klever Node Hub';
+            clearAlerts();
+            try {
+                await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dashboard_name: name })
+                });
+            } catch (_) {
+                // Settings save is best-effort during setup (no JWT yet)
+            }
+            hide('setup-name-section');
+            show('setup-section');
+        }
+
+        function showSetupNotify() {
+            hide('recovery-section');
+            show('setup-notify-section');
+        }
+
+        function toggleSetupNotifyFields() {
+            const type = document.getElementById('setup-notify-type').value;
+            document.getElementById('setup-notify-telegram').classList.toggle('hidden', type !== 'telegram');
+            document.getElementById('setup-notify-webhook').classList.toggle('hidden', type !== 'webhook');
+        }
+
+        async function finishSetup() {
+            const type = document.getElementById('setup-notify-type').value;
+            if (type === 'telegram') {
+                const token = document.getElementById('setup-tg-token').value.trim();
+                const chatID = document.getElementById('setup-tg-chatid').value.trim();
+                if (token && chatID) {
+                    await API.post('/api/notifications/channels', {
+                        type: 'telegram', bot_token: token, chat_id: chatID
+                    });
+                }
+            } else if (type === 'webhook') {
+                const url = document.getElementById('setup-wh-url').value.trim();
+                if (url) {
+                    await API.post('/api/notifications/channels', {
+                        type: 'webhook', url: url
+                    });
+                }
+            }
+            window.location.href = '/overview';
+        }
 
         init();
     </script>
