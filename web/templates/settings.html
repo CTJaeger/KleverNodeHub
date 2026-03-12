@@ -190,10 +190,44 @@
                 <!-- Security -->
                 <div id="tab-security" class="tab-content">
                     <div class="settings-section">
+                        <h4>Password</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Change your dashboard login password.</p>
+                        <div class="setting-row">
+                            <div><div class="setting-label">Current Password</div></div>
+                            <input class="form-input" id="pw-current" type="password" placeholder="Enter current password">
+                        </div>
+                        <div class="setting-row">
+                            <div><div class="setting-label">New Password</div></div>
+                            <input class="form-input" id="pw-new" type="password" placeholder="Minimum 8 characters">
+                        </div>
+                        <div class="setting-row">
+                            <div><div class="setting-label">Confirm New Password</div></div>
+                            <input class="form-input" id="pw-confirm" type="password" placeholder="Repeat new password">
+                        </div>
+                        <div class="section-actions">
+                            <button class="btn btn-primary btn-sm" onclick="changePassword()">Change Password</button>
+                        </div>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
                         <h4>Passkeys</h4>
-                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Manage registered passkeys for login authentication. You must keep at least one passkey.</p>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Manage registered passkeys for passwordless login. Passkeys are optional if you use password authentication.</p>
                         <div id="passkey-list" style="margin-bottom:16px;"></div>
                         <button class="btn btn-primary btn-sm" onclick="registerNewPasskey()">+ Register New Passkey</button>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
+                        <h4>Klever Wallet</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Link a Klever wallet address for passwordless login via the Klever Extension browser extension.</p>
+                        <div id="klever-status"></div>
+                        <div id="klever-link-form" class="hidden" style="margin-top:12px;">
+                            <div class="setting-row">
+                                <div><div class="setting-label">Wallet Address</div></div>
+                                <input class="form-input" id="klever-address" placeholder="klv1...">
+                            </div>
+                            <div class="section-actions">
+                                <button class="btn btn-primary btn-sm" onclick="linkKleverWallet()">Link Wallet</button>
+                                <button class="btn btn-secondary btn-sm" id="klever-detect-btn" onclick="detectKleverWallet()" style="display:none;">Detect from Extension</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="settings-section" style="margin-top:16px;">
                         <h4>Recovery Codes</h4>
@@ -232,6 +266,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/passkey.js"></script>
+    <script src="/static/js/klever.js"></script>
     <script>
         let settingsData = {};
         let defaults = {};
@@ -461,6 +496,92 @@
             }).join('');
         }
 
+        // --- Klever wallet management ---
+        async function loadKleverStatus() {
+            const data = await API.getJSON('/api/auth/klever');
+            if (!data) return;
+            const container = document.getElementById('klever-status');
+            const form = document.getElementById('klever-link-form');
+
+            if (data.has_address) {
+                container.innerHTML =
+                    '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">' +
+                        '<div style="flex:1;">' +
+                            '<strong>Linked</strong>' +
+                            '<div style="color:var(--text-secondary);font-size:12px;word-break:break-all;">' + esc(data.address) + '</div>' +
+                        '</div>' +
+                        '<button class="btn btn-secondary btn-sm" onclick="unlinkKleverWallet()" style="color:var(--danger);">Unlink</button>' +
+                    '</div>';
+                form.classList.add('hidden');
+            } else {
+                container.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No wallet linked.</p>';
+                form.classList.remove('hidden');
+                // Show detect button if Klever Extension is available
+                if (typeof KleverAuth !== 'undefined' && KleverAuth.isAvailable()) {
+                    document.getElementById('klever-detect-btn').style.display = '';
+                }
+            }
+        }
+
+        async function linkKleverWallet() {
+            const address = document.getElementById('klever-address').value.trim();
+            if (!address) { showStatus('Enter a wallet address', true); return; }
+            const resp = await API.post('/api/setup/klever', { address: address });
+            if (resp && resp.ok) {
+                showStatus('Klever wallet linked');
+                await loadKleverStatus();
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed to link wallet'), true);
+            }
+        }
+
+        async function detectKleverWallet() {
+            try {
+                const address = await KleverAuth.getAddress();
+                document.getElementById('klever-address').value = address;
+                showStatus('Detected: ' + address);
+            } catch (err) {
+                showStatus('Detection failed: ' + err.message, true);
+            }
+        }
+
+        async function unlinkKleverWallet() {
+            if (!confirm('Unlink Klever wallet? You will no longer be able to sign in with it.')) return;
+            const resp = await API.delete('/api/auth/klever');
+            if (resp && resp.ok) {
+                showStatus('Klever wallet unlinked');
+                await loadKleverStatus();
+            } else {
+                showStatus('Error unlinking wallet', true);
+            }
+        }
+
+        // --- Password change ---
+        async function changePassword() {
+            const current = document.getElementById('pw-current').value;
+            const newPw = document.getElementById('pw-new').value;
+            const confirm = document.getElementById('pw-confirm').value;
+
+            if (!current) { showStatus('Enter your current password', true); return; }
+            if (!newPw || newPw.length < 8) { showStatus('New password must be at least 8 characters', true); return; }
+            if (newPw !== confirm) { showStatus('Passwords do not match', true); return; }
+
+            const resp = await API.put('/api/auth/password', {
+                current_password: current,
+                new_password: newPw
+            });
+            if (resp && resp.ok) {
+                showStatus('Password changed successfully');
+                document.getElementById('pw-current').value = '';
+                document.getElementById('pw-new').value = '';
+                document.getElementById('pw-confirm').value = '';
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed to change password'), true);
+            }
+        }
+
         // --- Passkey management ---
         async function loadPasskeys() {
             const data = await API.getJSON('/api/auth/passkeys');
@@ -539,6 +660,7 @@
         loadSettings();
         loadChannels();
         loadPasskeys();
+        loadKleverStatus();
     </script>
 </body>
 </html>

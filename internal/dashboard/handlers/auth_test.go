@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/auth"
 )
@@ -32,11 +33,15 @@ func setupAuthHandler(t *testing.T) (*AuthHandler, []string) {
 		t.Fatalf("GenerateCodes: %v", err)
 	}
 
-	handler := NewAuthHandler(jwt, webauthn, recovery)
+	password := auth.NewPasswordManager("")
+	limiter := auth.NewRateLimiter(15*time.Minute, 5)
+	klever := auth.NewKleverAuthManager("")
+
+	handler := NewAuthHandler(jwt, webauthn, recovery, password, limiter, klever)
 	return handler, codes
 }
 
-func TestHandleSetupStatus_NoPasskeys(t *testing.T) {
+func TestHandleSetupStatus_NoPasskeysNoPassword(t *testing.T) {
 	handler, _ := setupAuthHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/setup/status", nil)
@@ -52,7 +57,101 @@ func TestHandleSetupStatus_NoPasskeys(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if resp["setup_complete"] != false {
-		t.Error("setup_complete should be false without passkeys")
+		t.Error("setup_complete should be false without passkeys or password")
+	}
+	if resp["has_password"] != false {
+		t.Error("has_password should be false")
+	}
+}
+
+func TestHandleSetupPassword(t *testing.T) {
+	handler, _ := setupAuthHandler(t)
+
+	body, _ := json.Marshal(map[string]string{"password": "testpassword123"})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/password", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.HandleSetupPassword(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp["access_token"] == nil || resp["access_token"] == "" {
+		t.Error("expected access_token after setup")
+	}
+
+	// Setup complete should now be true
+	req2 := httptest.NewRequest(http.MethodGet, "/api/setup/status", nil)
+	w2 := httptest.NewRecorder()
+	handler.HandleSetupStatus(w2, req2)
+
+	var status map[string]any
+	_ = json.NewDecoder(w2.Body).Decode(&status)
+	if status["setup_complete"] != true {
+		t.Error("setup_complete should be true after password set")
+	}
+}
+
+func TestHandleSetupPassword_AlreadySet(t *testing.T) {
+	handler, _ := setupAuthHandler(t)
+
+	body, _ := json.Marshal(map[string]string{"password": "testpassword123"})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/password", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.HandleSetupPassword(w, req)
+
+	// Try again
+	req2 := httptest.NewRequest(http.MethodPost, "/api/setup/password", bytes.NewReader(body))
+	w2 := httptest.NewRecorder()
+	handler.HandleSetupPassword(w2, req2)
+
+	if w2.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d", w2.Code, http.StatusConflict)
+	}
+}
+
+func TestHandlePasswordLogin_Valid(t *testing.T) {
+	handler, _ := setupAuthHandler(t)
+
+	// Set password first
+	body, _ := json.Marshal(map[string]string{"password": "mypassword123"})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/password", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.HandleSetupPassword(w, req)
+
+	// Login
+	body2, _ := json.Marshal(map[string]string{"password": "mypassword123"})
+	req2 := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(body2))
+	req2.RemoteAddr = "127.0.0.1:12345"
+	w2 := httptest.NewRecorder()
+	handler.HandlePasswordLogin(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d (body: %s)", w2.Code, http.StatusOK, w2.Body.String())
+	}
+}
+
+func TestHandlePasswordLogin_Invalid(t *testing.T) {
+	handler, _ := setupAuthHandler(t)
+
+	// Set password
+	body, _ := json.Marshal(map[string]string{"password": "mypassword123"})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/password", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.HandleSetupPassword(w, req)
+
+	// Wrong password
+	body2, _ := json.Marshal(map[string]string{"password": "wrongpassword"})
+	req2 := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(body2))
+	req2.RemoteAddr = "127.0.0.1:12345"
+	w2 := httptest.NewRecorder()
+	handler.HandlePasswordLogin(w2, req2)
+
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", w2.Code, http.StatusUnauthorized)
 	}
 }
 

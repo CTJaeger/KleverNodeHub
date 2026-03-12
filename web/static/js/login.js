@@ -4,12 +4,6 @@ let recoveryCodes = [];
 async function init() {
     show('loading');
 
-    if (!Passkey.isSupported()) {
-        hide('loading');
-        show('no-webauthn');
-        return;
-    }
-
     const status = await API.getJSON('/api/setup/status');
     hide('loading');
 
@@ -20,11 +14,68 @@ async function init() {
 
     if (status.setup_complete) {
         show('login-section');
+        // Show passkey login button only if passkeys are registered and WebAuthn is available
+        if (status.passkey_count > 0 && Passkey.isSupported()) {
+            show('passkey-login-section');
+        }
+        // Show Klever login button only if Klever Extension is available and address is registered
+        if (status.has_klever && KleverAuth.isAvailable()) {
+            show('klever-login-section');
+        }
     } else {
         show('setup-name-section');
     }
 }
 
+// Setup wizard step 1 → step 2 (password)
+async function setupDashboardName() {
+    const name = document.getElementById('setup-dashboard-name').value.trim() || 'Klever Node Hub';
+    clearAlerts();
+    try {
+        await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dashboard_name: name })
+        });
+    } catch (_) {
+        // Settings save is best-effort during setup (no JWT yet)
+    }
+    hide('setup-name-section');
+    show('setup-password-section');
+}
+
+// Setup wizard step 2: set initial password
+async function setupPassword() {
+    const password = document.getElementById('setup-password').value;
+    const confirm = document.getElementById('setup-password-confirm').value;
+    clearAlerts();
+
+    if (!password || password.length < 8) {
+        showError('Password must be at least 8 characters');
+        return;
+    }
+    if (password !== confirm) {
+        showError('Passwords do not match');
+        return;
+    }
+
+    const result = await API.postJSON('/api/setup/password', { password });
+    if (result && result.ok) {
+        API.setToken(result.data.access_token);
+        hide('setup-password-section');
+        // Show passkey setup only if WebAuthn is available
+        if (Passkey.isSupported()) {
+            show('setup-section');
+        } else {
+            // Skip passkey, go straight to notifications
+            show('setup-notify-section');
+        }
+    } else {
+        showError(result?.data?.error || 'Failed to set password');
+    }
+}
+
+// Setup wizard step 3: optional passkey registration
 async function setupPasskey() {
     const name = document.getElementById('passkey-name').value || 'default';
     const btn = document.getElementById('btn-setup');
@@ -40,7 +91,8 @@ async function setupPasskey() {
             hide('setup-section');
             show('recovery-section');
         } else {
-            window.location.href = '/overview';
+            hide('setup-section');
+            show('setup-notify-section');
         }
     } catch (err) {
         showError(err.message);
@@ -49,6 +101,37 @@ async function setupPasskey() {
     }
 }
 
+// Skip passkey setup → notifications
+function skipPasskeySetup() {
+    hide('setup-section');
+    show('setup-notify-section');
+}
+
+// After recovery codes → notifications
+function showSetupNotify() {
+    hide('recovery-section');
+    show('setup-notify-section');
+}
+
+// Login with password
+async function loginPassword() {
+    const password = document.getElementById('login-password').value;
+    if (!password) {
+        showError('Please enter your password');
+        return;
+    }
+    clearAlerts();
+
+    const result = await API.postJSON('/api/auth/password', { password });
+    if (result && result.ok) {
+        API.setToken(result.data.access_token);
+        window.location.href = '/overview';
+    } else {
+        showError(result?.data?.error || 'Login failed');
+    }
+}
+
+// Login with passkey
 async function loginPasskey() {
     const btn = document.getElementById('btn-passkey-login');
     btn.disabled = true;
@@ -65,6 +148,24 @@ async function loginPasskey() {
     }
 }
 
+// Login with Klever Extension
+async function loginKlever() {
+    const btn = document.getElementById('btn-klever-login');
+    btn.disabled = true;
+    btn.textContent = 'Connecting wallet...';
+    clearAlerts();
+
+    try {
+        await KleverAuth.login();
+        window.location.href = '/overview';
+    } catch (err) {
+        showError(err.message);
+        btn.disabled = false;
+        btn.textContent = 'Sign in with Klever Wallet';
+    }
+}
+
+// Login with recovery code
 async function loginRecovery() {
     const code = document.getElementById('recovery-code').value.trim();
     if (!code) {
@@ -87,6 +188,13 @@ async function loginRecovery() {
     }
 }
 
+// Toggle recovery code section
+function toggleRecovery() {
+    const el = document.getElementById('recovery-login');
+    el.classList.toggle('hidden');
+}
+
+// Recovery codes display helpers
 function displayRecoveryCodes(codes) {
     const container = document.getElementById('recovery-codes');
     container.textContent = '';
@@ -117,47 +225,7 @@ function downloadRecoveryCodes() {
     URL.revokeObjectURL(url);
 }
 
-function showError(msg) {
-    const el = document.getElementById('error-alert');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-}
-
-function showSuccess(msg) {
-    const el = document.getElementById('success-alert');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-}
-
-function clearAlerts() {
-    document.getElementById('error-alert').classList.add('hidden');
-    document.getElementById('success-alert').classList.add('hidden');
-}
-
-function show(id) { document.getElementById(id).classList.remove('hidden'); }
-function hide(id) { document.getElementById(id).classList.add('hidden'); }
-
-async function setupDashboardName() {
-    const name = document.getElementById('setup-dashboard-name').value.trim() || 'Klever Node Hub';
-    clearAlerts();
-    try {
-        await fetch('/api/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dashboard_name: name })
-        });
-    } catch (_) {
-        // Settings save is best-effort during setup (no JWT yet)
-    }
-    hide('setup-name-section');
-    show('setup-section');
-}
-
-function showSetupNotify() {
-    hide('recovery-section');
-    show('setup-notify-section');
-}
-
+// Notification setup (final wizard step)
 function toggleSetupNotifyFields() {
     const type = document.getElementById('setup-notify-type').value;
     document.getElementById('setup-notify-telegram').classList.toggle('hidden', type !== 'telegram');
@@ -184,5 +252,26 @@ async function finishSetup() {
     }
     window.location.href = '/overview';
 }
+
+// UI helpers
+function showError(msg) {
+    const el = document.getElementById('error-alert');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+function showSuccess(msg) {
+    const el = document.getElementById('success-alert');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+function clearAlerts() {
+    document.getElementById('error-alert').classList.add('hidden');
+    document.getElementById('success-alert').classList.add('hidden');
+}
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
 init();

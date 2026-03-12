@@ -35,10 +35,28 @@
                 </button>
             </div>
 
-            <!-- Setup wizard step 2: Register Passkey -->
+            <!-- Setup wizard step 2: Set Password -->
+            <div id="setup-password-section" class="hidden">
+                <p class="text-center mb-16 text-muted text-sm">
+                    Set a password to secure your dashboard.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="setup-password">Password</label>
+                    <input type="password" id="setup-password" class="form-input" placeholder="Minimum 8 characters">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="setup-password-confirm">Confirm Password</label>
+                    <input type="password" id="setup-password-confirm" class="form-input" placeholder="Repeat password">
+                </div>
+                <button class="btn btn-primary w-full" onclick="setupPassword()">
+                    Set Password &amp; Continue
+                </button>
+            </div>
+
+            <!-- Setup wizard step 3: Optional Passkey -->
             <div id="setup-section" class="hidden">
                 <p class="text-center mb-16 text-muted text-sm">
-                    Register your first passkey to secure your dashboard.
+                    Optionally register a passkey for passwordless login.
                 </p>
                 <div class="form-group">
                     <label class="form-label" for="passkey-name">Passkey Name</label>
@@ -46,6 +64,9 @@
                 </div>
                 <button id="btn-setup" class="btn btn-primary w-full" onclick="setupPasskey()">
                     Register Passkey
+                </button>
+                <button class="btn btn-secondary w-full mt-8" onclick="skipPasskeySetup()">
+                    Skip
                 </button>
             </div>
 
@@ -96,16 +117,39 @@
                 </button>
             </div>
 
-            <!-- Login section (passkey exists) -->
+            <!-- Login section -->
             <div id="login-section" class="hidden">
-                <button id="btn-passkey-login" class="btn btn-primary w-full" onclick="loginPasskey()">
-                    Sign in with Passkey
+                <!-- Password login (always shown) -->
+                <div class="form-group">
+                    <label class="form-label" for="login-password">Password</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="Enter password"
+                           onkeydown="if(event.key==='Enter')loginPassword()">
+                </div>
+                <button class="btn btn-primary w-full" onclick="loginPassword()">
+                    Sign In
                 </button>
 
-                <div class="login-divider">or</div>
+                <!-- Passkey login (conditional) -->
+                <div id="passkey-login-section" class="hidden">
+                    <div class="login-divider">or</div>
+                    <button id="btn-passkey-login" class="btn btn-secondary w-full" onclick="loginPasskey()">
+                        Sign in with Passkey
+                    </button>
+                </div>
 
-                <!-- Recovery code login -->
-                <div id="recovery-login">
+                <!-- Klever Extension login (conditional) -->
+                <div id="klever-login-section" class="hidden">
+                    <div class="login-divider">or</div>
+                    <button id="btn-klever-login" class="btn btn-secondary w-full" onclick="loginKlever()">
+                        Sign in with Klever Wallet
+                    </button>
+                </div>
+
+                <!-- Recovery code (collapsible) -->
+                <div class="login-divider">
+                    <a href="#" onclick="toggleRecovery(); return false;" style="font-size:12px;color:var(--text-secondary);">Use Recovery Code</a>
+                </div>
+                <div id="recovery-login" class="hidden">
                     <div class="form-group">
                         <label class="form-label" for="recovery-code">Recovery Code</label>
                         <input type="text" id="recovery-code" class="form-input" placeholder="XXXX-XXXX-XXXX">
@@ -113,14 +157,6 @@
                     <button class="btn btn-secondary w-full" onclick="loginRecovery()">
                         Use Recovery Code
                     </button>
-                </div>
-            </div>
-
-            <!-- No WebAuthn support -->
-            <div id="no-webauthn" class="hidden">
-                <div class="alert alert-error">
-                    Your browser does not support Passkeys (WebAuthn).
-                    Please use a modern browser like Chrome, Safari, or Firefox.
                 </div>
             </div>
 
@@ -136,6 +172,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/passkey.js"></script>
+    <script src="/static/js/klever.js"></script>
     <script src="/static/js/login.js"></script>
 </body>
 </html>

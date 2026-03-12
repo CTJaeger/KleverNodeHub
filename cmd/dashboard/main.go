@@ -129,6 +129,17 @@ func main() {
 		log.Println("=============================================")
 	}
 
+	// --- Auth: Password ---
+	passwordHash, _ := settingsStore.Get("password_hash")
+	passwordMgr := auth.NewPasswordManager(passwordHash)
+
+	// --- Auth: Rate Limiter ---
+	loginLimiter := auth.NewRateLimiter(15*time.Minute, 5)
+
+	// --- Auth: Klever Extension ---
+	kleverAddress, _ := settingsStore.Get("klever_admin_address")
+	kleverMgr := auth.NewKleverAuthManager(kleverAddress)
+
 	// --- Metrics Scheduler ---
 	metricsScheduler := scheduler.New(metricsStore)
 	metricsScheduler.Start()
@@ -142,7 +153,7 @@ func main() {
 	hub.StartHealthCheck(60 * time.Second)
 
 	// --- Handlers ---
-	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr)
+	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr, passwordMgr, loginLimiter, kleverMgr)
 	nodeHandler := handlers.NewNodeHandler(hub, nodeStore)
 	serverHandler := handlers.NewServerHandler(serverStore, nodeStore, metricsStore)
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
@@ -177,6 +188,20 @@ func main() {
 		savePasskeyCredentials(settingsStore, creds)
 	})
 
+	// Persist password hash when it changes
+	authHandler.SetOnPasswordChanged(func(hash string) {
+		if err := settingsStore.Set("password_hash", hash); err != nil {
+			log.Printf("WARNING: failed to save password hash: %v", err)
+		}
+	})
+
+	// Persist Klever admin address when it changes
+	authHandler.SetOnKleverAddressChanged(func(address string) {
+		if err := settingsStore.Set("klever_admin_address", address); err != nil {
+			log.Printf("WARNING: failed to save klever address: %v", err)
+		}
+	})
+
 	// --- Server + Routes ---
 	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr, CA: ca})
 	if err := srv.SetupRoutes(); err != nil {
@@ -192,7 +217,11 @@ func main() {
 	mux.HandleFunc("POST /api/auth/passkey/register/finish", authHandler.HandlePasskeyFinishRegister)
 	mux.HandleFunc("POST /api/auth/passkey/login/begin", authHandler.HandlePasskeyBeginLogin)
 	mux.HandleFunc("POST /api/auth/passkey/login/finish", authHandler.HandlePasskeyFinishLogin)
+	mux.HandleFunc("POST /api/auth/password", authHandler.HandlePasswordLogin)
+	mux.HandleFunc("POST /api/setup/password", authHandler.HandleSetupPassword)
 	mux.HandleFunc("POST /api/auth/recovery", authHandler.HandleRecoveryLogin)
+	mux.HandleFunc("GET /api/auth/klever/challenge", authHandler.HandleKleverChallenge)
+	mux.HandleFunc("POST /api/auth/klever/verify", authHandler.HandleKleverVerify)
 	mux.HandleFunc("POST /api/auth/refresh", authHandler.HandleRefresh)
 	mux.HandleFunc("POST /api/auth/logout", authHandler.HandleLogout)
 
@@ -213,6 +242,10 @@ func main() {
 	// Protected routes (JWT required)
 	mux.Handle("GET /api/auth/passkeys", authMw(http.HandlerFunc(authHandler.HandleListPasskeys)))
 	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
+	mux.Handle("PUT /api/auth/password", authMw(http.HandlerFunc(authHandler.HandleChangePassword)))
+	mux.Handle("GET /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverStatus)))
+	mux.Handle("POST /api/setup/klever", authMw(http.HandlerFunc(authHandler.HandleKleverSetup)))
+	mux.Handle("DELETE /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverRemove)))
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
 	mux.Handle("GET /api/servers", authMw(http.HandlerFunc(serverHandler.HandleList)))
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
