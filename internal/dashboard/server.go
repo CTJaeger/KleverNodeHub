@@ -90,13 +90,13 @@ func (s *Server) servePage(templatePath string) http.HandlerFunc {
 // handleHealth returns build info and uptime. Unauthenticated, used for monitoring.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
-		Status  string       `json:"status"`
-		Uptime  string       `json:"uptime"`
-		Build   version.Info `json:"build"`
+		Status string       `json:"status"`
+		Uptime string       `json:"uptime"`
+		Build  version.Info `json:"build"`
 	}{
-		Status:  "ok",
-		Uptime:  version.Uptime().Round(time.Second).String(),
-		Build:   version.Get(),
+		Status: "ok",
+		Uptime: version.Uptime().Round(time.Second).String(),
+		Build:  version.Get(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -109,7 +109,7 @@ func (s *Server) setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-XSS-Protection", "1; mode=block")
 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 	w.Header().Set("Content-Security-Policy",
-		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:;")
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:;")
 }
 
 // SecurityHeadersMiddleware wraps a handler with security headers.
@@ -153,6 +153,8 @@ func (s *Server) getTLSConfig() (*tls.Config, error) {
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
 			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
 		},

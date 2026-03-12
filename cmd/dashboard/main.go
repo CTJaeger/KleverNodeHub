@@ -31,6 +31,7 @@ func main() {
 
 	// CLI flags
 	addr := flag.String("addr", ":9443", "Listen address (host:port)")
+	domain := flag.String("domain", "localhost", "Domain for WebAuthn RP ID and TLS (e.g. localhost, myserver.local, node.example.com)")
 	dataDir := flag.String("data-dir", defaultDataDir(), "Data directory for DB, certs, config")
 	flag.Parse()
 
@@ -75,15 +76,15 @@ func main() {
 	}
 
 	// --- Auth: WebAuthn ---
-	hostname := "localhost"
-	if h, _ := os.Hostname(); h != "" {
-		hostname = h
+	rpOrigins := []string{fmt.Sprintf("https://%s%s", *domain, *addr)}
+	if *domain != "localhost" {
+		rpOrigins = append(rpOrigins, fmt.Sprintf("https://localhost%s", *addr))
 	}
 	waCredentials := loadPasskeyCredentials(settingsStore)
 	webauthnMgr, err := auth.NewWebAuthnManager(auth.WebAuthnConfig{
 		RPDisplayName: "Klever Node Hub",
-		RPID:          hostname,
-		RPOrigins:     []string{fmt.Sprintf("https://%s%s", hostname, *addr)},
+		RPID:          *domain,
+		RPOrigins:     rpOrigins,
 	}, waCredentials)
 	if err != nil {
 		// Non-fatal: WebAuthn may fail on some systems, passkey login won't work
@@ -179,6 +180,10 @@ func main() {
 	// WebSocket endpoint for agents (authenticated via mTLS cert, not JWT)
 	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore, geoResolver)
 	mux.HandleFunc("GET /ws/agent", wsHandler.HandleUpgrade)
+
+	// WebSocket endpoint for browser clients (authenticated via JWT cookie)
+	browserWsHandler := ws.NewBrowserHandler(hub)
+	mux.Handle("GET /ws", authMw(http.HandlerFunc(browserWsHandler.HandleUpgrade)))
 
 	// Protected routes (JWT required)
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))

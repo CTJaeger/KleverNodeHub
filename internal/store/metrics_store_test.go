@@ -200,11 +200,11 @@ func TestPurgeSystemMetrics(t *testing.T) {
 
 func TestExtractNumericMetrics(t *testing.T) {
 	raw := map[string]any{
-		"klv_nonce":           float64(29091835),
+		"klv_nonce":            float64(29091835),
 		"klv_cpu_load_percent": float64(1),
-		"klv_consensus_state": "not in consensus group", // string — should be skipped
-		"klv_app_version":     "v1.7.15",                // string — should be skipped
-		"klv_is_syncing":      float64(0),
+		"klv_consensus_state":  "not in consensus group", // string — should be skipped
+		"klv_app_version":      "v1.7.15",                // string — should be skipped
+		"klv_is_syncing":       float64(0),
 	}
 
 	numeric := ExtractNumericMetrics(raw)

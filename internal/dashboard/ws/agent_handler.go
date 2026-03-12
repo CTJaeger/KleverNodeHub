@@ -63,6 +63,7 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Register in hub
 	agentConn := h.hub.Register(serverID)
+	h.hub.BroadcastToBrowsers("agent.connected", map[string]string{"server_id": serverID})
 
 	// Run read and write loops
 	ctx, cancel := context.WithCancel(r.Context())
@@ -95,6 +96,7 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Cleanup
 	h.hub.Unregister(serverID)
+	h.hub.BroadcastToBrowsers("agent.disconnected", map[string]string{"server_id": serverID})
 	_ = conn.Close(websocket.StatusNormalClosure, "closing")
 	log.Printf("agent WebSocket disconnected: %s", serverID)
 }
@@ -130,12 +132,20 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)
+			h.hub.BroadcastToBrowsers("agent.discovery", map[string]any{
+				"server_id": serverID,
+			})
 
 		case "node.metrics":
 			h.handleNodeMetrics(&msg)
+			h.hub.BroadcastToBrowsers("node.metrics", msg.Payload)
 
 		case "node.nonce_stall":
 			h.handleNonceStall(serverID, &msg)
+			h.hub.BroadcastToBrowsers("node.nonce_stall", map[string]any{
+				"server_id": serverID,
+				"payload":   msg.Payload,
+			})
 
 		case "command.result":
 			h.handleCommandResult(&msg)

@@ -1,4 +1,4 @@
-.PHONY: build-dashboard build-agent build test lint security coverage clean
+.PHONY: build-dashboard build-agent build run fmt test lint security coverage clean
 
 BIN_DIR := bin
 DASHBOARD_BIN := $(BIN_DIR)/klever-node-hub
@@ -23,6 +23,12 @@ build-agent: $(BIN_DIR)
 	go build -ldflags="$(LDFLAGS)" -o $(AGENT_BIN) ./cmd/agent
 
 build: build-dashboard build-agent
+
+run:
+	go run -ldflags="$(LDFLAGS)" ./cmd/dashboard
+
+fmt:
+	goimports -w .
 
 test:
 	go test ./... -v -race

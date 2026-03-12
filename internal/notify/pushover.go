@@ -9,7 +9,7 @@ import (
 
 // PushoverConfig holds Pushover configuration.
 type PushoverConfig struct {
-	UserKey string `json:"user_key"`
+	UserKey  string `json:"user_key"`
 	AppToken string `json:"app_token"`
 }
 

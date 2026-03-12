@@ -197,4 +197,3 @@ func TestContainsOffline(t *testing.T) {
 		t.Error("should not match other errors")
 	}
 }
-

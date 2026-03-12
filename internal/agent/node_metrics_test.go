@@ -424,9 +424,9 @@ func TestMetricsEventSerialization(t *testing.T) {
 		NodeID:   "node-1",
 		ServerID: "server-1",
 		Metrics: map[string]any{
-			"klv_nonce":         float64(29091835),
+			"klv_nonce":           float64(29091835),
 			"klv_consensus_state": "not in consensus group",
-			"klv_is_syncing":    float64(0),
+			"klv_is_syncing":      float64(0),
 		},
 		CollectedAt: 1773267804,
 	}

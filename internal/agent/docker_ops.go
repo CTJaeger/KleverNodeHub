@@ -17,11 +17,11 @@ import (
 // ContainerConfig defines parameters for creating a Klever node container.
 type ContainerConfig struct {
 	Name            string `json:"name"`             // Container name, e.g. "klever-node1"
-	ImageTag        string `json:"image_tag"`         // e.g. "v0.60.0" or "latest"
-	DataDir         string `json:"data_dir"`          // Host data directory
-	RestAPIPort     int    `json:"rest_api_port"`     // REST API port
-	DisplayName     string `json:"display_name"`      // Node display name
-	RedundancyLevel int    `json:"redundancy_level"`  // 0 = active, 1 = fallback
+	ImageTag        string `json:"image_tag"`        // e.g. "v0.60.0" or "latest"
+	DataDir         string `json:"data_dir"`         // Host data directory
+	RestAPIPort     int    `json:"rest_api_port"`    // REST API port
+	DisplayName     string `json:"display_name"`     // Node display name
+	RedundancyLevel int    `json:"redundancy_level"` // 0 = active, 1 = fallback
 }
 
 // containerCreateBody is the Docker API request body for container creation.
@@ -35,8 +35,8 @@ type containerCreateBody struct {
 }
 
 type hostConfigBody struct {
-	Binds       []string      `json:"Binds,omitempty"`
-	NetworkMode string        `json:"NetworkMode,omitempty"`
+	Binds         []string      `json:"Binds,omitempty"`
+	NetworkMode   string        `json:"NetworkMode,omitempty"`
 	RestartPolicy restartPolicy `json:"RestartPolicy,omitempty"`
 }
 
@@ -158,7 +158,7 @@ func (d *DockerClient) CreateContainer(ctx context.Context, cfg *ContainerConfig
 				cfg.DataDir + "/logs:/opt/klever-blockchain/logs",
 				cfg.DataDir + "/wallet:/opt/klever-blockchain/wallet",
 			},
-			NetworkMode: "host",
+			NetworkMode:   "host",
 			RestartPolicy: restartPolicy{Name: "unless-stopped"},
 		},
 		Labels: map[string]string{
