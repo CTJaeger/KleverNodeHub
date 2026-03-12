@@ -111,7 +111,7 @@ func (p *Provisioner) reportProgress(step, total int, name, status, errMsg strin
 func (p *Provisioner) stepPreflight(ctx context.Context) error {
 	// Verify Docker connectivity
 	if _, err := p.docker.DiscoverNodes(ctx); err != nil {
-		return fmt.Errorf("Docker not accessible: %w", err)
+		return fmt.Errorf("docker not accessible: %w", err)
 	}
 
 	// Check port availability
