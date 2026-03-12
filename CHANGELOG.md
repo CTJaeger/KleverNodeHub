@@ -3,6 +3,26 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #31 — Password Login (Phase 1)**: Dashboard unusable via IP address (WebAuthn requires domain)
+  - `internal/auth/argon2.go` — Extracted shared Argon2id helpers (HashArgon2id, VerifyArgon2id)
+  - `internal/auth/password.go` — PasswordManager with Argon2id hashing, min 8 chars, SetPassword/Verify/HasPassword
+  - `internal/auth/ratelimit.go` — In-memory sliding window rate limiter (5 attempts per 15 min per IP)
+  - `internal/auth/recovery.go` — Refactored to use shared Argon2id helpers (no behavior change)
+  - `internal/dashboard/handlers/auth.go` — New handlers: POST /api/setup/password, POST /api/auth/password, PUT /api/auth/password
+  - `cmd/dashboard/main.go` — PasswordManager + RateLimiter wiring, persistence callback, new routes
+  - `web/templates/login.html` — Setup wizard: Dashboard Name → Password → Optional Passkey → Recovery Codes → Notifications
+  - `web/static/js/login.js` — Password-first login flow, passkey conditional, skip button, toggleRecovery
+  - `web/templates/settings.html` — Password change UI in Security tab
+  - 10 new tests (password, rate limiter, handler tests)
+- **Issue #31 — Klever Extension Login (Phase 2)**: Challenge-response auth via Klever browser wallet
+  - `internal/auth/klever.go` — KleverAuthManager: bech32 address decoding, challenge nonce generation (5 min TTL), Ed25519 signature verification
+  - `internal/auth/klever_test.go` — 10 tests (address validation, challenge/verify, full sign/verify with real Ed25519 keypair, challenge consumed)
+  - `internal/dashboard/handlers/auth.go` — New handlers: GET /api/auth/klever/challenge, POST /api/auth/klever/verify, POST /api/setup/klever, DELETE /api/auth/klever, GET /api/auth/klever
+  - `cmd/dashboard/main.go` — KleverAuthManager wiring + persistence callback + routes
+  - `web/static/js/klever.js` — Klever Extension client (initialize, getAddress, signMessage challenge-response flow)
+  - `web/templates/login.html` — "Sign in with Klever Wallet" button (conditional: extension + address registered)
+  - `web/static/js/login.js` — loginKlever() function, Klever button visibility based on setup status
+  - `web/templates/settings.html` — Klever Wallet section in Security tab (link/unlink/detect from extension)
 - **README overhaul**: Complete rewrite with accurate tech stack, CLI flags, installation guide, deploy instructions
 - **Dockerfile fix**: Updated Go version from 1.22 to 1.26 in both `Dockerfile` and `Dockerfile.agent`
 

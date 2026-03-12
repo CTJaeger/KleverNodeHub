@@ -2,23 +2,15 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
-
-	"golang.org/x/crypto/argon2"
 )
 
 const (
 	recoveryCodeCount  = 8
 	recoveryCodeLength = 12 // 3 groups of 4 hex chars
-	argon2Time         = 3
-	argon2Memory       = 64 * 1024 // 64 MB
-	argon2Threads      = 4
-	argon2KeyLen       = 32
-	saltLen            = 16
 )
 
 // RecoveryCode holds a hashed recovery code with its usage state.
@@ -54,7 +46,7 @@ func (rm *RecoveryManager) GenerateCodes() (plaintextCodes []string, hashedCodes
 		}
 		plaintextCodes[i] = code
 
-		hash, err := hashRecoveryCode(code)
+		hash, err := HashArgon2id(normalizeCode(code))
 		if err != nil {
 			return nil, nil, fmt.Errorf("hash code %d: %w", i, err)
 		}
@@ -78,7 +70,7 @@ func (rm *RecoveryManager) Verify(code string) bool {
 		if rm.codes[i].Used {
 			continue
 		}
-		if verifyRecoveryCode(normalized, rm.codes[i].Hash) {
+		if VerifyArgon2id(normalized, rm.codes[i].Hash) {
 			rm.codes[i].Used = true
 			return true
 		}
@@ -129,35 +121,3 @@ func normalizeCode(code string) string {
 	return strings.ToUpper(strings.ReplaceAll(code, "-", ""))
 }
 
-// hashRecoveryCode hashes a code with Argon2id, returns hex(salt + hash).
-func hashRecoveryCode(code string) (string, error) {
-	salt := make([]byte, saltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("generate salt: %w", err)
-	}
-
-	normalized := normalizeCode(code)
-	hash := argon2.IDKey([]byte(normalized), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-
-	// Encode as hex: salt (16 bytes) + hash (32 bytes)
-	result := make([]byte, saltLen+argon2KeyLen)
-	copy(result[:saltLen], salt)
-	copy(result[saltLen:], hash)
-
-	return hex.EncodeToString(result), nil
-}
-
-// verifyRecoveryCode checks a plaintext code against a stored hash.
-func verifyRecoveryCode(normalizedCode, storedHash string) bool {
-	decoded, err := hex.DecodeString(storedHash)
-	if err != nil || len(decoded) != saltLen+argon2KeyLen {
-		return false
-	}
-
-	salt := decoded[:saltLen]
-	expectedHash := decoded[saltLen:]
-
-	actualHash := argon2.IDKey([]byte(normalizedCode), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-
-	return subtle.ConstantTimeCompare(expectedHash, actualHash) == 1
-}

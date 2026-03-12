@@ -15,18 +15,27 @@ type AuthHandler struct {
 	jwt      *auth.JWTManager
 	webauthn *auth.WebAuthnManager
 	recovery *auth.RecoveryManager
+	password *auth.PasswordManager
+	limiter  *auth.RateLimiter
+	klever   *auth.KleverAuthManager
 
 	// onCredentialsChanged is called when passkey credentials are added or updated.
-	// Used to persist credentials to the settings store.
 	onCredentialsChanged func([]auth.PasskeyCredential)
+	// onPasswordChanged is called when the password hash changes.
+	onPasswordChanged func(string)
+	// onKleverAddressChanged is called when the Klever admin address changes.
+	onKleverAddressChanged func(string)
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(jwt *auth.JWTManager, webauthn *auth.WebAuthnManager, recovery *auth.RecoveryManager) *AuthHandler {
+func NewAuthHandler(jwt *auth.JWTManager, webauthn *auth.WebAuthnManager, recovery *auth.RecoveryManager, password *auth.PasswordManager, limiter *auth.RateLimiter, klever *auth.KleverAuthManager) *AuthHandler {
 	return &AuthHandler{
 		jwt:      jwt,
 		webauthn: webauthn,
 		recovery: recovery,
+		password: password,
+		limiter:  limiter,
+		klever:   klever,
 	}
 }
 
@@ -35,13 +44,158 @@ func (h *AuthHandler) SetOnCredentialsChanged(fn func([]auth.PasskeyCredential))
 	h.onCredentialsChanged = fn
 }
 
+// SetOnPasswordChanged sets the callback for password hash persistence.
+func (h *AuthHandler) SetOnPasswordChanged(fn func(string)) {
+	h.onPasswordChanged = fn
+}
+
+// SetOnKleverAddressChanged sets the callback for Klever address persistence.
+func (h *AuthHandler) SetOnKleverAddressChanged(fn func(string)) {
+	h.onKleverAddressChanged = fn
+}
+
 // HandleSetupStatus returns whether initial setup has been completed.
 // GET /api/setup/status
 func (h *AuthHandler) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"setup_complete": h.webauthn.HasCredentials(),
+		"setup_complete": h.password.HasPassword() || h.webauthn.HasCredentials(),
+		"has_password":   h.password.HasPassword(),
 		"passkey_count":  h.webauthn.CredentialCount(),
+		"has_klever":     h.klever.HasAddress(),
 	})
+}
+
+// HandleSetupPassword sets the initial password during first-time setup.
+// POST /api/setup/password
+func (h *AuthHandler) HandleSetupPassword(w http.ResponseWriter, r *http.Request) {
+	if h.password.HasPassword() {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "password already configured"})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	hash, err := h.password.SetPassword(req.Password)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onPasswordChanged != nil {
+		h.onPasswordChanged(hash)
+	}
+
+	// Auto-login after setup
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+		return
+	}
+
+	setAuthCookies(w, tokens)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":       "password set",
+		"access_token": tokens.AccessToken,
+	})
+}
+
+// HandlePasswordLogin authenticates via password.
+// POST /api/auth/password
+func (h *AuthHandler) HandlePasswordLogin(w http.ResponseWriter, r *http.Request) {
+	ip := extractIP(r)
+
+	if !h.limiter.Allow(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts, please try again later"})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if !h.password.Verify(req.Password) {
+		h.limiter.RecordFailure(ip)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid password"})
+		return
+	}
+
+	h.limiter.Reset(ip)
+
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+		return
+	}
+
+	setAuthCookies(w, tokens)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	})
+}
+
+// HandleChangePassword changes the admin password (requires current password).
+// PUT /api/auth/password
+func (h *AuthHandler) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if !h.password.Verify(req.CurrentPassword) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password is incorrect"})
+		return
+	}
+
+	hash, err := h.password.SetPassword(req.NewPassword)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onPasswordChanged != nil {
+		h.onPasswordChanged(hash)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password changed"})
+}
+
+// extractIP returns the client IP from the request, stripping the port.
+func extractIP(r *http.Request) string {
+	// Check X-Forwarded-For first (reverse proxy)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP
+		if idx := len(xff); idx > 0 {
+			for i, c := range xff {
+				if c == ',' {
+					return xff[:i]
+				}
+			}
+			return xff
+		}
+	}
+	// Strip port from RemoteAddr
+	addr := r.RemoteAddr
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[:i]
+		}
+	}
+	return addr
 }
 
 // HandlePasskeyBeginRegister starts the WebAuthn registration ceremony.
@@ -301,6 +455,101 @@ func (h *AuthHandler) HandleDeletePasskey(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// HandleKleverChallenge generates a challenge nonce for Klever Extension login.
+// GET /api/auth/klever/challenge?address=klv1...
+func (h *AuthHandler) HandleKleverChallenge(w http.ResponseWriter, r *http.Request) {
+	address := r.URL.Query().Get("address")
+	if address == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "address parameter required"})
+		return
+	}
+
+	nonce, err := h.klever.CreateChallenge(address)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"challenge": nonce,
+	})
+}
+
+// HandleKleverVerify verifies a Klever Extension signature and issues JWT tokens.
+// POST /api/auth/klever/verify
+func (h *AuthHandler) HandleKleverVerify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Address   string `json:"address"`
+		Challenge string `json:"challenge"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if err := h.klever.VerifySignature(req.Address, req.Challenge, req.Signature); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		return
+	}
+
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+		return
+	}
+
+	setAuthCookies(w, tokens)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	})
+}
+
+// HandleKleverSetup registers a Klever admin address (protected).
+// POST /api/setup/klever
+func (h *AuthHandler) HandleKleverSetup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if err := h.klever.SetAddress(req.Address); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onKleverAddressChanged != nil {
+		h.onKleverAddressChanged(req.Address)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "address registered"})
+}
+
+// HandleKleverRemove removes the registered Klever admin address (protected).
+// DELETE /api/auth/klever
+func (h *AuthHandler) HandleKleverRemove(w http.ResponseWriter, r *http.Request) {
+	h.klever.RemoveAddress()
+
+	if h.onKleverAddressChanged != nil {
+		h.onKleverAddressChanged("")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "address removed"})
+}
+
+// HandleKleverStatus returns the current Klever auth configuration (protected).
+// GET /api/auth/klever
+func (h *AuthHandler) HandleKleverStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"has_address": h.klever.HasAddress(),
+		"address":     h.klever.Address(),
+	})
 }
 
 // setAuthCookies sets the JWT cookies in the response.
