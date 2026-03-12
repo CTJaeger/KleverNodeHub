@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml/badge.svg)](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Docker Hub](https://img.shields.io/docker/v/ctjaeger/klever-node-hub?label=Docker&logo=docker)](https://hub.docker.com/r/ctjaeger/klever-node-hub)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Self-hosted management dashboard for Klever validator nodes**
@@ -129,15 +130,11 @@ scp bin/klever-node-hub-linux user@your-server:/opt/klever/klever-node-hub
 Or use Docker:
 
 ```bash
-# Build the image
-docker build -t klever-node-hub .
-
-# Run
 docker run -d \
   -p 9443:9443 \
   -v klever-data:/root/.klever-node-hub \
   --name klever-node-hub \
-  klever-node-hub \
+  ctjaeger/klever-node-hub:latest \
   --domain your-server.example.com
 ```
 
@@ -156,7 +153,17 @@ On first access (`https://your-server:9443`), a setup wizard will guide you thro
 
 ### Agent (on each validator server)
 
-Use the install script to set up the agent as a systemd service:
+Use the install script to set up the agent as a systemd service, or run via Docker:
+
+```bash
+docker run -d \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --name klever-agent \
+  ctjaeger/klever-agent:latest \
+  --dashboard-url https://your-server:9443 --register-token YOUR_TOKEN
+```
+
+Or use the install script for a systemd service:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh \
