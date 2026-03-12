@@ -1,4 +1,4 @@
-.PHONY: build-dashboard build-agent build run fmt test lint security coverage clean \
+.PHONY: build-dashboard build-agent build run run-live seed fmt test lint security coverage clean \
 	build-linux-dashboard build-linux-agent build-linux deploy-agent deploy-dashboard deploy
 
 BIN_DIR := bin
@@ -67,6 +67,12 @@ deploy: build-linux
 
 run:
 	go run -ldflags="$(LDFLAGS)" ./cmd/dashboard
+
+run-live:
+	air
+
+seed:
+	go run ./cmd/seed --clear
 
 fmt:
 	goimports -w .

@@ -168,6 +168,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/datatable.js"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
@@ -188,83 +189,74 @@
             return div.innerHTML;
         }
 
-        // --- Alert History ---
-        async function loadAlertHistory() {
-            const data = await API.getJSON('/api/alerts/history?limit=50');
-            if (!data) return;
-
-            const alerts = data.alerts || [];
-            const container = document.getElementById('alerts-list');
-
-            if (alerts.length === 0) {
-                container.textContent = '';
-                const p = document.createElement('p');
-                p.className = 'text-muted';
-                p.style.padding = '16px';
-                p.textContent = 'No alerts yet.';
-                container.appendChild(p);
-                return;
-            }
-
-            // Build table with DOM methods for safety
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-wrapper';
-            const table = document.createElement('table');
-            table.className = 'data-table';
-
-            const thead = table.createTHead();
-            const headerRow = thead.insertRow();
-            ['Severity', 'Rule', 'Message', 'Time', 'State', ''].forEach(function(text) {
-                const th = document.createElement('th');
-                th.textContent = text;
-                headerRow.appendChild(th);
-            });
-
-            const tbody = table.createTBody();
-            alerts.forEach(function(a) {
-                const row = tbody.insertRow();
+        // DataTable for alert history
+        const alertHistoryTable = new DataTable({
+            containerId: 'alerts-list',
+            pageSize: 25,
+            searchFields: ['rule_name', 'message', 'severity', 'state'],
+            columns: [
+                { key: 'severity', label: 'Severity', filterable: true },
+                { key: 'state', label: 'State', filterable: true }
+            ],
+            emptyMessage: 'No alerts yet.',
+            renderItem: function(a) {
                 const sevBadge = a.severity === 'critical' ? 'badge-offline' : a.severity === 'warning' ? 'badge-syncing' : 'badge-online';
                 const stateBadge = a.state === 'firing' ? 'badge-offline' : a.state === 'resolved' ? 'badge-online' : 'badge-syncing';
                 const time = new Date((a.fired_at || a.created_at) * 1000).toLocaleString();
+                const ackBtn = (a.state === 'firing' && !a.acked)
+                    ? '<button class="btn btn-sm btn-secondary" onclick="ackAlert(\'' + a.id + '\')">Ack</button>'
+                    : '';
+                return '<div class="card" style="margin-bottom:4px;padding:12px 16px;">' +
+                    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+                        '<span class="badge ' + sevBadge + '">' + esc(a.severity) + '</span>' +
+                        '<strong>' + esc(a.rule_name) + '</strong>' +
+                        '<span class="text-muted" style="flex:1;min-width:200px;">' + esc(a.message) + '</span>' +
+                        '<span class="text-muted text-sm">' + time + '</span>' +
+                        '<span class="badge ' + stateBadge + '">' + esc(a.state) + '</span>' +
+                        ackBtn +
+                    '</div>' +
+                '</div>';
+            }
+        });
+        window._dt['alerts-list'] = alertHistoryTable;
 
-                const sevCell = row.insertCell();
-                const sevSpan = document.createElement('span');
-                sevSpan.className = 'badge ' + sevBadge;
-                sevSpan.textContent = a.severity;
-                sevCell.appendChild(sevSpan);
+        // DataTable for alert rules
+        const alertRulesTable = new DataTable({
+            containerId: 'alert-rules-list',
+            pageSize: 25,
+            searchFields: ['name', 'metric_name', 'severity'],
+            columns: [
+                { key: 'severity', label: 'Severity', filterable: true }
+            ],
+            emptyMessage: 'No alert rules configured.',
+            renderItem: function(r) {
+                const condLabels = { gt: '>', lt: '<', eq: '=', stall: 'stall' };
+                const sevBadge = r.severity === 'critical' ? 'badge-offline' : r.severity === 'warning' ? 'badge-syncing' : 'badge-online';
+                const statusBadge = r.enabled ? 'badge-online' : 'badge-offline';
+                const builtinTag = r.builtin ? '<span class="text-sm text-muted"> (built-in)</span>' : '';
+                const delBtn = !r.builtin ? '<button class="btn btn-sm btn-secondary" onclick="deleteRule(\'' + r.id + '\')">Del</button>' : '';
+                return '<div class="card" style="margin-bottom:4px;padding:12px 16px;">' +
+                    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+                        '<strong>' + esc(r.name) + '</strong>' + builtinTag +
+                        '<span class="text-muted">' + esc(r.metric_name) + ' ' + (condLabels[r.condition] || r.condition) + ' ' + r.threshold +
+                            (r.duration_sec > 0 ? ' for ' + r.duration_sec + 's' : '') + '</span>' +
+                        '<span class="badge ' + sevBadge + '">' + esc(r.severity) + '</span>' +
+                        '<span class="badge ' + statusBadge + '">' + (r.enabled ? 'enabled' : 'disabled') + '</span>' +
+                        '<div style="margin-left:auto;display:flex;gap:4px;">' +
+                            '<button class="btn btn-sm btn-secondary" onclick="editRule(\'' + r.id + '\')">Edit</button>' +
+                            delBtn +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+        });
+        window._dt['alert-rules-list'] = alertRulesTable;
 
-                const ruleCell = row.insertCell();
-                const strong = document.createElement('strong');
-                strong.textContent = a.rule_name;
-                ruleCell.appendChild(strong);
-
-                const msgCell = row.insertCell();
-                msgCell.className = 'text-muted';
-                msgCell.textContent = a.message;
-
-                const timeCell = row.insertCell();
-                timeCell.className = 'text-muted text-sm';
-                timeCell.textContent = time;
-
-                const stateCell = row.insertCell();
-                const stateSpan = document.createElement('span');
-                stateSpan.className = 'badge ' + stateBadge;
-                stateSpan.textContent = a.state;
-                stateCell.appendChild(stateSpan);
-
-                const actionCell = row.insertCell();
-                if (a.state === 'firing' && !a.acked) {
-                    const btn = document.createElement('button');
-                    btn.className = 'btn btn-sm btn-secondary';
-                    btn.textContent = 'Ack';
-                    btn.onclick = function() { ackAlert(a.id); };
-                    actionCell.appendChild(btn);
-                }
-            });
-
-            wrapper.appendChild(table);
-            container.textContent = '';
-            container.appendChild(wrapper);
+        // --- Alert History ---
+        async function loadAlertHistory() {
+            const data = await API.getJSON('/api/alerts/history?limit=100');
+            if (!data) return;
+            alertHistoryTable.setData(data.alerts || []);
         }
 
         async function ackAlert(id) {
@@ -276,88 +268,7 @@
         async function loadAlertRules() {
             const data = await API.getJSON('/api/alerts/rules');
             if (!data) return;
-
-            const rules = data.rules || [];
-            const container = document.getElementById('alert-rules-list');
-
-            if (rules.length === 0) {
-                container.textContent = '';
-                const p = document.createElement('p');
-                p.className = 'text-muted';
-                p.textContent = 'No alert rules configured.';
-                container.appendChild(p);
-                return;
-            }
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-wrapper';
-            const table = document.createElement('table');
-            table.className = 'data-table';
-
-            const thead = table.createTHead();
-            const headerRow = thead.insertRow();
-            ['Name', 'Metric', 'Condition', 'Severity', 'Status', ''].forEach(function(text) {
-                const th = document.createElement('th');
-                th.textContent = text;
-                headerRow.appendChild(th);
-            });
-
-            const condLabels = { gt: '>', lt: '<', eq: '=', stall: 'stall' };
-            const tbody = table.createTBody();
-            rules.forEach(function(r) {
-                const row = tbody.insertRow();
-
-                const nameCell = row.insertCell();
-                const nameStrong = document.createElement('strong');
-                nameStrong.textContent = r.name;
-                nameCell.appendChild(nameStrong);
-                if (r.builtin) {
-                    const builtinSpan = document.createElement('span');
-                    builtinSpan.className = 'text-sm text-muted';
-                    builtinSpan.textContent = ' (built-in)';
-                    nameCell.appendChild(builtinSpan);
-                }
-
-                const metricCell = row.insertCell();
-                metricCell.className = 'text-muted';
-                metricCell.textContent = r.metric_name;
-
-                const condCell = row.insertCell();
-                condCell.className = 'text-muted';
-                condCell.textContent = (condLabels[r.condition] || r.condition) + ' ' + r.threshold +
-                    (r.duration_sec > 0 ? ' for ' + r.duration_sec + 's' : '') + ', cooldown ' + r.cooldown_min + 'min';
-
-                const sevCell = row.insertCell();
-                const sevSpan = document.createElement('span');
-                sevSpan.className = 'badge ' + (r.severity === 'critical' ? 'badge-offline' : r.severity === 'warning' ? 'badge-syncing' : 'badge-online');
-                sevSpan.textContent = r.severity;
-                sevCell.appendChild(sevSpan);
-
-                const statusCell = row.insertCell();
-                const statusSpan = document.createElement('span');
-                statusSpan.className = 'badge ' + (r.enabled ? 'badge-online' : 'badge-offline');
-                statusSpan.textContent = r.enabled ? 'enabled' : 'disabled';
-                statusCell.appendChild(statusSpan);
-
-                const actionCell = row.insertCell();
-                const editBtn = document.createElement('button');
-                editBtn.className = 'btn btn-sm btn-secondary';
-                editBtn.textContent = 'Edit';
-                editBtn.style.marginRight = '4px';
-                editBtn.onclick = function() { editRule(r.id); };
-                actionCell.appendChild(editBtn);
-                if (!r.builtin) {
-                    const delBtn = document.createElement('button');
-                    delBtn.className = 'btn btn-sm btn-secondary';
-                    delBtn.textContent = 'Del';
-                    delBtn.onclick = function() { deleteRule(r.id); };
-                    actionCell.appendChild(delBtn);
-                }
-            });
-
-            wrapper.appendChild(table);
-            container.textContent = '';
-            container.appendChild(wrapper);
+            alertRulesTable.setData(data.rules || []);
         }
 
         function showAddRule() {

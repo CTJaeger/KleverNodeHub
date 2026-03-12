@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <div class="app-top-strip">
+        <span>Operations View</span>
+        <span id="top-shell-status">Live infrastructure dashboard</span>
+    </div>
     <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
     <div class="app">
@@ -95,9 +99,19 @@
                 <div class="page-header-left">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                     <span class="page-header-title">Dashboard</span>
-                    <span class="page-header-sub" id="sync-time"></span>
+                    <span class="page-header-sub">Operations overview</span>
+                </div>
+                <div class="page-header-center">
+                    <label class="page-search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                        <input id="overview-search" class="page-search-input" placeholder="Search servers and provisioned nodes..." oninput="setOverviewSearch(this.value)">
+                    </label>
                 </div>
                 <div class="page-header-right">
+                    <div class="page-header-status">
+                        <span class="status-dot connected"></span>
+                        <span id="sync-time">Syncing...</span>
+                    </div>
                     <button class="page-header-icon-btn" onclick="loadData()" title="Refresh">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     </button>
@@ -124,8 +138,8 @@
                         <span>Servers</span>
                     </div>
                     <div class="stat-card-body">
-                        <div class="stat-card-label">TOTAL / ONLINE</div>
-                        <div class="stat-card-value"><span id="stat-servers">0</span> / <span id="stat-online" class="text-accent">0</span></div>
+                        <div class="stat-card-label">ONLINE / SERVERS</div>
+                        <div class="stat-card-value"><span id="stat-online" class="text-accent">0</span> / <span id="stat-servers">0</span></div>
                         <div class="stat-card-sub" id="stat-nodes-sub">0 nodes</div>
                     </div>
                 </div>
@@ -189,7 +203,7 @@
                 </div>
             </div>
 
-            <!-- Servers Status Table -->
+            <!-- Servers Status -->
             <div class="data-table-container" style="margin-bottom:20px;">
                 <div class="data-table-header">
                     <span class="data-table-title">
@@ -201,51 +215,20 @@
                         <button class="btn btn-secondary btn-sm" onclick="showAddServer()">+ Add Server</button>
                     </div>
                 </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Server</th>
-                            <th>Status</th>
-                            <th>IP Address</th>
-                            <th>Agent</th>
-                            <th>CPU</th>
-                            <th>Memory</th>
-                            <th>Nodes</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="server-table-body">
-                        <tr><td colspan="8" class="text-muted" style="text-align:center;padding:32px;">No servers registered yet. <a href="#" onclick="showAddServer(); return false;" style="color:var(--accent);">Add your first server</a></td></tr>
-                    </tbody>
-                </table>
+                <div id="server-list"></div>
             </div>
 
             <!-- Nodes Table -->
-            <div class="data-table-container" id="nodes-table-container" style="margin-bottom:20px;display:none;">
-                <div class="data-table-header">
-                    <span class="data-table-title">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                        Provisioned Nodes
-                    </span>
+            <div id="nodes-table-container" style="margin-bottom:20px;display:none;">
+                <div class="data-table-container node-table-scroll">
+                    <div class="data-table-header">
+                        <span class="data-table-title">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                            Provisioned Nodes
+                        </span>
+                    </div>
+                    <div id="nodes-list"></div>
                 </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Node</th>
-                            <th>Status</th>
-                            <th>Nonce</th>
-                            <th>Sync</th>
-                            <th>Server</th>
-                            <th>Type</th>
-                            <th>CPU</th>
-                            <th>Memory</th>
-                            <th>Image</th>
-                            <th>Port</th>
-                        </tr>
-                    </thead>
-                    <tbody id="nodes-table-body">
-                    </tbody>
-                </table>
             </div>
 
             </div><!-- /page-body -->
@@ -397,6 +380,7 @@
         let servers = [];
         let nodes = [];
         let refreshInterval = null;
+        let overviewSearchQuery = '';
 
         // DataTable for servers
         const serverTable = new DataTable({
@@ -407,40 +391,169 @@
                 { key: 'status', label: 'Status', filterable: true }
             ],
             emptyMessage: 'No servers registered yet.',
+            renderHeader: function() {
+                return '<div class="server-table-head">' +
+                    '<div class="server-table-head-cell">Server</div>' +
+                    '<div class="server-table-head-cell">Host</div>' +
+                    '<div class="server-table-head-cell">Agent</div>' +
+                    '<div class="server-table-head-cell">Nodes</div>' +
+                    '<div class="server-table-head-cell">CPU</div>' +
+                    '<div class="server-table-head-cell">Mem</div>' +
+                    '<div class="server-table-head-cell">Disk</div>' +
+                    '<div class="server-table-head-cell server-table-head-status">Status</div>' +
+                    '<div class="server-table-head-cell server-table-head-actions">Actions</div>' +
+                '</div>';
+            },
             renderItem: function(server) {
                 const serverNodes = nodes.filter(n => n.server_id === server.id);
                 const badgeClass = server.status === 'online' ? 'badge-online' : 'badge-offline';
-                return '<div class="card">' +
-                    '<div class="card-header">' +
-                        '<h3>' + esc(server.name || server.hostname) + '</h3>' +
+                const ip = server.public_ip || server.ip_address || '';
+                const subtitle = [ip, server.region].filter(Boolean).join(' \u00b7 ');
+                const label = esc(server.name || server.hostname) + ', ' + server.status;
+                const m = serverMetrics[server.id];
+                var cpu = m ? m.cpu_percent : 0;
+                var mem = m ? m.mem_percent : 0;
+                var disk = m ? m.disk_percent : 0;
+                const serverName = esc(server.name || server.hostname);
+                const serverIDJS = escJS(server.id || '');
+                const serverNameJS = escJS(server.name || server.hostname || '');
+                const serverURLJS = escJS('/servers/' + encodeURIComponent(server.id));
+                function barColor(pct) {
+                    if (pct < 60) return 'var(--accent)';
+                    if (pct < 85) return 'var(--warning)';
+                    return 'var(--error)';
+                }
+                function metricBar(pct) {
+                    pct = Math.max(0, Math.min(100, pct || 0));
+                    const fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
+                    return '<div class="server-metric">' +
+                        '<div class="server-metric-fill" style="width:' + fillWidth + '%;background:' + barColor(pct) + ';"></div>' +
+                        '<span class="server-metric-value">' + pct.toFixed(0) + '%</span>' +
+                    '</div>';
+                }
+                return '<div class="server-row server-row-grid" role="link" tabindex="0" aria-label="' + label + '" onclick="navigateRow(event, \'' + serverURLJS + '\')" onkeydown="activateRow(event, \'' + serverURLJS + '\')">' +
+                    '<div class="server-cell server-cell-server" data-label="Server">' +
+                        '<span class="server-row-name">' + serverName + '</span>' +
+                        (subtitle ? '<span class="server-row-sub-inline">' + esc(subtitle) + '</span>' : '') +
+                    '</div>' +
+                    '<div class="server-cell" data-label="Host">' + esc(server.hostname) + '</div>' +
+                    '<div class="server-cell" data-label="Agent">' + esc(server.agent_version || '-') + '</div>' +
+                    '<div class="server-cell" data-label="Nodes">' + serverNodes.length + '</div>' +
+                    '<div class="server-cell server-cell-metric" data-label="CPU">' +
+                        metricBar(cpu) +
+                    '</div>' +
+                    '<div class="server-cell server-cell-metric" data-label="Mem">' +
+                        metricBar(mem) +
+                    '</div>' +
+                    '<div class="server-cell server-cell-metric" data-label="Disk">' +
+                        metricBar(disk) +
+                    '</div>' +
+                    '<div class="server-cell server-cell-status" data-label="Status">' +
                         '<span class="badge ' + badgeClass + '">' + esc(server.status) + '</span>' +
                     '</div>' +
-                    '<div class="info-row"><span class="info-label">Hostname</span><span class="info-value">' + esc(server.hostname) + '</span></div>' +
-                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.public_ip || server.ip_address) + '</span></div>' +
-                    (server.region ? '<div class="info-row"><span class="info-label">Region</span><span class="info-value">' + esc(server.region) + '</span></div>' : '') +
-                    '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
-                    '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
-                    '<div class="gauge-row">' +
-                        '<div class="gauge-item" id="gauge-cpu-' + server.id + '"></div>' +
-                        '<div class="gauge-item" id="gauge-mem-' + server.id + '"></div>' +
-                        '<div class="gauge-item" id="gauge-disk-' + server.id + '"></div>' +
+                    '<div class="server-cell server-cell-actions" data-label="Actions">' +
+                        '<div class="actions-menu-wrap">' +
+                            '<button class="actions-menu-btn" aria-label="Server actions" onclick="toggleServerActions(event, \'' + serverIDJS + '\')">...</button>' +
+                            '<div class="actions-dropdown" id="server-actions-' + esc(server.id) + '">' +
+                                '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + serverURLJS + '\')">Details</button>' +
+                                '<button class="actions-dropdown-item danger" onclick="deleteServerFromMenu(event, \'' + serverIDJS + '\', \'' + serverNameJS + '\')">Delete server</button>' +
+                            '</div>' +
+                        '</div>' +
                     '</div>' +
-                    (serverNodes.length > 0 ? '<div class="mt-8">' + serverNodes.map(renderNodeBadge).join('') + '</div>' : '') +
                 '</div>';
-            },
-            onRender: function(pageData) {
-                pageData.forEach(server => {
-                    const m = serverMetrics[server.id];
-                    const cpuEl = document.getElementById('gauge-cpu-' + server.id);
-                    const memEl = document.getElementById('gauge-mem-' + server.id);
-                    const diskEl = document.getElementById('gauge-disk-' + server.id);
-                    if (cpuEl) Charts.gauge(cpuEl, m ? m.cpu_percent : 0, { label: 'CPU', size: 70 });
-                    if (memEl) Charts.gauge(memEl, m ? m.mem_percent : 0, { label: 'Memory', size: 70 });
-                    if (diskEl) Charts.gauge(diskEl, m ? m.disk_percent : 0, { label: 'Disk', size: 70 });
-                });
             }
         });
         window._dt['server-list'] = serverTable;
+
+        // DataTable for nodes
+        const nodeTable = new DataTable({
+            containerId: 'nodes-list',
+            pageSize: 25,
+            searchFields: ['display_name', 'name', 'container_name', 'node_type', 'status', 'bls_public_key', 'docker_image_tag'],
+            columns: [
+                { key: 'status', label: 'Status', filterable: true },
+                { key: 'node_type', label: 'Type', filterable: true }
+            ],
+            emptyMessage: 'No nodes provisioned yet.',
+            renderHeader: function() {
+                return '<div class="node-table-head node-table-head-overview">' +
+                    '<div class="node-table-head-cell">Node</div>' +
+                    '<div class="node-table-head-cell">Server</div>' +
+                    '<div class="node-table-head-cell">Type</div>' +
+                    '<div class="node-table-head-cell">Nonce</div>' +
+                    '<div class="node-table-head-cell">Sync</div>' +
+                    '<div class="node-table-head-cell">CPU</div>' +
+                    '<div class="node-table-head-cell">Memory</div>' +
+                    '<div class="node-table-head-cell node-table-head-status">Status</div>' +
+                    '<div class="node-table-head-cell node-table-head-actions">Actions</div>' +
+                '</div>';
+            },
+            renderItem: function(n) {
+                const serverMap = {};
+                servers.forEach(function(s) { serverMap[s.id] = s.name || s.hostname; });
+                const meta = n.metadata || {};
+                const nonce = meta.klv_nonce;
+                const isSyncing = meta.klv_is_syncing;
+                const cpuPct = meta.cpu_percent || 0;
+                const memPct = meta.mem_percent || 0;
+                const memUsed = meta.mem_used || 0;
+                const memLimit = meta.mem_limit || 0;
+                const nodeName = esc(n.display_name || n.name || n.container_name);
+                const serverName = esc(serverMap[n.server_id] || n.server_id || '-');
+                const nodeIDJS = escJS(n.id || '');
+                const nodeNameJS = escJS(n.display_name || n.name || n.container_name || '');
+                const nodeURLJS = escJS('/node/' + encodeURIComponent(n.id));
+                const syncHtml = isSyncing != null
+                    ? (isSyncing === 0
+                        ? '<span class="badge badge-running">synced</span>'
+                        : '<span class="badge badge-syncing">syncing</span>')
+                    : '<span class="text-muted">-</span>';
+                function metricBar(pct, label) {
+                    pct = Math.max(0, Math.min(100, pct || 0));
+                    const fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
+                    return '<div class="server-metric">' +
+                        '<div class="server-metric-fill" style="width:' + fillWidth + '%;background:' + Charts._gaugeColor(pct) + ';"></div>' +
+                        '<span class="server-metric-value">' + esc(label) + '</span>' +
+                    '</div>';
+                }
+
+                return '<div class="node-row node-row-grid node-row-grid-overview" role="link" tabindex="0" aria-label="' + nodeName + '" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
+                    '<div class="node-cell node-cell-primary" data-label="Node">' +
+                        '<span class="node-row-name">' + nodeName + '</span>' +
+                    '</div>' +
+                    '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
+                    '<div class="node-cell" data-label="Type">' + esc(n.node_type || '-') + '</div>' +
+                    '<div class="node-cell node-cell-mono" data-label="Nonce">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</div>' +
+                    '<div class="node-cell" data-label="Sync">' +
+                        syncHtml +
+                    '</div>' +
+                    '<div class="node-cell node-cell-metric" data-label="CPU">' +
+                        metricBar(cpuPct, cpuPct.toFixed(1) + '%') +
+                    '</div>' +
+                    '<div class="node-cell node-cell-metric" data-label="Memory">' +
+                        metricBar(memPct, Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit)) +
+                    '</div>' +
+                    '<div class="node-cell node-cell-status" data-label="Status">' +
+                        '<span class="badge badge-' + esc(n.status || 'stopped') + '">' + esc(n.status || 'stopped') + '</span>' +
+                    '</div>' +
+                    '<div class="node-cell node-cell-actions" data-label="Actions">' +
+                        '<div class="actions-menu-wrap">' +
+                            '<button class="actions-menu-btn" aria-label="Node actions" onclick="toggleNodeActions(event, \'' + nodeIDJS + '\')">...</button>' +
+                            '<div class="actions-dropdown" id="node-actions-' + esc(n.id) + '">' +
+                                '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + nodeURLJS + '\')">Details</button>' +
+                                '<div class="actions-dropdown-divider"></div>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'start\')">Start</button>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'stop\')">Stop</button>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'restart\')">Restart</button>' +
+                                '<div class="actions-dropdown-divider"></div>' +
+                                '<button class="actions-dropdown-item danger" onclick="deleteNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">Delete node</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+        });
+        window._dt['nodes-list'] = nodeTable;
 
         async function init() {
             await loadData();
@@ -483,6 +596,9 @@
                 servers = [];
                 nodes = [];
             }
+            const syncText = 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('sync-time').textContent = syncText;
+            document.getElementById('top-shell-status').textContent = syncText;
             renderServers();
             updateStats();
         }
@@ -501,153 +617,40 @@
             document.getElementById('stat-stopped').textContent = stopped;
             document.getElementById('stat-syncing').textContent = syncing;
             document.getElementById('stat-syncing-sub').textContent = syncing + ' syncing';
+
+            // Alert counts
+            var totalActive = activeAlerts ? activeAlerts.length : 0;
+            var criticalCount = activeAlerts ? activeAlerts.filter(function(a) { return a.severity === 'critical'; }).length : 0;
+            document.getElementById('stat-alerts').textContent = totalActive;
+            document.getElementById('stat-alerts-sub').textContent = criticalCount + ' critical';
         }
 
         let serverMetrics = {}; // serverID → latest system metrics
 
         function renderServers() {
             serverTable.setData(servers);
+            if (overviewSearchQuery) setOverviewSearch(overviewSearchQuery);
             renderResourceGauges();
             renderNodes();
         }
 
         function renderNodes() {
             const container = document.getElementById('nodes-table-container');
-            const tbody = document.getElementById('nodes-table-body');
-
             if (nodes.length === 0) {
                 container.style.display = 'none';
                 return;
             }
-
             container.style.display = '';
-            tbody.textContent = '';
+            nodeTable.setData(nodes);
+            if (overviewSearchQuery) setOverviewSearch(overviewSearchQuery);
+        }
 
-            // Build a server name lookup
-            const serverMap = {};
-            servers.forEach(function(s) { serverMap[s.id] = s.name || s.hostname; });
-
-            nodes.forEach(function(n) {
-                const tr = document.createElement('tr');
-                tr.style.cursor = 'pointer';
-                tr.onclick = function() { location.href = '/node/' + n.id; };
-
-                // Node name
-                const nameCell = document.createElement('td');
-                const nameStrong = document.createElement('strong');
-                nameStrong.textContent = n.display_name || n.name || n.container_name;
-                nameCell.appendChild(nameStrong);
-                if (n.bls_public_key) {
-                    const keyDiv = document.createElement('div');
-                    keyDiv.className = 'text-sm text-muted';
-                    keyDiv.style.marginTop = '2px';
-                    keyDiv.style.fontFamily = 'monospace';
-                    keyDiv.textContent = n.bls_public_key.substring(0, 16) + '...';
-                    keyDiv.title = n.bls_public_key;
-                    nameCell.appendChild(keyDiv);
-                }
-                tr.appendChild(nameCell);
-
-                // Status
-                const statusCell = document.createElement('td');
-                const statusBadge = document.createElement('span');
-                statusBadge.className = 'badge badge-' + (n.status || 'stopped');
-                statusBadge.textContent = n.status || 'stopped';
-                statusCell.appendChild(statusBadge);
-                tr.appendChild(statusCell);
-
-                // Nonce
-                const nonceCell = document.createElement('td');
-                const meta2 = n.metadata || {};
-                const nonce = meta2.klv_nonce;
-                nonceCell.style.fontFamily = 'monospace';
-                nonceCell.textContent = nonce != null ? Math.floor(nonce).toLocaleString() : '-';
-                tr.appendChild(nonceCell);
-
-                // Sync
-                const syncCell = document.createElement('td');
-                const isSyncing = meta2.klv_is_syncing;
-                if (isSyncing != null) {
-                    const syncBadge = document.createElement('span');
-                    if (isSyncing === 0) {
-                        syncBadge.className = 'badge badge-running';
-                        syncBadge.textContent = 'synced';
-                    } else {
-                        syncBadge.className = 'badge badge-warning';
-                        syncBadge.textContent = 'syncing';
-                    }
-                    syncCell.appendChild(syncBadge);
-                } else {
-                    syncCell.className = 'text-muted';
-                    syncCell.textContent = '-';
-                }
-                tr.appendChild(syncCell);
-
-                // Server
-                const serverCell = document.createElement('td');
-                serverCell.className = 'text-muted';
-                serverCell.textContent = serverMap[n.server_id] || n.server_id;
-                tr.appendChild(serverCell);
-
-                // Type
-                const typeCell = document.createElement('td');
-                typeCell.textContent = n.node_type || '-';
-                tr.appendChild(typeCell);
-
-                // CPU
-                const cpuCell = document.createElement('td');
-                const meta = n.metadata || {};
-                const cpuPct = meta.cpu_percent || 0;
-                const cpuBar = document.createElement('div');
-                cpuBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
-                const cpuTrack = document.createElement('div');
-                cpuTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
-                const cpuFill = document.createElement('div');
-                cpuFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(cpuPct) + ';width:' + Math.min(cpuPct, 100) + '%;';
-                cpuTrack.appendChild(cpuFill);
-                cpuBar.appendChild(cpuTrack);
-                const cpuLabel = document.createElement('span');
-                cpuLabel.className = 'text-muted';
-                cpuLabel.style.fontSize = '12px';
-                cpuLabel.textContent = cpuPct.toFixed(1) + '%';
-                cpuBar.appendChild(cpuLabel);
-                cpuCell.appendChild(cpuBar);
-                tr.appendChild(cpuCell);
-
-                // Memory
-                const memCell = document.createElement('td');
-                const memPct = meta.mem_percent || 0;
-                const memUsed = meta.mem_used || 0;
-                const memLimit = meta.mem_limit || 0;
-                const memBar = document.createElement('div');
-                memBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
-                const memTrack = document.createElement('div');
-                memTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
-                const memFill = document.createElement('div');
-                memFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(memPct) + ';width:' + Math.min(memPct, 100) + '%;';
-                memTrack.appendChild(memFill);
-                memBar.appendChild(memTrack);
-                const memLabel = document.createElement('span');
-                memLabel.className = 'text-muted';
-                memLabel.style.fontSize = '12px';
-                memLabel.textContent = Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit);
-                memBar.appendChild(memLabel);
-                memCell.appendChild(memBar);
-                tr.appendChild(memCell);
-
-                // Image
-                const imageCell = document.createElement('td');
-                imageCell.className = 'text-muted';
-                imageCell.textContent = n.docker_image_tag || '-';
-                tr.appendChild(imageCell);
-
-                // Port
-                const portCell = document.createElement('td');
-                portCell.className = 'text-muted';
-                portCell.textContent = n.rest_api_port || '-';
-                tr.appendChild(portCell);
-
-                tbody.appendChild(tr);
+        function setOverviewSearch(query) {
+            overviewSearchQuery = query || '';
+            [serverTable, nodeTable].forEach(function(table) {
+                table.searchQuery = overviewSearchQuery;
+                table.page = 1;
+                table.applyFilters();
             });
         }
 
@@ -740,6 +743,108 @@
                 loadData();
             }
         }
+
+        async function deleteNode(id, name) {
+            if (!confirm('Delete node "' + name + '"? This removes it from the dashboard only (container is not affected).')) return;
+            const resp = await API.delete('/api/nodes/' + id);
+            if (resp && resp.ok) {
+                loadData();
+            }
+        }
+
+        function closeServerActions() {
+            document.querySelectorAll('#server-list .actions-dropdown.active').forEach(function(el) {
+                el.classList.remove('active');
+            });
+        }
+
+        function closeNodeActions() {
+            document.querySelectorAll('#nodes-list .actions-dropdown.active').forEach(function(el) {
+                el.classList.remove('active');
+            });
+        }
+
+        function toggleServerActions(event, id) {
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = document.getElementById('server-actions-' + id);
+            if (!menu) return false;
+            const willOpen = !menu.classList.contains('active');
+            closeServerActions();
+            if (willOpen) menu.classList.add('active');
+            return false;
+        }
+
+        function toggleNodeActions(event, id) {
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = document.getElementById('node-actions-' + id);
+            if (!menu) return false;
+            const willOpen = !menu.classList.contains('active');
+            closeNodeActions();
+            closeServerActions();
+            if (willOpen) menu.classList.add('active');
+            return false;
+        }
+
+        function deleteServerFromMenu(event, id, name) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeServerActions();
+            deleteServer(id, name);
+            return false;
+        }
+
+        function deleteNodeFromMenu(event, id, name) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            deleteNode(id, name);
+            return false;
+        }
+
+        function openDetailsFromMenu(event, url) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeServerActions();
+            closeNodeActions();
+            window.location.href = url;
+            return false;
+        }
+
+        async function runNodeActionFromMenu(event, id, action) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            const result = await API.postJSON('/api/nodes/' + id + '/' + action, {});
+            if (!(result && result.ok && result.data && result.data.success)) {
+                window.alert('Failed to ' + action + ' node: ' + (result?.data?.error || 'Unknown error'));
+                return false;
+            }
+            await loadData();
+            await loadServerMetrics();
+            return false;
+        }
+
+        function navigateRow(event, url) {
+            if (event.target.closest('.actions-menu-wrap')) return false;
+            window.location.href = url;
+            return false;
+        }
+
+        function activateRow(event, url) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigateRow(event, url);
+                return false;
+            }
+            return true;
+        }
+
+        document.addEventListener('click', function() {
+            closeServerActions();
+            closeNodeActions();
+        });
 
         function showAddServer() {
             document.getElementById('modal-add-server').classList.add('active');
@@ -878,6 +983,10 @@
             return div.innerHTML;
         }
 
+        function escJS(str) {
+            return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
         // --- Alerts ---
         let activeAlerts = [];
 
@@ -887,6 +996,7 @@
                 if (data && data.alerts) {
                     activeAlerts = data.alerts;
                     renderAlertBanner();
+                    updateStats();
                 }
             } catch (e) { /* ignore */ }
         }
