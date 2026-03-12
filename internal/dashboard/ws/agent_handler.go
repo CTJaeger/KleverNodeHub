@@ -175,8 +175,9 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 
 	log.Printf("discovery from %s: %d nodes found", serverID, len(report.Nodes))
 
+	existing, _ := h.nodeStore.ListByServer(serverID)
+
 	for _, discovered := range report.Nodes {
-		// Check if node already exists
 		meta := map[string]any{
 			"cpu_percent": discovered.CPUPercent,
 			"mem_used":    discovered.MemUsed,
@@ -184,7 +185,6 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 			"mem_percent": discovered.MemPercent,
 		}
 
-		existing, _ := h.nodeStore.ListByServer(serverID)
 		found := false
 		for i := range existing {
 			if existing[i].ContainerName == discovered.ContainerName {
