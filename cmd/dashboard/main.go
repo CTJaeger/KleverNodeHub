@@ -16,6 +16,7 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/auth"
 	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
+	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/alerting"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/handlers"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/scheduler"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
@@ -134,6 +135,11 @@ func main() {
 	notifyManager := notify.NewManager()
 	handlers.LoadSavedChannels(settingsStore, notifyManager)
 	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
+	alertStore := store.NewAlertStore(db)
+	alertHandler := handlers.NewAlertHandler(alertStore)
+	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
+	alertEvaluator.EnsureDefaults()
+	alertEvaluator.Start()
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -202,6 +208,12 @@ func main() {
 	mux.Handle("DELETE /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleRemoveChannel)))
 	mux.Handle("POST /api/notifications/channels/{name}/test", authMw(http.HandlerFunc(notifyHandler.HandleTestChannel)))
 	mux.Handle("GET /api/notifications/history", authMw(http.HandlerFunc(notifyHandler.HandleHistory)))
+	mux.Handle("GET /api/alerts", authMw(http.HandlerFunc(alertHandler.HandleListActiveAlerts)))
+	mux.Handle("GET /api/alerts/history", authMw(http.HandlerFunc(alertHandler.HandleAlertHistory)))
+	mux.Handle("GET /api/alerts/rules", authMw(http.HandlerFunc(alertHandler.HandleListRules)))
+	mux.Handle("POST /api/alerts/rules", authMw(http.HandlerFunc(alertHandler.HandleCreateOrUpdateRule)))
+	mux.Handle("DELETE /api/alerts/rules/{id}", authMw(http.HandlerFunc(alertHandler.HandleDeleteRule)))
+	mux.Handle("POST /api/alerts/{id}/acknowledge", authMw(http.HandlerFunc(alertHandler.HandleAcknowledgeAlert)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
@@ -210,6 +222,7 @@ func main() {
 	go func() {
 		sig := <-sigCh
 		log.Printf("received %s, shutting down...", sig)
+		alertEvaluator.Stop()
 		metricsScheduler.Stop()
 		hub.Stop()
 		_ = db.Close()

@@ -1,0 +1,103 @@
+// Package alerting implements the alert rules evaluation engine.
+package alerting
+
+import (
+	"github.com/CTJaeger/KleverNodeHub/internal/store"
+)
+
+// DefaultRules returns the built-in alert rules created on first run.
+func DefaultRules() []store.AlertRule {
+	return []store.AlertRule{
+		{
+			ID:          "builtin-nonce-stall",
+			Name:        "Nonce Stall",
+			Enabled:     true,
+			MetricName:  "klv_nonce",
+			Condition:   "stall",
+			Threshold:   15,
+			DurationSec: 0,
+			Severity:    "critical",
+			NodeFilter:  "*",
+			CooldownMin: 5,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-node-offline",
+			Name:        "Node Offline",
+			Enabled:     true,
+			MetricName:  "agent.heartbeat",
+			Condition:   "stall",
+			Threshold:   60,
+			DurationSec: 0,
+			Severity:    "critical",
+			NodeFilter:  "*",
+			CooldownMin: 5,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-high-cpu",
+			Name:        "High CPU",
+			Enabled:     true,
+			MetricName:  "cpu_percent",
+			Condition:   "gt",
+			Threshold:   90,
+			DurationSec: 300,
+			Severity:    "warning",
+			NodeFilter:  "*",
+			CooldownMin: 15,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-high-memory",
+			Name:        "High Memory",
+			Enabled:     true,
+			MetricName:  "mem_percent",
+			Condition:   "gt",
+			Threshold:   90,
+			DurationSec: 300,
+			Severity:    "warning",
+			NodeFilter:  "*",
+			CooldownMin: 15,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-disk-full",
+			Name:        "Disk Full",
+			Enabled:     true,
+			MetricName:  "disk_percent",
+			Condition:   "gt",
+			Threshold:   85,
+			DurationSec: 0,
+			Severity:    "warning",
+			NodeFilter:  "*",
+			CooldownMin: 30,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-low-peers",
+			Name:        "Low Peers",
+			Enabled:     true,
+			MetricName:  "klv_connectedPeers",
+			Condition:   "lt",
+			Threshold:   3,
+			DurationSec: 0,
+			Severity:    "warning",
+			NodeFilter:  "*",
+			CooldownMin: 10,
+			Builtin:     true,
+		},
+		{
+			ID:          "builtin-sync-lag",
+			Name:        "Sync Lag",
+			Enabled:     true,
+			MetricName:  "klv_isSyncing",
+			Condition:   "eq",
+			Threshold:   1,
+			DurationSec: 1800,
+			Severity:    "warning",
+			NodeFilter:  "*",
+			CooldownMin: 30,
+			Builtin:     true,
+		},
+	}
+}

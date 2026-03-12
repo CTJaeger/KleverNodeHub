@@ -3,6 +3,25 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #24**: Alert rules engine with configurable thresholds
+  - Migration 3: `alert_rules` and `alerts` tables with indexes
+  - `AlertStore` with full CRUD for rules and alert records (create, update, delete, list, query)
+  - `Evaluator`: periodic rule evaluation engine (15s interval, configurable)
+  - Alert state machine: Normal → Pending → Firing → Resolved
+  - Duration-based rules: threshold must breach for configured seconds before firing
+  - Cooldown period prevents notification spam (per-rule configurable)
+  - Recovery notifications when alerts resolve
+  - 7 built-in default rules: nonce stall, node offline, high CPU, high memory, disk full, low peers, sync lag
+  - System metrics evaluation (CPU/memory/disk per server) and node metrics evaluation
+  - Heartbeat stale detection for agent offline alerts
+  - Stall detection for nonce and heartbeat metrics
+  - Integration with notification manager from Issue #23
+  - Dashboard API: GET active alerts, GET history, GET/POST/DELETE rules, POST acknowledge
+  - Alert banner on overview page (active alerts with severity colors)
+  - Alert history panel with acknowledge button
+  - Alert rules configuration UI (add/edit/delete, built-in rules editable)
+  - 22 unit tests (evaluator: threshold, resolve, pending→firing, system metrics, heartbeat stale, defaults, start/stop; store: CRUD, enabled filter, ack, count, active queries)
+
 - **Issue #23**: Notification system — Telegram, Pushover, and webhook channels
   - `Channel` interface with `Send`, `Validate`, `Name` methods
   - `TelegramChannel`: Bot API, Markdown formatting, rate limiting (20 msg/min)
