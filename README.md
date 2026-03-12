@@ -7,6 +7,8 @@
 
 **Self-hosted management dashboard for Klever validator nodes**
 
+![Dashboard Overview](docs/dash.png)
+
 ---
 
 ## Overview
