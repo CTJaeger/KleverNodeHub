@@ -34,12 +34,20 @@ func main() {
 	addr := flag.String("addr", ":9443", "Listen address (host:port)")
 	domain := flag.String("domain", "localhost", "Domain for WebAuthn RP ID and TLS (e.g. localhost, myserver.local, node.example.com)")
 	dataDir := flag.String("data-dir", defaultDataDir(), "Data directory for DB, certs, config")
+	resetRecoveryCodes := flag.Bool("reset-recovery-codes", false, "Generate new recovery codes and exit")
 	flag.Parse()
 
 	// Ensure data directory exists
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
 		log.Fatalf("create data dir: %v", err)
 	}
+
+	// --- Handle --reset-recovery-codes ---
+	if *resetRecoveryCodes {
+		resetRecoveryCodesAndExit(*dataDir)
+		return
+	}
+
 	log.Printf("data directory: %s", *dataDir)
 
 	// --- Database ---
@@ -203,6 +211,8 @@ func main() {
 	mux.Handle("GET /ws", authMw(http.HandlerFunc(browserWsHandler.HandleUpgrade)))
 
 	// Protected routes (JWT required)
+	mux.Handle("GET /api/auth/passkeys", authMw(http.HandlerFunc(authHandler.HandleListPasskeys)))
+	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
 	mux.Handle("GET /api/servers", authMw(http.HandlerFunc(serverHandler.HandleList)))
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
@@ -420,6 +430,35 @@ func loadOrCreateInstanceID(settings *store.SettingsStore) (string, error) {
 	}
 	log.Printf("generated new dashboard instance ID: %s", id)
 	return id, nil
+}
+
+// resetRecoveryCodesAndExit opens the DB, generates new recovery codes, saves them, and exits.
+func resetRecoveryCodesAndExit(dataDir string) {
+	dbPath := filepath.Join(dataDir, "dashboard.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		log.Fatalf("open database: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	settingsStore := store.NewSettingsStore(db)
+
+	// Load existing codes to preserve count context
+	existingCodes := loadRecoveryCodes(settingsStore)
+	recoveryMgr := auth.NewRecoveryManager(existingCodes)
+
+	plaintextCodes, _, err := recoveryMgr.GenerateCodes()
+	if err != nil {
+		log.Fatalf("generate recovery codes: %v", err)
+	}
+	saveRecoveryCodes(settingsStore, recoveryMgr.Codes())
+
+	fmt.Println("=== NEW RECOVERY CODES ===")
+	for i, code := range plaintextCodes {
+		fmt.Printf("  %d: %s\n", i+1, code)
+	}
+	fmt.Println("==========================")
+	fmt.Println("Previous codes have been invalidated. Save these codes securely.")
 }
 
 // saveRecoveryCodes persists recovery codes to the settings store.
