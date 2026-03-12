@@ -231,6 +231,105 @@ func TestWebhookSend_Retry(t *testing.T) {
 	}
 }
 
+func TestChannelFilter_MatchesAll(t *testing.T) {
+	f := ChannelFilter{}
+	if !f.MatchesFilter("critical", "node_down") {
+		t.Error("empty filter should match all")
+	}
+}
+
+func TestChannelFilter_SeverityFilter(t *testing.T) {
+	f := ChannelFilter{Severities: []string{"critical"}}
+	if !f.MatchesFilter("critical", "node_down") {
+		t.Error("should match critical")
+	}
+	if f.MatchesFilter("warning", "node_down") {
+		t.Error("should not match warning")
+	}
+}
+
+func TestChannelFilter_AlertTypeFilter(t *testing.T) {
+	f := ChannelFilter{AlertTypes: []string{"node_down", "resource"}}
+	if !f.MatchesFilter("critical", "node_down") {
+		t.Error("should match node_down")
+	}
+	if f.MatchesFilter("critical", "nonce_stall") {
+		t.Error("should not match nonce_stall")
+	}
+	// Empty alert type should pass
+	if !f.MatchesFilter("critical", "") {
+		t.Error("empty alert type should pass type filter")
+	}
+}
+
+func TestManagerSend_WithFilter(t *testing.T) {
+	mgr := NewManager()
+
+	chAll := &mockChannel{name: "all"}
+	chCritical := &mockChannel{name: "critical-only"}
+	mgr.AddChannel(chAll)
+	mgr.AddChannelWithFilter(chCritical, ChannelFilter{Severities: []string{"critical"}})
+
+	// Send warning — only chAll should receive
+	mgr.Send(&Alert{Title: "Warning", Severity: SeverityWarning, AlertType: "resource"})
+
+	if atomic.LoadInt32(&chAll.sendCount) != 1 {
+		t.Error("all channel should receive warning")
+	}
+	if atomic.LoadInt32(&chCritical.sendCount) != 0 {
+		t.Error("critical-only channel should NOT receive warning")
+	}
+
+	// Send critical — both should receive
+	mgr.Send(&Alert{Title: "Critical", Severity: SeverityCritical, AlertType: "node_down"})
+
+	if atomic.LoadInt32(&chAll.sendCount) != 2 {
+		t.Error("all channel should receive critical too")
+	}
+	if atomic.LoadInt32(&chCritical.sendCount) != 1 {
+		t.Error("critical-only channel should receive critical")
+	}
+}
+
+func TestManagerUpdateChannelFilter(t *testing.T) {
+	mgr := NewManager()
+	ch := &mockChannel{name: "test"}
+	mgr.AddChannelWithFilter(ch, ChannelFilter{Severities: []string{"critical"}})
+
+	// Warning should be filtered out
+	mgr.Send(&Alert{Title: "W", Severity: SeverityWarning})
+	if atomic.LoadInt32(&ch.sendCount) != 0 {
+		t.Error("should be filtered before update")
+	}
+
+	// Update filter to allow all
+	if err := mgr.UpdateChannelFilter("test", ChannelFilter{}); err != nil {
+		t.Fatalf("update filter: %v", err)
+	}
+
+	mgr.Send(&Alert{Title: "W2", Severity: SeverityWarning})
+	if atomic.LoadInt32(&ch.sendCount) != 1 {
+		t.Error("should receive after filter update")
+	}
+}
+
+func TestManagerChannelsWithFilters(t *testing.T) {
+	mgr := NewManager()
+	mgr.AddChannelWithFilter(&mockChannel{name: "a"}, ChannelFilter{Severities: []string{"critical"}})
+	mgr.AddChannel(&mockChannel{name: "b"})
+
+	infos := mgr.ChannelsWithFilters()
+	if len(infos) != 2 {
+		t.Fatalf("expected 2, got %d", len(infos))
+	}
+	if infos[0].Name != "a" || len(infos[0].Filter.Severities) != 1 {
+		t.Errorf("first channel: %+v", infos[0])
+	}
+	if infos[1].Name != "b" || len(infos[1].Filter.Severities) != 0 {
+		t.Errorf("second channel: %+v", infos[1])
+	}
+}
+
 func TestFormatTelegramMessage(t *testing.T) {
 	alert := &Alert{
 		Title:    "Node Down",

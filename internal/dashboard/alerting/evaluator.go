@@ -357,11 +357,12 @@ func (e *Evaluator) resolveAlert(state *AlertState, source string, now time.Time
 
 		// Send recovery notification
 		e.notifier.Send(&notify.Alert{
-			Title:    fmt.Sprintf("Resolved: %s", state.AlertRecord.RuleName),
-			Message:  fmt.Sprintf("%s has recovered", source),
-			Severity: notify.SeverityInfo,
-			Source:   source,
-			Time:     now.Unix(),
+			Title:     fmt.Sprintf("Resolved: %s", state.AlertRecord.RuleName),
+			Message:   fmt.Sprintf("%s has recovered", source),
+			Severity:  notify.SeverityInfo,
+			Source:    source,
+			AlertType: "resolved",
+			Time:      now.Unix(),
 		})
 	}
 }
@@ -404,12 +405,27 @@ func (e *Evaluator) resolveStaleAlerts(now time.Time) {
 func (e *Evaluator) sendNotification(rule *store.AlertRule, state *AlertState, source string, value float64, _ bool) {
 	msg := formatAlertMessage(rule, source, value)
 	e.notifier.Send(&notify.Alert{
-		Title:    fmt.Sprintf("%s: %s", rule.Severity, rule.Name),
-		Message:  msg,
-		Severity: rule.Severity,
-		Source:   source,
-		Time:     time.Now().Unix(),
+		Title:     fmt.Sprintf("%s: %s", rule.Severity, rule.Name),
+		Message:   msg,
+		Severity:  rule.Severity,
+		Source:    source,
+		AlertType: alertTypeFromRule(rule),
+		Time:      time.Now().Unix(),
 	})
+}
+
+// alertTypeFromRule derives the alert type category from a rule's metric name.
+func alertTypeFromRule(rule *store.AlertRule) string {
+	switch rule.MetricName {
+	case "agent.heartbeat":
+		return "node_down"
+	case "klv_nonce":
+		return "nonce_stall"
+	case "cpu_percent", "mem_percent", "disk_percent":
+		return "resource"
+	default:
+		return "metric"
+	}
 }
 
 func formatAlertMessage(rule *store.AlertRule, source string, value float64) string {

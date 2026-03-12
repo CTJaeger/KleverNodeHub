@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #29**: Multi-channel notification credentials and per-channel alert routing
+  - `ChannelFilter` struct with severity and alert type filtering
+  - `Manager.AddChannelWithFilter()`, `UpdateChannelFilter()`, `ChannelsWithFilters()` — per-channel filter support
+  - `Manager.Send()` now respects channel filters (empty filter = all alerts, backward-compatible)
+  - `Alert.AlertType` field for routing (node_down, nonce_stall, resource, metric, resolved)
+  - `alertTypeFromRule()` derives alert type from rule's metric name in evaluator
+  - `namedChannel` wrapper for multiple instances of same channel type
+  - `HandleUpdateChannel` (PUT) for filter/credential updates, new `notify_ch_{name}` storage format
+  - Settings UI: Notifications tab with channel management (add/edit/delete/test, severity + alert type filter checkboxes)
+  - Backward-compatible: legacy `notify_channel_{type}` configs still load, channels with no filter receive all alerts
+  - 6 new tests for filter matching, filtered send, filter update, channels-with-filters
+
 - **Issue #28**: Server public IP and region detection
   - Agent: `ipdetect.go` — detects public IP via `api.ipify.org` (with fallbacks to `ifconfig.me`, `icanhazip.com`)
   - Agent sends public IP in `agent.info` (on connect) and `agent.heartbeat` (periodic refresh)
