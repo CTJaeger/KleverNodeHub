@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **README**: Added CI badge, Go version badge, MIT license badge
+- **CI fix**: Fixed goimports formatting in klever.go and recovery.go (const/var alignment)
 - **Issue #31 — Password Login (Phase 1)**: Dashboard unusable via IP address (WebAuthn requires domain)
   - `internal/auth/argon2.go` — Extracted shared Argon2id helpers (HashArgon2id, VerifyArgon2id)
   - `internal/auth/password.go` — PasswordManager with Argon2id hashing, min 8 chars, SetPassword/Verify/HasPassword
