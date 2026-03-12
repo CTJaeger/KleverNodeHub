@@ -27,8 +27,8 @@ func NewNotificationHandler(manager *notify.Manager, settings *store.SettingsSto
 
 // channelConfigRequest is the body for adding/updating a notification channel.
 type channelConfigRequest struct {
-	Name   string               `json:"name"`   // unique name, e.g. "telegram-ops"
-	Type   string               `json:"type"`   // telegram, pushover, webhook
+	Name   string               `json:"name"` // unique name, e.g. "telegram-ops"
+	Type   string               `json:"type"` // telegram, pushover, webhook
 	Config map[string]string    `json:"config"`
 	Filter notify.ChannelFilter `json:"filter"`
 }
