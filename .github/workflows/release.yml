@@ -144,7 +144,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build, docker]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
