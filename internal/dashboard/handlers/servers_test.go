@@ -43,7 +43,8 @@ func setupServerHandler(t *testing.T) (*ServerHandler, func()) {
 		CreatedAt:     time.Now().Unix(),
 	})
 
-	handler := NewServerHandler(serverStore, nodeStore)
+	metricsStore := store.NewMetricsStore(db)
+	handler := NewServerHandler(serverStore, nodeStore, metricsStore)
 	return handler, func() { _ = db.Close() }
 }
 

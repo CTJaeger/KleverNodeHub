@@ -312,6 +312,22 @@ func (s *AlertStore) PurgeOldAlerts(olderThan time.Duration) (int64, error) {
 	return count, nil
 }
 
+// ResolveAllFiring marks all pending/firing alerts as resolved (e.g. on dashboard restart).
+func (s *AlertStore) ResolveAllFiring() (int64, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+
+	now := time.Now().Unix()
+	result, err := s.db.db.Exec(
+		"UPDATE alerts SET state='resolved', resolved_at=? WHERE state IN ('pending', 'firing')", now)
+	if err != nil {
+		return 0, fmt.Errorf("resolve all firing: %w", err)
+	}
+
+	count, _ := result.RowsAffected()
+	return count, nil
+}
+
 // --- Helpers ---
 
 func boolToInt(b bool) int {

@@ -13,13 +13,47 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h1>Klever Node Hub</h1>
-                <span class="version">v0.1.0</span>
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
             </div>
-            <nav class="sidebar-nav">
-                <a href="/overview">Overview</a>
-                <a href="#" onclick="API.logout()">Logout</a>
-            </nav>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -31,8 +65,22 @@
                 <div style="width:36px"></div>
             </div>
 
-            <!-- Back link -->
-            <a href="/overview" class="text-sm" style="display:inline-block;margin-bottom:16px;">&larr; Back to Overview</a>
+            <!-- Page Header Bar -->
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                    <a href="/overview" style="color:var(--text-secondary);font-size:13px;">Dashboard</a>
+                    <span style="color:var(--text-muted);">/</span>
+                    <span class="page-header-title" id="page-node-name">Node Detail</span>
+                </div>
+                <div class="page-header-right">
+                    <button class="page-header-icon-btn" onclick="loadNode(); loadMetrics();" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page-body">
 
             <!-- Node Header -->
             <div class="card mb-16">
@@ -54,7 +102,7 @@
                 <!-- Upgrade/Downgrade -->
                 <div class="mt-8" id="upgrade-section">
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <select id="upgrade-tag" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:140px;">
+                        <select id="upgrade-tag" class="btn btn-sm" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);padding:4px 8px;min-width:140px;">
                             <option value="">Select version...</option>
                         </select>
                         <button class="btn btn-sm btn-primary" onclick="doUpgrade()" id="btn-upgrade">Upgrade</button>
@@ -155,7 +203,7 @@
                 <div class="card-header">
                     <h3>Configuration</h3>
                     <div style="display:flex;gap:8px;align-items:center;">
-                        <select id="config-file-select" onchange="loadConfigFile()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
+                        <select id="config-file-select" onchange="loadConfigFile()" class="btn btn-sm" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);padding:4px 8px;">
                             <option value="">Select file...</option>
                         </select>
                         <button class="btn btn-sm btn-primary" onclick="saveConfig()" id="btn-save-config" disabled>Save</button>
@@ -163,9 +211,9 @@
                     </div>
                 </div>
                 <div id="config-editor-wrap" class="hidden">
-                    <textarea id="config-editor" style="width:100%;min-height:300px;font-family:monospace;font-size:13px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);padding:8px;resize:vertical;tab-size:4;white-space:pre;overflow:auto;" spellcheck="false"></textarea>
+                    <textarea id="config-editor" style="width:100%;min-height:300px;font-family:monospace;font-size:13px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);padding:8px;resize:vertical;tab-size:4;white-space:pre;overflow:auto;" spellcheck="false"></textarea>
                     <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-                        <select id="config-backup-select" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:200px;">
+                        <select id="config-backup-select" class="btn btn-sm" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);padding:4px 8px;min-width:200px;">
                             <option value="">Backups...</option>
                         </select>
                         <button class="btn btn-sm btn-secondary" onclick="restoreBackup()">Restore</button>
@@ -198,8 +246,8 @@
                 <div class="card-header">
                     <h3>Logs</h3>
                     <div style="display:flex;gap:8px;align-items:center;">
-                        <input type="text" id="log-filter" placeholder="Filter..." oninput="filterLogs()" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;font-size:13px;width:140px;">
-                        <select id="log-lines" onchange="loadLogs()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
+                        <input type="text" id="log-filter" placeholder="Filter..." oninput="filterLogs()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);padding:4px 8px;font-size:13px;width:140px;">
+                        <select id="log-lines" onchange="loadLogs()" class="btn btn-sm" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);padding:4px 8px;">
                             <option value="100">100 lines</option>
                             <option value="500">500 lines</option>
                             <option value="2000">2000 lines</option>
@@ -214,10 +262,11 @@
                         </label>
                     </div>
                 </div>
-                <div id="log-viewer" style="background:#0d1117;color:#c9d1d9;font-family:monospace;font-size:12px;line-height:1.5;padding:8px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all;border-radius:4px;">
+                <div id="log-viewer" style="background:#141c30;color:#e8eaed;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;padding:12px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all;border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
                     <div class="text-muted text-sm" style="padding:16px;text-align:center;">Click Refresh to load logs.</div>
                 </div>
             </div>
+            </div><!-- /page-body -->
         </main>
     </div>
 
@@ -264,7 +313,9 @@
         function renderNode() {
             if (!node) return;
 
-            document.getElementById('node-name').textContent = node.display_name || node.name || node.container_name;
+            const nodeName = node.display_name || node.name || node.container_name;
+            document.getElementById('node-name').textContent = nodeName;
+            document.getElementById('page-node-name').textContent = nodeName;
             document.getElementById('node-server').textContent = 'Server: ' + (node.server_id || '-');
 
             const badge = document.getElementById('node-status-badge');
@@ -315,15 +366,15 @@
             updateStatusFromLatest('klv_consensus_state', 'ns-consensus', from, now);
 
             // Render charts
-            renderChart('chart-nonce', nonceData, { color: '#4fc3f7', xFormat });
-            renderChart('chart-peers', peersData, { color: '#3fb950', xFormat });
-            renderChart('chart-txs', txData, { color: '#d29922', xFormat });
+            renderChart('chart-nonce', nonceData, { color: '#e8a737', xFormat });
+            renderChart('chart-peers', peersData, { color: '#34d399', xFormat });
+            renderChart('chart-txs', txData, { color: '#60a5fa', xFormat });
             renderMultiChart('chart-network', [
-                { data: recvData, label: 'Recv', color: '#4fc3f7' },
-                { data: sentData, label: 'Sent', color: '#f85149' },
+                { data: recvData, label: 'Recv', color: '#60a5fa' },
+                { data: sentData, label: 'Sent', color: '#f87171' },
             ], { xFormat, yFormat: Charts.formatBps });
-            renderChart('chart-cpu', cpuData, { color: '#f85149', yLabel: '%', xFormat });
-            renderChart('chart-mem', memData, { color: '#d29922', yLabel: '%', xFormat });
+            renderChart('chart-cpu', cpuData, { color: '#f87171', yLabel: '%', xFormat });
+            renderChart('chart-mem', memData, { color: '#fbbf24', yLabel: '%', xFormat });
 
             // Sync progress
             updateSyncProgress(nonceData);
@@ -361,7 +412,7 @@
 
             Charts.timeSeries(canvas, {
                 labels: data.map(p => p.collected_at),
-                datasets: [{ values: data.map(p => p.value), color: opts.color || '#4fc3f7' }]
+                datasets: [{ values: data.map(p => p.value), color: opts.color || '#e8a737' }]
             }, {
                 yLabel: opts.yLabel,
                 yFormat: opts.yFormat,
@@ -548,7 +599,7 @@
                     renderLogView();
                 }
             } catch (e) {
-                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
+                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
             }
         }
 
@@ -566,10 +617,10 @@
                 count++;
                 let lineHtml = '';
                 if (showTimestamps && line.timestamp) {
-                    lineHtml += '<span style="color:#6e7681;">' + esc(line.timestamp) + '</span> ';
+                    lineHtml += '<span style="color:#6b7280;">' + esc(line.timestamp) + '</span> ';
                 }
                 if (line.stream === 'stderr') {
-                    lineHtml += '<span style="color:#f85149;">' + highlightLogLevel(esc(msg)) + '</span>';
+                    lineHtml += '<span style="color:#f87171;">' + highlightLogLevel(esc(msg)) + '</span>';
                 } else {
                     lineHtml += highlightLogLevel(esc(msg));
                 }
@@ -593,10 +644,10 @@
 
         function highlightLogLevel(text) {
             return text
-                .replace(/\b(ERROR|FATAL|PANIC)\b/g, '<span style="color:#f85149;font-weight:bold;">$1</span>')
-                .replace(/\b(WARN|WARNING)\b/g, '<span style="color:#d29922;font-weight:bold;">$1</span>')
-                .replace(/\b(INFO)\b/g, '<span style="color:#3fb950;">$1</span>')
-                .replace(/\b(DEBUG)\b/g, '<span style="color:#6e7681;">$1</span>');
+                .replace(/\b(ERROR|FATAL|PANIC)\b/g, '<span style="color:#f87171;font-weight:bold;">$1</span>')
+                .replace(/\b(WARN|WARNING)\b/g, '<span style="color:#fbbf24;font-weight:bold;">$1</span>')
+                .replace(/\b(INFO)\b/g, '<span style="color:#34d399;">$1</span>')
+                .replace(/\b(DEBUG)\b/g, '<span style="color:#6b7280;">$1</span>');
         }
 
         function downloadLogs() {
@@ -734,8 +785,9 @@
                 if (data && data.tags) {
                     data.tags.forEach(tag => {
                         const opt = document.createElement('option');
-                        opt.value = tag;
-                        opt.textContent = tag;
+                        const name = typeof tag === 'string' ? tag : tag.name;
+                        opt.value = name;
+                        opt.textContent = name;
                         select.appendChild(opt);
                     });
                 }
@@ -781,7 +833,7 @@
             } else {
                 barEl.style.width = '100%';
                 barEl.className = 'progress-bar-fill';
-                barEl.style.background = 'var(--danger)';
+                barEl.style.background = 'var(--error)';
                 const errMsg = result?.data?.error || 'Unknown error';
                 statusEl.textContent = 'Failed: ' + errMsg;
                 showResult('Failed: ' + errMsg, true);

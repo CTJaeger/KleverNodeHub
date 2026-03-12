@@ -119,13 +119,17 @@ func main() {
 	metricsScheduler.Start()
 
 	// --- WebSocket Hub ---
-	hub := ws.NewHub(serverStore)
+	// Reset all servers to offline on startup; agents will set online when they connect
+	if err := serverStore.ResetAllStatus("offline"); err != nil {
+		log.Printf("reset server status: %v", err)
+	}
+	hub := ws.NewHub(serverStore, nodeStore)
 	hub.StartHealthCheck(60 * time.Second)
 
 	// --- Handlers ---
 	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr)
 	nodeHandler := handlers.NewNodeHandler(hub, nodeStore)
-	serverHandler := handlers.NewServerHandler(serverStore, nodeStore)
+	serverHandler := handlers.NewServerHandler(serverStore, nodeStore, metricsStore)
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
@@ -138,6 +142,12 @@ func main() {
 	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
 	alertStore := store.NewAlertStore(db)
 	alertHandler := handlers.NewAlertHandler(alertStore)
+	// Resolve stale alerts from previous run
+	if resolved, err := alertStore.ResolveAllFiring(); err != nil {
+		log.Printf("resolve stale alerts: %v", err)
+	} else if resolved > 0 {
+		log.Printf("resolved %d stale alerts from previous run", resolved)
+	}
 	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
@@ -153,7 +163,7 @@ func main() {
 	})
 
 	// --- Server + Routes ---
-	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr})
+	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr, CA: ca})
 	if err := srv.SetupRoutes(); err != nil {
 		log.Fatalf("setup routes: %v", err)
 	}
@@ -189,8 +199,10 @@ func main() {
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
 	mux.Handle("GET /api/servers", authMw(http.HandlerFunc(serverHandler.HandleList)))
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
+	mux.Handle("DELETE /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleDelete)))
 	mux.Handle("GET /api/nodes", authMw(http.HandlerFunc(serverHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleGetNode)))
+	mux.Handle("DELETE /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleDeleteNode)))
 	mux.Handle("POST /api/nodes/{id}/start", authMw(http.HandlerFunc(nodeHandler.HandleStart)))
 	mux.Handle("POST /api/nodes/{id}/stop", authMw(http.HandlerFunc(nodeHandler.HandleStop)))
 	mux.Handle("POST /api/nodes/{id}/restart", authMw(http.HandlerFunc(nodeHandler.HandleRestart)))

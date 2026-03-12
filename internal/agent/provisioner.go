@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -20,10 +22,10 @@ const (
 	provisionTimeout   = 10 * time.Minute
 )
 
-// Config URLs for official Klever node configuration.
+// Config URLs for official Klever node configuration archives.
 var configURLs = map[string]string{
-	"mainnet": "https://backup.mainnet.klever.org/config.toml",
-	"testnet": "https://backup.testnet.klever.org/config.toml",
+	"mainnet": "https://backup.mainnet.klever.org/config.mainnet.108.tar.gz",
+	"testnet": "https://backup.testnet.klever.org/config.testnet.109.tar.gz",
 }
 
 // ProvisionStep represents a single provisioning step.
@@ -59,6 +61,7 @@ func NewProvisioner(docker *DockerClient, req *models.ProvisionRequest, jobID st
 		{"Pull Docker image", (*Provisioner).stepPullImage},
 		{"Create directory structure", (*Provisioner).stepCreateDirs},
 		{"Download configuration", (*Provisioner).stepDownloadConfig},
+		{"Set permissions", (*Provisioner).stepSetPermissions},
 		{"Create container", (*Provisioner).stepCreateContainer},
 		{"Start container", (*Provisioner).stepStartContainer},
 		{"Verify node", (*Provisioner).stepVerify},
@@ -157,13 +160,58 @@ func (p *Provisioner) stepCreateDirs(ctx context.Context) error {
 	return EnsureDataDirs(p.nodeDir)
 }
 
-// stepDownloadConfig downloads the official Klever config.toml.
+// stepDownloadConfig downloads and extracts the official Klever config archive.
 func (p *Provisioner) stepDownloadConfig(ctx context.Context) error {
 	configURL, ok := configURLs[p.req.Network]
 	if !ok {
 		return fmt.Errorf("unknown network: %s", p.req.Network)
 	}
 
+	configDir := filepath.Join(p.nodeDir, "config")
+
+	// Try primary: official tar.gz archive
+	if err := downloadAndExtractConfig(ctx, configURL, configDir); err != nil {
+		log.Printf("primary config download failed: %v, trying fallback...", err)
+
+		// Fallback: individual files from GitHub
+		if err := downloadFallbackConfig(ctx, p.req.Network, configDir); err != nil {
+			return fmt.Errorf("config download failed (primary and fallback): %w", err)
+		}
+	}
+
+	// Apply config overrides to config.toml if it exists
+	configPath := filepath.Join(configDir, "config.toml")
+	if data, err := os.ReadFile(configPath); err == nil {
+		content := string(data)
+		if name, ok := p.req.ConfigOverrides["NodeDisplayName"]; ok {
+			content = replaceConfigValue(content, "NodeDisplayName", name)
+		}
+		if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("write config overrides: %w", err)
+		}
+	}
+
+	log.Printf("configuration downloaded to %s", configDir)
+	return nil
+}
+
+// stepSetPermissions sets ownership to 999:999 (matching container user).
+func (p *Provisioner) stepSetPermissions(_ context.Context) error {
+	return chownRecursive(p.nodeDir, 999, 999)
+}
+
+// chownRecursive sets ownership of a directory tree.
+func chownRecursive(dir string, uid, gid int) error {
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chown(path, uid, gid)
+	})
+}
+
+// downloadAndExtractConfig downloads a tar.gz archive and extracts with strip-components=1.
+func downloadAndExtractConfig(ctx context.Context, configURL, configDir string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, configURL, nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -171,31 +219,120 @@ func (p *Provisioner) stepDownloadConfig(ctx context.Context) error {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("download config: %w", err)
+		return fmt.Errorf("download: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download config: HTTP %d", resp.StatusCode)
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	configPath := filepath.Join(p.nodeDir, "config", "config.toml")
-	data, err := io.ReadAll(resp.Body)
+	return extractTarGz(resp.Body, configDir, 1)
+}
+
+// Fallback config files from GitHub.
+var fallbackConfigFiles = []string{
+	"api.yaml", "config.yaml", "enableEpochs.yaml", "external.yaml",
+	"gasScheduleV1.yaml", "genesis.json", "nodesSetup.json",
+}
+
+const fallbackGitHubBase = "https://raw.githubusercontent.com/CTJaeger/KleverNodeManagement/main/config"
+
+// downloadFallbackConfig downloads individual config files from GitHub.
+func downloadFallbackConfig(ctx context.Context, network, configDir string) error {
+	_ = network // future: per-network fallback paths
+	for _, file := range fallbackConfigFiles {
+		fileURL := fallbackGitHubBase + "/" + file
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+		if err != nil {
+			return fmt.Errorf("create request for %s: %w", file, err)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("download %s: %w", file, err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return fmt.Errorf("download %s: HTTP %d", file, resp.StatusCode)
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("read %s: %w", file, err)
+		}
+
+		if err := os.WriteFile(filepath.Join(configDir, file), data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", file, err)
+		}
+	}
+
+	log.Printf("downloaded %d config files from GitHub fallback", len(fallbackConfigFiles))
+	return nil
+}
+
+// extractTarGz extracts a tar.gz stream into the destination directory.
+// stripComponents removes N leading path components (like tar --strip-components).
+func extractTarGz(r io.Reader, destDir string, stripComponents int) error {
+	gr, err := gzip.NewReader(r)
 	if err != nil {
-		return fmt.Errorf("read config: %w", err)
+		return fmt.Errorf("gzip reader: %w", err)
 	}
+	defer func() { _ = gr.Close() }()
 
-	// Apply config overrides
-	content := string(data)
-	if name, ok := p.req.ConfigOverrides["NodeDisplayName"]; ok {
-		content = replaceConfigValue(content, "NodeDisplayName", name)
+	tr := tar.NewReader(gr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("tar read: %w", err)
+		}
+
+		// Strip leading path components
+		name := header.Name
+		for i := 0; i < stripComponents; i++ {
+			idx := strings.IndexByte(name, '/')
+			if idx < 0 {
+				name = ""
+				break
+			}
+			name = name[idx+1:]
+		}
+		if name == "" || name == "." {
+			continue
+		}
+
+		// Sanitize path to prevent directory traversal
+		name = filepath.Clean(name)
+		if strings.Contains(name, "..") {
+			continue
+		}
+		target := filepath.Join(destDir, name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", target, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("mkdir parent %s: %w", target, err)
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("create %s: %w", target, err)
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				_ = f.Close()
+				return fmt.Errorf("write %s: %w", target, err)
+			}
+			_ = f.Close()
+		}
 	}
-
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-
-	log.Printf("downloaded config from %s", configURL)
 	return nil
 }
 

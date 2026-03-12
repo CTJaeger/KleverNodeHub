@@ -45,7 +45,7 @@ func setupHandlerTest(t *testing.T) (*NodeHandler, *ws.Hub, func()) {
 		CreatedAt:     time.Now().Unix(),
 	})
 
-	hub := ws.NewHub(serverStore)
+	hub := ws.NewHub(serverStore, nodeStore)
 	handler := NewNodeHandler(hub, nodeStore)
 	return handler, hub, func() { _ = db.Close() }
 }

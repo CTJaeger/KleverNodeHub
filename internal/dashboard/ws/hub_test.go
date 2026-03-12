@@ -20,9 +20,10 @@ func newTestHub(t *testing.T) (*Hub, *store.ServerStore) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	ss := store.NewServerStore(db)
+	ns := store.NewNodeStore(db)
 	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
 
-	hub := NewHub(ss)
+	hub := NewHub(ss, ns)
 	t.Cleanup(func() { hub.Stop() })
 	return hub, ss
 }
@@ -94,10 +95,11 @@ func TestBroadcast(t *testing.T) {
 	db, _ := store.Open(filepath.Join(dir, "test.db"))
 	defer func() { _ = db.Close() }()
 	ss := store.NewServerStore(db)
+	ns := store.NewNodeStore(db)
 	_ = ss.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "offline"})
 	_ = ss.Create(&models.Server{ID: "srv-2", Name: "S2", Hostname: "h2", IPAddress: "5.6.7.8", Status: "offline"})
 
-	hub := NewHub(ss)
+	hub := NewHub(ss, ns)
 	defer hub.Stop()
 
 	hub.Register("srv-1")
@@ -141,7 +143,8 @@ func TestNewHub_CreatesDBFile(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	ss := store.NewServerStore(db)
-	hub := NewHub(ss)
+	ns := store.NewNodeStore(db)
+	hub := NewHub(ss, ns)
 	defer hub.Stop()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {

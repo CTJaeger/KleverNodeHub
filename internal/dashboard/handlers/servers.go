@@ -3,20 +3,23 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
 
 // ServerHandler handles server API requests.
 type ServerHandler struct {
-	serverStore *store.ServerStore
-	nodeStore   *store.NodeStore
+	serverStore  *store.ServerStore
+	nodeStore    *store.NodeStore
+	metricsStore *store.MetricsStore
 }
 
 // NewServerHandler creates a new ServerHandler.
-func NewServerHandler(serverStore *store.ServerStore, nodeStore *store.NodeStore) *ServerHandler {
+func NewServerHandler(serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore) *ServerHandler {
 	return &ServerHandler{
-		serverStore: serverStore,
-		nodeStore:   nodeStore,
+		serverStore:  serverStore,
+		nodeStore:    nodeStore,
+		metricsStore: metricsStore,
 	}
 }
 
@@ -48,29 +51,76 @@ func (h *ServerHandler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, server)
 }
 
+// nodeMetricNames are the metrics enriched on node list responses.
+var nodeMetricNames = []string{"klv_nonce", "klv_is_syncing", "klv_probable_highest_nonce"}
+
 // HandleListNodes returns all nodes, optionally filtered by server.
 // GET /api/nodes
 func (h *ServerHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 	serverID := r.URL.Query().Get("server_id")
 
+	var nodes []models.Node
 	var err error
-	var result any
 
 	if serverID != "" {
-		nodes, e := h.nodeStore.ListByServer(serverID)
-		err = e
-		result = map[string]any{"nodes": nodes}
+		nodes, err = h.nodeStore.ListByServer(serverID)
 	} else {
-		nodes, e := h.nodeStore.ListAll("")
-		err = e
-		result = map[string]any{"nodes": nodes}
+		nodes, err = h.nodeStore.ListAll("")
 	}
 
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+
+	// Enrich nodes with latest metrics (nonce, sync state)
+	if h.metricsStore != nil {
+		for i := range nodes {
+			latest, _ := h.metricsStore.LatestNodeMetrics(nodes[i].ID, nodeMetricNames)
+			if len(latest) > 0 {
+				if nodes[i].Metadata == nil {
+					nodes[i].Metadata = make(map[string]any)
+				}
+				for k, v := range latest {
+					nodes[i].Metadata[k] = v
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": nodes})
+}
+
+// HandleDelete removes a server by ID.
+// DELETE /api/servers/{id}
+func (h *ServerHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing server ID"})
+		return
+	}
+
+	if err := h.serverStore.Delete(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// HandleDeleteNode removes a node by ID.
+// DELETE /api/nodes/{id}
+func (h *ServerHandler) HandleDeleteNode(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing node ID"})
+		return
+	}
+
+	if err := h.nodeStore.Delete(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // HandleGetNode returns a single node by ID.

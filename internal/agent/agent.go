@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,6 +49,29 @@ func New(configDir string) *Agent {
 // Config returns the agent's current configuration.
 func (a *Agent) Config() *Config {
 	return a.config
+}
+
+// TLSConfig builds a tls.Config using the agent's mTLS credentials.
+// The returned config trusts the dashboard CA and presents the agent's client certificate.
+func (a *Agent) TLSConfig() (*tls.Config, error) {
+	if a.config == nil {
+		return nil, fmt.Errorf("agent not configured")
+	}
+
+	cert, err := tls.X509KeyPair([]byte(a.config.CertPEM), []byte(a.config.KeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("load client certificate: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM([]byte(a.config.CACertPEM)) {
+		return nil, fmt.Errorf("parse CA certificate")
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}, nil
 }
 
 // LoadConfig loads the agent configuration from disk.
@@ -155,7 +179,7 @@ func (a *Agent) RunDiscovery(dockerSocket string) *models.DiscoveryReport {
 
 	discovered, err := client.DiscoverNodes(ctx)
 	if err != nil {
-		log.Printf("discovery failed: %v", err)
+		log.Printf("discovery: Docker not available or not running: %v", err)
 		return &models.DiscoveryReport{Nodes: []models.DiscoveredNode{}}
 	}
 
@@ -170,6 +194,10 @@ func (a *Agent) RunDiscovery(dockerSocket string) *models.DiscoveryReport {
 			RedundancyLevel: d.RedundancyLevel,
 			DockerImageTag:  d.DockerImageTag,
 			DataDirectory:   d.DataDirectory,
+			CPUPercent:      d.CPUPercent,
+			MemUsed:         d.MemUsed,
+			MemLimit:        d.MemLimit,
+			MemPercent:      d.MemPercent,
 		}
 
 		// Try to extract BLS public key from config directory

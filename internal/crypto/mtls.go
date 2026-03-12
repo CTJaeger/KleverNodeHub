@@ -1,7 +1,10 @@
 package crypto
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -9,30 +12,24 @@ import (
 
 // DashboardTLSConfig creates a TLS config for the dashboard server.
 // It requires client certificates signed by the CA (mTLS).
+// The server cert uses ECDSA P-256 for broad browser compatibility,
+// while still being signed by the Ed25519 CA.
 func DashboardTLSConfig(ca *CA) (*tls.Config, error) {
-	// Create server certificate (self-signed by CA for TLS)
-	serverPub, serverPriv, err := GenerateEd25519KeyPair()
+	// Use ECDSA P-256 for server cert (browsers don't all support Ed25519 in TLS)
+	serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate server key: %w", err)
 	}
 
-	serverCertDER, err := createServerCertificate(serverPub, ca.Certificate, ca.PrivateKey)
+	serverCertDER, err := createServerCertificate(serverKey.Public(), ca.Certificate, ca.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("create server cert: %w", err)
 	}
 
-	serverKeyDER, err := x509.MarshalPKCS8PrivateKey(serverPriv)
-	if err != nil {
-		return nil, fmt.Errorf("marshal server key: %w", err)
-	}
-
 	serverCert := tls.Certificate{
 		Certificate: [][]byte{serverCertDER},
-		PrivateKey:  serverPriv,
-		Leaf:        nil,
+		PrivateKey:  serverKey,
 	}
-	// Set the raw DER for the certificate chain
-	_ = serverKeyDER // key is already in serverCert.PrivateKey
 
 	// CA cert pool for verifying client certs
 	clientCAs := x509.NewCertPool()
@@ -79,7 +76,7 @@ func AgentTLSConfig(agentCertPEM, agentKeyPEM, caCertPEM []byte) (*tls.Config, e
 }
 
 func createServerCertificate(
-	serverPub ed25519.PublicKey,
+	serverPub interface{},
 	caCert *x509.Certificate,
 	caPriv ed25519.PrivateKey,
 ) ([]byte, error) {
@@ -96,9 +93,10 @@ func createServerCertificate(
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
 	}
 
-	certDER, err := x509.CreateCertificate(nil, template, caCert, serverPub, caPriv)
+	certDER, err := x509.CreateCertificate(rand.Reader, template, caCert, serverPub, caPriv)
 	if err != nil {
 		return nil, fmt.Errorf("create server certificate: %w", err)
 	}

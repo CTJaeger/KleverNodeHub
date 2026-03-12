@@ -234,4 +234,10 @@ var migrations = []string{
 	// Migration 4: Add public IP and region columns to servers
 	`ALTER TABLE servers ADD COLUMN public_ip TEXT DEFAULT '';
 	ALTER TABLE servers ADD COLUMN region TEXT DEFAULT '';`,
+
+	// Migration 5: Add absolute memory/disk values to system_metrics
+	`ALTER TABLE system_metrics ADD COLUMN mem_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN mem_used INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_used INTEGER DEFAULT 0;`,
 }
