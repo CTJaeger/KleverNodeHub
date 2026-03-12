@@ -11,8 +11,8 @@ const Charts = {
      * @param {object} opts — { label, size, strokeWidth, color }
      */
     gauge(el, percent, opts = {}) {
-        const size = opts.size || 80;
-        const stroke = opts.strokeWidth || 6;
+        const size = opts.size || 102;
+        const stroke = opts.strokeWidth || 12;
         const r = (size - stroke) / 2;
         const circ = 2 * Math.PI * r;
         const pct = Math.max(0, Math.min(100, percent || 0));
@@ -22,16 +22,28 @@ const Charts = {
 
         el.innerHTML = `
             <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="gauge-svg">
+                <defs>
+                    <filter id="gaugeGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2.4" result="blur"></feGaussianBlur>
+                        <feMerge>
+                            <feMergeNode in="blur"></feMergeNode>
+                            <feMergeNode in="SourceGraphic"></feMergeNode>
+                        </feMerge>
+                    </filter>
+                </defs>
                 <circle cx="${size/2}" cy="${size/2}" r="${r}"
-                    fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${stroke}" />
+                    fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="${stroke}" />
+                <circle cx="${size/2}" cy="${size/2}" r="${r - stroke * 0.52}"
+                    fill="rgba(5,10,19,0.9)" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
                 <circle cx="${size/2}" cy="${size/2}" r="${r}"
                     fill="none" stroke="${color}" stroke-width="${stroke}"
                     stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
                     stroke-linecap="round"
                     transform="rotate(-90 ${size/2} ${size/2})"
+                    filter="url(#gaugeGlow)"
                     style="transition:stroke-dashoffset 0.5s ease" />
-                <text x="${size/2}" y="${size/2}" text-anchor="middle" dy="0.35em"
-                    fill="var(--text-primary)" font-size="${size * 0.22}px" font-weight="700">
+                <text x="${size/2}" y="${size/2}" text-anchor="middle" dy="0.15em"
+                    fill="var(--text-heading)" font-size="${size * 0.2}px" font-weight="800">
                     ${pct.toFixed(0)}%
                 </text>
             </svg>
@@ -105,11 +117,21 @@ const Charts = {
         canvas.height = h * dpr;
         ctx.scale(dpr, dpr);
 
-        const pad = { top: 10, right: 16, bottom: 30, left: 55 };
+        const colors = {
+            grid: Charts._cssVar('--border', 'rgba(123,146,191,0.18)'),
+            gridSoft: Charts._cssVar('--border-soft', 'rgba(123,146,191,0.08)'),
+            text: Charts._cssVar('--text-secondary', '#8d98b1'),
+            textStrong: Charts._cssVar('--text-heading', '#eef3ff'),
+            plot: Charts._cssVar('--bg-input', 'rgba(8,17,31,0.84)')
+        };
+
+        const pad = { top: 14, right: 12, bottom: 30, left: 44 };
         const chartW = w - pad.left - pad.right;
         const chartH = h - pad.top - pad.bottom;
 
         ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = colors.plot;
+        ctx.fillRect(pad.left, pad.top, chartW, chartH);
 
         // Calculate Y range across all datasets
         let yMin = Infinity, yMax = -Infinity;
@@ -131,13 +153,13 @@ const Charts = {
         const xRange = xMax - xMin || 1;
 
         // Grid lines + Y labels
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.strokeStyle = colors.grid;
         ctx.lineWidth = 1;
-        ctx.fillStyle = 'var(--text-secondary)';
-        ctx.font = '11px monospace';
+        ctx.fillStyle = colors.text;
+        ctx.font = '11px "JetBrains Mono", monospace';
         ctx.textAlign = 'right';
 
-        const yTicks = 5;
+        const yTicks = 4;
         for (let i = 0; i <= yTicks; i++) {
             const y = pad.top + chartH - (i / yTicks) * chartH;
             const val = yMin + (i / yTicks) * (yMax - yMin);
@@ -149,51 +171,90 @@ const Charts = {
             ctx.fillText(formatted, pad.left - 6, y + 4);
         }
 
-        // X labels
+        // X labels + vertical grid
         ctx.textAlign = 'center';
         const xTicks = Math.min(6, labels.length);
-        const xStep = Math.floor(labels.length / xTicks);
-        for (let i = 0; i < labels.length; i += xStep) {
-            const x = pad.left + ((labels[i] - xMin) / xRange) * chartW;
-            const y = h - pad.bottom + 16;
-            const formatted = opts.xFormat ? opts.xFormat(labels[i]) : Charts._formatTime(labels[i]);
-            ctx.fillText(formatted, x, y);
+        const tickIndexes = [];
+        for (let i = 0; i < xTicks; i++) {
+            tickIndexes.push(Math.round((i / Math.max(1, xTicks - 1)) * (labels.length - 1)));
         }
+        tickIndexes.forEach((idx, pos) => {
+            const x = pad.left + ((labels[idx] - xMin) / xRange) * chartW;
+            if (pos > 0 && pos < tickIndexes.length - 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = colors.gridSoft;
+                ctx.moveTo(x, pad.top);
+                ctx.lineTo(x, pad.top + chartH);
+                ctx.stroke();
+                ctx.strokeStyle = colors.grid;
+            }
+            const y = h - pad.bottom + 16;
+            const formatted = opts.xFormat ? opts.xFormat(labels[idx]) : Charts._formatTime(labels[idx]);
+            ctx.fillText(formatted, x, y);
+        });
+
+        // Plot border
+        ctx.strokeStyle = colors.gridSoft;
+        ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 
         // Draw datasets
         data.datasets.forEach(ds => {
+            const points = labels.map((t, i) => ({
+                x: pad.left + ((t - xMin) / xRange) * chartW,
+                y: pad.top + chartH - ((ds.values[i] - yMin) / (yMax - yMin)) * chartH
+            }));
+
+            if (points.length < 2) return;
+
             ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
             ctx.strokeStyle = ds.color || '#e8a737';
             ctx.lineWidth = 2;
 
-            labels.forEach((t, i) => {
-                const x = pad.left + ((t - xMin) / xRange) * chartW;
-                const y = pad.top + chartH - ((ds.values[i] - yMin) / (yMax - yMin)) * chartH;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+            points.forEach((point, i) => {
+                if (i === 0) ctx.moveTo(point.x, point.y);
+                else ctx.lineTo(point.x, point.y);
             });
             ctx.stroke();
 
-            // Area fill
-            const lastX = pad.left + ((labels[labels.length-1] - xMin) / xRange) * chartW;
-            const firstX = pad.left;
-            ctx.lineTo(lastX, pad.top + chartH);
-            ctx.lineTo(firstX, pad.top + chartH);
+            const fill = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+            fill.addColorStop(0, Charts._withAlpha(ds.color || '#e8a737', 0.24));
+            fill.addColorStop(1, Charts._withAlpha(ds.color || '#e8a737', 0.02));
+            ctx.lineTo(points[points.length - 1].x, pad.top + chartH);
+            ctx.lineTo(points[0].x, pad.top + chartH);
             ctx.closePath();
-            ctx.fillStyle = (ds.color || '#e8a737').replace(')', ',0.08)').replace('rgb', 'rgba');
-            if (ds.color && ds.color.startsWith('#')) {
-                ctx.fillStyle = ds.color + '14';
-            }
+            ctx.fillStyle = fill;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.strokeStyle = ds.color || '#e8a737';
+            ctx.lineWidth = 2;
+            points.forEach((point, i) => {
+                if (i === 0) ctx.moveTo(point.x, point.y);
+                else ctx.lineTo(point.x, point.y);
+            });
+            ctx.stroke();
+
+            const last = points[points.length - 1];
+            ctx.beginPath();
+            ctx.fillStyle = colors.textStrong;
+            ctx.arc(last.x, last.y, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.fillStyle = Charts._withAlpha(ds.color || '#e8a737', 0.22);
+            ctx.arc(last.x, last.y, 6.5, 0, Math.PI * 2);
             ctx.fill();
         });
 
         // Y axis label
         if (opts.yLabel) {
             ctx.save();
-            ctx.translate(12, pad.top + chartH / 2);
+            ctx.translate(14, pad.top + chartH / 2);
             ctx.rotate(-Math.PI / 2);
-            ctx.fillStyle = 'var(--text-secondary)';
-            ctx.font = '11px sans-serif';
+            ctx.fillStyle = colors.text;
+            ctx.font = '11px Manrope, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(opts.yLabel, 0, 0);
             ctx.restore();
@@ -203,11 +264,11 @@ const Charts = {
         if (data.datasets.length > 1) {
             let lx = pad.left;
             const ly = h - 4;
-            ctx.font = '11px sans-serif';
+            ctx.font = '11px Manrope, sans-serif';
             data.datasets.forEach(ds => {
                 ctx.fillStyle = ds.color || '#e8a737';
                 ctx.fillRect(lx, ly - 8, 12, 3);
-                ctx.fillStyle = 'var(--text-secondary)';
+                ctx.fillStyle = colors.text;
                 ctx.textAlign = 'left';
                 ctx.fillText(ds.label || '', lx + 16, ly - 3);
                 lx += ctx.measureText(ds.label || '').width + 32;
@@ -231,6 +292,34 @@ const Charts = {
         const d = new Date(ts * 1000);
         return d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) + ' ' +
             d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    },
+
+    _cssVar(name, fallback) {
+        const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return value || fallback;
+    },
+
+    _withAlpha(color, alpha) {
+        if (!color) return `rgba(255,255,255,${alpha})`;
+        if (color.startsWith('#')) {
+            let hex = color.slice(1);
+            if (hex.length === 3) hex = hex.split('').map((ch) => ch + ch).join('');
+            const int = parseInt(hex, 16);
+            const r = (int >> 16) & 255;
+            const g = (int >> 8) & 255;
+            const b = int & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        if (color.startsWith('rgb(')) {
+            return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
+        }
+        if (color.startsWith('rgba(')) {
+            const parts = color.slice(5, -1).split(',').map((part) => part.trim());
+            if (parts.length >= 3) {
+                return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
+            }
+        }
+        return color;
     },
 
     /**
