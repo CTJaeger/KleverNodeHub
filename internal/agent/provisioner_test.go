@@ -19,8 +19,8 @@ func TestNewProvisioner(t *testing.T) {
 	if p == nil {
 		t.Fatal("expected non-nil provisioner")
 	}
-	if len(p.steps) != 7 {
-		t.Errorf("steps = %d, want 7", len(p.steps))
+	if len(p.steps) != 8 {
+		t.Errorf("steps = %d, want 8", len(p.steps))
 	}
 	if p.nodeDir == "" {
 		t.Error("expected nodeDir to be set")
@@ -39,6 +39,7 @@ func TestProvisionerStepNames(t *testing.T) {
 		"Pull Docker image",
 		"Create directory structure",
 		"Download configuration",
+		"Set permissions",
 		"Create container",
 		"Start container",
 		"Verify node",
@@ -89,8 +90,8 @@ func TestProvisionerProgressCallback(t *testing.T) {
 	})
 
 	// Test reportProgress directly
-	p.reportProgress(1, 7, "Test Step", "running", "")
-	p.reportProgress(1, 7, "Test Step", "completed", "")
+	p.reportProgress(1, 8, "Test Step", "running", "")
+	p.reportProgress(1, 8, "Test Step", "completed", "")
 
 	if len(received) != 2 {
 		t.Fatalf("received %d progress events, want 2", len(received))

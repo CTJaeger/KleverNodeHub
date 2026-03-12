@@ -161,6 +161,38 @@ func (s *ServerStore) UpdateHeartbeat(id string, timestamp int64) error {
 	return nil
 }
 
+// ResetAllStatus sets all servers to the given status (e.g. on dashboard startup).
+func (s *ServerStore) ResetAllStatus(status string) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+
+	_, err := s.db.db.Exec("UPDATE servers SET status=?, updated_at=?", status, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("reset all status: %w", err)
+	}
+	return nil
+}
+
+// UpdateStatus sets the server status (e.g. "online", "offline").
+func (s *ServerStore) UpdateStatus(id, status string) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+
+	result, err := s.db.db.Exec(
+		"UPDATE servers SET status=?, updated_at=? WHERE id=?",
+		status, time.Now().Unix(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update status: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("server not found: %s", id)
+	}
+	return nil
+}
+
 // scanner interface shared by *sql.Row and *sql.Rows
 type scanner interface {
 	Scan(dest ...any) error

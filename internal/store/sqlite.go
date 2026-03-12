@@ -9,6 +9,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite" // Pure-Go SQLite driver
@@ -16,8 +17,8 @@ import (
 
 // DB wraps the SQLite database connection with encryption support.
 type DB struct {
-	db  *sql.DB
-	mu  sync.RWMutex // Serialize writes (SQLite limitation)
+	db *sql.DB
+	mu sync.RWMutex // Serialize writes (SQLite limitation)
 }
 
 // Open opens or creates a SQLite database at the given path.
@@ -94,7 +95,7 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("begin migration %d: %w", version, err)
 		}
 
-		if _, err := tx.Exec(migration); err != nil {
+		if err := execMigration(tx, migration); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("run migration %d: %w", version, err)
 		}
@@ -109,6 +110,36 @@ func (d *DB) migrate() error {
 		}
 	}
 
+	return nil
+}
+
+// execMigration runs a migration SQL string, tolerating "duplicate column name"
+// errors from ALTER TABLE statements. This handles cases where columns were added
+// manually or by a previous schema version before migration renumbering.
+func execMigration(tx *sql.Tx, migration string) error {
+	_, err := tx.Exec(migration)
+	if err == nil {
+		return nil
+	}
+
+	// If the error is about a duplicate column, run statements individually
+	// and skip only the ones that fail with duplicate column errors.
+	if !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+
+	for _, stmt := range strings.Split(migration, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := tx.Exec(stmt); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
+			return err
+		}
+	}
 	return nil
 }
 
@@ -234,4 +265,21 @@ var migrations = []string{
 	// Migration 4: Add public IP and region columns to servers
 	`ALTER TABLE servers ADD COLUMN public_ip TEXT DEFAULT '';
 	ALTER TABLE servers ADD COLUMN region TEXT DEFAULT '';`,
+
+	// Migration 5: Add absolute memory/disk values to system_metrics
+	`ALTER TABLE system_metrics ADD COLUMN mem_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN mem_used INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_used INTEGER DEFAULT 0;`,
+
+	// Migration 6: Repair — ensure columns from migrations 4 and 5 exist.
+	// Migrations 4/5 were renumbered during a rebase; databases that ran the
+	// old ordering have version 4/5 recorded but with different content.
+	// Re-issuing all ALTERs here is safe because execMigration skips duplicates.
+	`ALTER TABLE servers ADD COLUMN public_ip TEXT DEFAULT '';
+	ALTER TABLE servers ADD COLUMN region TEXT DEFAULT '';
+	ALTER TABLE system_metrics ADD COLUMN mem_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN mem_used INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_total INTEGER DEFAULT 0;
+	ALTER TABLE system_metrics ADD COLUMN disk_used INTEGER DEFAULT 0;`,
 }

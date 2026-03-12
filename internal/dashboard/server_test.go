@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	kvcrypto "github.com/CTJaeger/KleverNodeHub/internal/crypto"
 )
 
 func TestServerSetupRoutes(t *testing.T) {
@@ -35,9 +37,9 @@ func TestServerSecurityHeaders(t *testing.T) {
 
 	headers := map[string]string{
 		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":       "DENY",
-		"X-XSS-Protection":      "1; mode=block",
-		"Referrer-Policy":       "strict-origin-when-cross-origin",
+		"X-Frame-Options":        "DENY",
+		"X-XSS-Protection":       "1; mode=block",
+		"Referrer-Policy":        "strict-origin-when-cross-origin",
 	}
 
 	for name, expected := range headers {
@@ -92,16 +94,19 @@ func TestServerStaticAssets(t *testing.T) {
 	}
 }
 
-func TestGenerateSelfSignedCert(t *testing.T) {
-	cert, err := generateSelfSignedCert()
+func TestGetTLSConfigWithCA(t *testing.T) {
+	ca, err := kvcrypto.NewCA()
 	if err != nil {
-		t.Fatalf("generateSelfSignedCert: %v", err)
+		t.Fatalf("NewCA: %v", err)
 	}
 
-	if len(cert.Certificate) == 0 {
-		t.Error("certificate is empty")
+	srv := NewServer(&ServerConfig{Addr: ":9443", CA: ca})
+	tlsCfg, err := srv.getTLSConfig()
+	if err != nil {
+		t.Fatalf("getTLSConfig: %v", err)
 	}
-	if cert.PrivateKey == nil {
-		t.Error("private key is nil")
+
+	if len(tlsCfg.Certificates) == 0 {
+		t.Error("no certificates in TLS config")
 	}
 }

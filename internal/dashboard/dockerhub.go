@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	dockerHubURL    = "https://hub.docker.com/v2/repositories/kleverapp/klever-go/tags/"
-	tagCacheTTL     = 15 * time.Minute
-	tagQueryLimit   = 100
+	dockerHubURL  = "https://hub.docker.com/v2/repositories/kleverapp/klever-go/tags/"
+	tagCacheTTL   = 15 * time.Minute
+	tagQueryLimit = 100
 )
 
 // filteredPrefixes are tag prefixes to exclude from the list.

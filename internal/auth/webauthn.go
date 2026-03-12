@@ -22,11 +22,13 @@ import (
 
 // PasskeyCredential stores a registered WebAuthn credential.
 type PasskeyCredential struct {
-	ID           string `json:"id"`            // Credential ID (hex-encoded)
-	PublicKey    []byte `json:"public_key"`     // COSE public key
-	Name         string `json:"name"`           // User-friendly name (e.g., "MacBook Pro")
-	SignCount    uint32 `json:"sign_count"`     // Signature counter (replay detection)
-	RegisteredAt int64  `json:"registered_at"`  // Unix timestamp
+	ID             string `json:"id"`              // Credential ID (hex-encoded)
+	PublicKey      []byte `json:"public_key"`      // COSE public key
+	Name           string `json:"name"`            // User-friendly name (e.g., "MacBook Pro")
+	SignCount      uint32 `json:"sign_count"`      // Signature counter (replay detection)
+	BackupEligible bool   `json:"backup_eligible"` // Whether credential supports backup/sync
+	BackupState    bool   `json:"backup_state"`    // Whether credential is currently backed up
+	RegisteredAt   int64  `json:"registered_at"`   // Unix timestamp
 }
 
 // WebAuthnManager handles passkey registration and authentication.
@@ -34,15 +36,17 @@ type WebAuthnManager struct {
 	mu          sync.Mutex
 	wa          *webauthn.WebAuthn
 	credentials []PasskeyCredential
+	instanceID  string // Unique per-dashboard instance; prevents passkey collisions on same RP ID
 	// Session data for ongoing ceremonies (in-memory, short-lived)
 	sessions map[string]*webauthn.SessionData
 }
 
 // WebAuthnConfig holds configuration for WebAuthn initialization.
 type WebAuthnConfig struct {
-	RPDisplayName string // Relying Party display name (e.g., "Klever Node Hub")
-	RPID          string // Relying Party ID (e.g., "localhost" or domain)
+	RPDisplayName string   // Relying Party display name (e.g., "Klever Node Hub")
+	RPID          string   // Relying Party ID (e.g., "localhost" or domain)
 	RPOrigins     []string // Allowed origins (e.g., "https://localhost:9443")
+	InstanceID    string   // Unique ID for this dashboard instance (prevents passkey collisions when multiple dashboards share the same RP ID)
 }
 
 // dashboardUser implements the webauthn.User interface for single-user mode.
@@ -68,9 +72,23 @@ func NewWebAuthnManager(config WebAuthnConfig, credentials []PasskeyCredential) 
 		return nil, fmt.Errorf("create webauthn: %w", err)
 	}
 
+	// Migrate credentials stored before backup flags were tracked.
+	// All modern passkey providers (Apple, Google, Windows) are backup-eligible.
+	for i := range credentials {
+		if !credentials[i].BackupEligible {
+			credentials[i].BackupEligible = true
+		}
+	}
+
+	instanceID := config.InstanceID
+	if instanceID == "" {
+		instanceID = "default"
+	}
+
 	return &WebAuthnManager{
 		wa:          wa,
 		credentials: credentials,
+		instanceID:  instanceID,
 		sessions:    make(map[string]*webauthn.SessionData),
 	}, nil
 }
@@ -113,11 +131,13 @@ func (wm *WebAuthnManager) FinishRegistration(sessionID string, response *protoc
 	}
 
 	wm.credentials = append(wm.credentials, PasskeyCredential{
-		ID:           hex.EncodeToString(credential.ID),
-		PublicKey:    credential.PublicKey,
-		Name:         name,
-		SignCount:    credential.Authenticator.SignCount,
-		RegisteredAt: time.Now().Unix(),
+		ID:             hex.EncodeToString(credential.ID),
+		PublicKey:      credential.PublicKey,
+		Name:           name,
+		SignCount:      credential.Authenticator.SignCount,
+		BackupEligible: credential.Flags.BackupEligible,
+		BackupState:    credential.Flags.BackupState,
+		RegisteredAt:   time.Now().Unix(),
 	})
 
 	return nil
@@ -163,11 +183,13 @@ func (wm *WebAuthnManager) FinishLogin(sessionID string, response *protocol.Pars
 		return fmt.Errorf("validate login: %w", err)
 	}
 
-	// Update sign count for the used credential
+	// Update sign count and flags for the used credential
 	credID := hex.EncodeToString(credential.ID)
 	for i := range wm.credentials {
 		if wm.credentials[i].ID == credID {
 			wm.credentials[i].SignCount = credential.Authenticator.SignCount
+			wm.credentials[i].BackupEligible = credential.Flags.BackupEligible
+			wm.credentials[i].BackupState = credential.Flags.BackupState
 			break
 		}
 	}
@@ -220,15 +242,20 @@ func (wm *WebAuthnManager) CredentialCount() int {
 
 func (wm *WebAuthnManager) buildUser() *dashboardUser {
 	user := &dashboardUser{
-		id:   []byte("klever-node-hub-admin"),
+		id:   []byte("klever-node-hub-" + wm.instanceID),
 		name: "admin",
 	}
 
 	for _, cred := range wm.credentials {
 		credID, _ := hex.DecodeString(cred.ID)
+
 		user.credentials = append(user.credentials, webauthn.Credential{
 			ID:        credID,
 			PublicKey: cred.PublicKey,
+			Flags: webauthn.CredentialFlags{
+				BackupEligible: cred.BackupEligible,
+				BackupState:    cred.BackupState,
+			},
 			Authenticator: webauthn.Authenticator{
 				SignCount: cred.SignCount,
 			},

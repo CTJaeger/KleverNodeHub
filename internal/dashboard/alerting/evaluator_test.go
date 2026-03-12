@@ -318,8 +318,12 @@ func TestEvaluatorSystemMetrics(t *testing.T) {
 	_ = serverStore.Create(srv)
 
 	now := time.Now().Unix()
-	_ = metricsStore.InsertSystemMetrics("srv1", 95, 80, 60, 2.5, now-30)
-	_ = metricsStore.InsertSystemMetrics("srv1", 96, 82, 62, 2.8, now-15)
+	_ = metricsStore.InsertSystemMetrics("srv1", &store.SystemMetricsRow{
+		CPUPercent: 95, MemPercent: 80, DiskPercent: 60, LoadAvg1: 2.5, CollectedAt: now - 30,
+	})
+	_ = metricsStore.InsertSystemMetrics("srv1", &store.SystemMetricsRow{
+		CPUPercent: 96, MemPercent: 82, DiskPercent: 62, LoadAvg1: 2.8, CollectedAt: now - 15,
+	})
 
 	rule := &store.AlertRule{
 		ID: "sys-cpu", Name: "System CPU", Enabled: true,
@@ -392,6 +396,151 @@ func TestDefaultRules(t *testing.T) {
 		if !r.Builtin {
 			t.Errorf("default rule %s should have Builtin=true", r.ID)
 		}
+	}
+}
+
+func TestEvaluatorNodeOffline(t *testing.T) {
+	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	srv := &models.Server{
+		ID: "srv1", Name: "test-server", Hostname: "localhost",
+		IPAddress: "127.0.0.1", Status: "online",
+		LastHeartbeat: time.Now().Unix(),
+	}
+	_ = serverStore.Create(srv)
+
+	// Create a stopped node
+	node := &models.Node{
+		ID: "node1", ServerID: "srv1", Name: "validator",
+		ContainerName: "klever-node1", RestAPIPort: 8080,
+		DataDirectory: "/data/node1", Status: "stopped",
+	}
+	_ = nodeStore.Create(node)
+
+	rule := &store.AlertRule{
+		ID: "node-offline", Name: "Node Offline", Enabled: true,
+		MetricName: "node.status", Condition: "eq", Threshold: 1,
+		DurationSec: 0, Severity: "critical", NodeFilter: "*", CooldownMin: 5,
+	}
+	_ = alertStore.CreateRule(rule)
+
+	notifier := notify.NewManager()
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+
+	eval.evaluate()
+
+	active, _ := alertStore.ListActiveAlerts()
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active alert for offline node, got %d", len(active))
+	}
+	if active[0].RuleName != "Node Offline" {
+		t.Errorf("alert rule_name = %q, want Node Offline", active[0].RuleName)
+	}
+
+	// Bring node back online — should resolve
+	node.Status = "running"
+	_ = nodeStore.Update(node)
+
+	eval.evaluate()
+
+	active2, _ := alertStore.ListActiveAlerts()
+	if len(active2) != 0 {
+		t.Errorf("expected 0 active alerts after node comes back, got %d", len(active2))
+	}
+}
+
+func TestEvaluatorNonceStall(t *testing.T) {
+	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	srv := &models.Server{
+		ID: "srv1", Name: "test-server", Hostname: "localhost",
+		IPAddress: "127.0.0.1", Status: "online",
+		LastHeartbeat: time.Now().Unix(),
+	}
+	_ = serverStore.Create(srv)
+
+	node := &models.Node{
+		ID: "node1", ServerID: "srv1", Name: "validator",
+		ContainerName: "klever-node1", RestAPIPort: 8080,
+		DataDirectory: "/data/node1", Status: "running",
+	}
+	_ = nodeStore.Create(node)
+
+	now := time.Now().Unix()
+	// Insert identical nonce values over 20 seconds (threshold is 15)
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 100}, now-25)
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 100}, now-10)
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 100}, now-5)
+
+	rule := &store.AlertRule{
+		ID: "nonce-stall", Name: "Nonce Stall", Enabled: true,
+		MetricName: "klv_nonce", Condition: "stall", Threshold: 15,
+		DurationSec: 0, Severity: "critical", NodeFilter: "*", CooldownMin: 5,
+	}
+	_ = alertStore.CreateRule(rule)
+
+	notifier := notify.NewManager()
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+
+	eval.evaluate()
+
+	active, _ := alertStore.ListActiveAlerts()
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active alert for nonce stall, got %d", len(active))
+	}
+
+	// Nonce increments — should resolve
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 101}, now)
+
+	eval.evaluate()
+
+	active2, _ := alertStore.ListActiveAlerts()
+	if len(active2) != 0 {
+		t.Errorf("expected 0 active alerts after nonce increments, got %d", len(active2))
+	}
+}
+
+func TestEvaluatorNonceStall_NotYetStalled(t *testing.T) {
+	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	srv := &models.Server{
+		ID: "srv1", Name: "test-server", Hostname: "localhost",
+		IPAddress: "127.0.0.1", Status: "online",
+		LastHeartbeat: time.Now().Unix(),
+	}
+	_ = serverStore.Create(srv)
+
+	node := &models.Node{
+		ID: "node1", ServerID: "srv1", Name: "validator",
+		ContainerName: "klever-node1", RestAPIPort: 8080,
+		DataDirectory: "/data/node1", Status: "running",
+	}
+	_ = nodeStore.Create(node)
+
+	now := time.Now().Unix()
+	// Same nonce but only 10s apart (threshold is 15)
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 100}, now-10)
+	_ = metricsStore.InsertNodeMetrics("node1", "srv1", map[string]float64{"klv_nonce": 100}, now-5)
+
+	rule := &store.AlertRule{
+		ID: "nonce-stall", Name: "Nonce Stall", Enabled: true,
+		MetricName: "klv_nonce", Condition: "stall", Threshold: 15,
+		DurationSec: 0, Severity: "critical", NodeFilter: "*", CooldownMin: 5,
+	}
+	_ = alertStore.CreateRule(rule)
+
+	notifier := notify.NewManager()
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+
+	eval.evaluate()
+
+	// Should NOT fire — stall duration (10s) < threshold (15s)
+	active, _ := alertStore.ListActiveAlerts()
+	if len(active) != 0 {
+		t.Errorf("expected 0 active alerts (not stalled long enough), got %d", len(active))
 	}
 }
 

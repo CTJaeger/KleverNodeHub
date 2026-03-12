@@ -33,7 +33,7 @@ type Channel interface {
 
 // ChannelFilter defines which alerts a channel should receive.
 type ChannelFilter struct {
-	Severities []string `json:"severities,omitempty"` // empty = all
+	Severities []string `json:"severities,omitempty"`  // empty = all
 	AlertTypes []string `json:"alert_types,omitempty"` // empty = all
 }
 

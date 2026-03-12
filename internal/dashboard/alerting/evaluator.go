@@ -85,6 +85,8 @@ func (e *Evaluator) Stop() {
 
 // EnsureDefaults creates default rules if none exist.
 func (e *Evaluator) EnsureDefaults() {
+	e.migrateRules()
+
 	count, err := e.alertStore.RuleCount()
 	if err != nil {
 		log.Printf("alert evaluator: check rule count: %v", err)
@@ -100,6 +102,36 @@ func (e *Evaluator) EnsureDefaults() {
 		}
 	}
 	log.Printf("alert evaluator: created %d default rules", len(DefaultRules()))
+}
+
+// migrateRules renames legacy rules and ensures new builtins exist.
+func (e *Evaluator) migrateRules() {
+	// Migrate old "Node Offline" (agent.heartbeat) → "Agent Offline"
+	old, err := e.alertStore.GetRule("builtin-node-offline")
+	if err == nil && old.MetricName == "agent.heartbeat" {
+		old.ID = "builtin-agent-offline"
+		old.Name = "Agent Offline"
+		if err := e.alertStore.CreateRule(old); err != nil {
+			log.Printf("alert evaluator: migrate rule: %v", err)
+		} else {
+			_ = e.alertStore.DeleteRule("builtin-node-offline")
+			log.Println("alert evaluator: migrated 'Node Offline' → 'Agent Offline'")
+		}
+	}
+
+	// Ensure any missing builtin rules are created
+	for _, rule := range DefaultRules() {
+		if !rule.Builtin {
+			continue
+		}
+		if _, err := e.alertStore.GetRule(rule.ID); err != nil {
+			if err := e.alertStore.CreateRule(&rule); err != nil {
+				log.Printf("alert evaluator: create missing builtin %q: %v", rule.Name, err)
+			} else {
+				log.Printf("alert evaluator: created missing builtin rule %q", rule.Name)
+			}
+		}
+	}
 }
 
 func (e *Evaluator) run(ctx context.Context) {
@@ -160,6 +192,8 @@ func (e *Evaluator) evaluate() {
 			e.evaluateSystemRule(rule, servers, lookback, nowUnix, now)
 		} else if rule.MetricName == "agent.heartbeat" {
 			e.evaluateHeartbeatRule(rule, servers, now)
+		} else if rule.MetricName == "node.status" {
+			e.evaluateNodeStatusRule(rule, nodes, now)
 		} else {
 			e.evaluateNodeRule(rule, nodes, lookback, nowUnix, now)
 		}
@@ -220,12 +254,39 @@ func (e *Evaluator) evaluateSystemRule(rule *store.AlertRule, servers []models.S
 func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []models.Server, now time.Time) {
 	for i := range servers {
 		srv := &servers[i]
+
+		// Skip servers that have never sent a heartbeat
+		if srv.LastHeartbeat == 0 {
+			continue
+		}
+
 		stateKey := fmt.Sprintf("%s:server:%s", rule.ID, srv.ID)
 
 		staleSec := float64(now.Unix() - srv.LastHeartbeat)
 		breached := staleSec > rule.Threshold
 		source := fmt.Sprintf("server:%s (%s)", srv.Name, srv.Hostname)
 		e.processResult(rule, stateKey, "", srv.ID, source, staleSec, breached, now)
+	}
+}
+
+func (e *Evaluator) evaluateNodeStatusRule(rule *store.AlertRule, nodes []models.Node, now time.Time) {
+	for i := range nodes {
+		node := &nodes[i]
+
+		if rule.NodeFilter != "*" && rule.NodeFilter != node.ID {
+			continue
+		}
+
+		stateKey := fmt.Sprintf("%s:%s", rule.ID, node.ID)
+
+		// Node is "offline" if status is not "running"
+		breached := node.Status != "running" && node.Status != ""
+		source := fmt.Sprintf("node:%s", node.ContainerName)
+		var value float64
+		if breached {
+			value = 1
+		}
+		e.processResult(rule, stateKey, node.ID, node.ServerID, source, value, breached, now)
 	}
 }
 
@@ -244,23 +305,38 @@ func (e *Evaluator) evaluateThreshold(rule *store.AlertRule, stateKey, nodeID, s
 
 func (e *Evaluator) evaluateStall(rule *store.AlertRule, stateKey, nodeID, serverID, nodeName string, from, to int64, now time.Time) {
 	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, from, to)
-	if err != nil || len(points) < 2 {
+	source := fmt.Sprintf("node:%s", nodeName)
+
+	// No data at all — if threshold > 0, treat as stalled (no metrics arriving)
+	if err != nil || len(points) == 0 {
+		if rule.Threshold > 0 {
+			e.processResult(rule, stateKey, nodeID, serverID, source, 0, true, now)
+		} else {
+			e.markNormal(stateKey, now)
+		}
+		return
+	}
+
+	if len(points) < 2 {
 		e.markNormal(stateKey, now)
 		return
 	}
 
-	// Check if all values in the window are the same (stalled)
-	first := points[0].Value
-	stalled := true
-	for _, p := range points[1:] {
-		if p.Value != first {
-			stalled = false
+	// Find the last time the value changed
+	lastValue := points[len(points)-1].Value
+	lastChangeAt := points[len(points)-1].CollectedAt
+	for i := len(points) - 2; i >= 0; i-- {
+		if points[i].Value != lastValue {
 			break
 		}
+		lastChangeAt = points[i].CollectedAt
 	}
 
-	source := fmt.Sprintf("node:%s", nodeName)
-	e.processResult(rule, stateKey, nodeID, serverID, source, first, stalled, now)
+	// Use threshold as seconds of stall required
+	stalledSec := float64(to - lastChangeAt)
+	stalled := stalledSec >= rule.Threshold
+
+	e.processResult(rule, stateKey, nodeID, serverID, source, lastValue, stalled, now)
 }
 
 func (e *Evaluator) processResult(rule *store.AlertRule, stateKey, nodeID, serverID, source string, value float64, breached bool, now time.Time) {

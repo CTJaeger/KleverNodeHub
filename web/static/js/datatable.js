@@ -72,41 +72,48 @@ class DataTable {
         let html = '';
 
         // Controls bar
-        html += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">';
+        html += '<div class="data-table-controls">';
+        html += '<div class="data-table-controls-filters">';
 
         // Search input
-        html += '<input type="text" class="form-input" placeholder="Search..." ' +
+        html += '<div class="data-table-control-field data-table-control-search">';
+        html += '<input type="text" class="form-input data-table-search" placeholder="Search..." ' +
             'value="' + this._esc(this.searchQuery) + '" ' +
-            'oninput="window._dt[\'' + this.containerId + '\'].onSearch(this.value)" ' +
-            'style="max-width:200px;font-size:13px;">';
+            'oninput="window._dt[\'' + this.containerId + '\'].onSearch(this.value)">';
+        html += '</div>';
 
         // Column dropdown filters
         for (const col of this.columns) {
             if (!col.filterable) continue;
             const uniqueVals = [...new Set(this.data.map(item => String(this._getNestedValue(item, col.key) || '')))].filter(v => v).sort();
             const currentVal = this.columnFilters[col.key] || '';
-            html += '<select class="form-input" style="max-width:140px;font-size:13px;" ' +
+            html += '<div class="data-table-control-field">';
+            html += '<select class="form-input data-table-filter" ' +
                 'onchange="window._dt[\'' + this.containerId + '\'].onColumnFilter(\'' + col.key + '\',this.value)">' +
                 '<option value="">All ' + this._esc(col.label) + '</option>';
             for (const v of uniqueVals) {
                 html += '<option value="' + this._esc(v) + '"' + (v === currentVal ? ' selected' : '') + '>' + this._esc(v) + '</option>';
             }
             html += '</select>';
+            html += '</div>';
         }
 
         // Clear filters
         if (this.searchQuery || Object.values(this.columnFilters).some(v => v)) {
-            html += '<button class="btn btn-secondary btn-sm" onclick="window._dt[\'' + this.containerId + '\'].clearFilters()">Clear</button>';
+            html += '<button class="btn btn-secondary btn-sm data-table-clear" onclick="window._dt[\'' + this.containerId + '\'].clearFilters()">Clear</button>';
         }
+        html += '</div>';
 
         // Page size selector (right side)
-        html += '<div style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);">';
-        html += '<span>Show</span><select class="form-input" style="width:60px;font-size:12px;padding:2px 4px;" ' +
+        html += '<div class="data-table-controls-meta">';
+        html += '<label class="data-table-page-size">';
+        html += '<span>Show</span><select class="form-input data-table-page-size-select" ' +
             'onchange="window._dt[\'' + this.containerId + '\'].onPageSize(this.value)">';
         for (const ps of [10, 25, 50, 100]) {
             html += '<option value="' + ps + '"' + (ps === this.pageSize ? ' selected' : '') + '>' + ps + '</option>';
         }
-        html += '</select></div>';
+        html += '</select></label>';
+        html += '</div>';
         html += '</div>';
 
         // Content
@@ -124,9 +131,9 @@ class DataTable {
 
         // Pagination footer
         if (total > this.pageSize) {
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--text-secondary);">';
-            html += '<span>Showing ' + (start + 1) + '-' + end + ' of ' + total + '</span>';
-            html += '<div style="display:flex;gap:4px;">';
+            html += '<div class="data-table-pagination">';
+            html += '<span class="data-table-pagination-info">Showing ' + (start + 1) + '-' + end + ' of ' + total + '</span>';
+            html += '<div class="data-table-pagination-actions">';
             html += '<button class="btn btn-secondary btn-sm"' + (this.page <= 1 ? ' disabled' : '') +
                 ' onclick="window._dt[\'' + this.containerId + '\'].goPage(' + (this.page - 1) + ')">Prev</button>';
 
@@ -134,8 +141,8 @@ class DataTable {
             const pageStart = Math.max(1, this.page - 2);
             const pageEnd = Math.min(maxPage, pageStart + 4);
             for (let p = pageStart; p <= pageEnd; p++) {
-                const activeStyle = p === this.page ? 'background:var(--accent);color:#fff;' : '';
-                html += '<button class="btn btn-secondary btn-sm" style="min-width:30px;' + activeStyle + '" ' +
+                const activeClass = p === this.page ? ' data-table-page-active' : '';
+                html += '<button class="btn btn-secondary btn-sm data-table-page-button' + activeClass + '" ' +
                     'onclick="window._dt[\'' + this.containerId + '\'].goPage(' + p + ')">' + p + '</button>';
             }
 
@@ -143,7 +150,7 @@ class DataTable {
                 ' onclick="window._dt[\'' + this.containerId + '\'].goPage(' + (this.page + 1) + ')">Next</button>';
             html += '</div></div>';
         } else if (total > 0) {
-            html += '<div style="margin-top:4px;font-size:12px;color:var(--text-secondary);">Showing ' + total + ' entries</div>';
+            html += '<div class="data-table-count">Showing ' + total + ' entries</div>';
         }
 
         container.innerHTML = html;

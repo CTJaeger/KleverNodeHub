@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +15,7 @@ import (
 
 const (
 	defaultDockerSocket = "/var/run/docker.sock"
-	dockerAPIVersion    = "v1.24" // Minimum API version for inspect
+	dockerAPIVersion    = "v1.41" // Docker Engine 20.10+
 	kleverImage         = "kleverapp/klever-go"
 )
 
@@ -68,10 +69,10 @@ type mountPoint struct {
 
 // containerListEntry is the minimal subset of Docker's container list response.
 type containerListEntry struct {
-	ID    string `json:"Id"`
+	ID    string   `json:"Id"`
 	Names []string `json:"Names"`
-	Image string `json:"Image"`
-	State string `json:"State"` // "running", "exited"
+	Image string   `json:"Image"`
+	State string   `json:"State"` // "running", "exited"
 }
 
 // ListKleverContainers returns IDs of all containers using the klever-go image.
@@ -142,16 +143,20 @@ func (d *DockerClient) InspectContainer(ctx context.Context, containerID string)
 
 // DiscoveredNode holds the information extracted from a running Klever container.
 type DiscoveredNode struct {
-	ContainerID     string `json:"container_id"`
-	ContainerName   string `json:"container_name"`
-	Status          string `json:"status"` // "running" or "stopped"
-	RestAPIPort     int    `json:"rest_api_port"`
-	DisplayName     string `json:"display_name,omitempty"`
-	RedundancyLevel int    `json:"redundancy_level"`
-	DockerImageTag  string `json:"docker_image_tag,omitempty"`
-	DataDirectory   string `json:"data_directory,omitempty"`
-	ConfigDirectory string `json:"config_directory,omitempty"`
-	BLSPublicKey    string `json:"bls_public_key,omitempty"`
+	ContainerID     string  `json:"container_id"`
+	ContainerName   string  `json:"container_name"`
+	Status          string  `json:"status"` // "running" or "stopped"
+	RestAPIPort     int     `json:"rest_api_port"`
+	DisplayName     string  `json:"display_name,omitempty"`
+	RedundancyLevel int     `json:"redundancy_level"`
+	DockerImageTag  string  `json:"docker_image_tag,omitempty"`
+	DataDirectory   string  `json:"data_directory,omitempty"`
+	ConfigDirectory string  `json:"config_directory,omitempty"`
+	BLSPublicKey    string  `json:"bls_public_key,omitempty"`
+	CPUPercent      float64 `json:"cpu_percent"`
+	MemUsed         uint64  `json:"mem_used"`
+	MemLimit        uint64  `json:"mem_limit"`
+	MemPercent      float64 `json:"mem_percent"`
 }
 
 // DiscoverNodes scans Docker for all Klever containers and extracts their configuration.
@@ -169,10 +174,94 @@ func (d *DockerClient) DiscoverNodes(ctx context.Context) ([]DiscoveredNode, err
 		}
 
 		node := parseContainerToNode(cj)
+
+		// Fetch container resource stats for running containers
+		if node.Status == "running" {
+			statsCtx, statsCancel := context.WithTimeout(ctx, 5*time.Second)
+			stats, err := d.containerStats(statsCtx, id)
+			statsCancel()
+			if err != nil {
+				log.Printf("container stats %s: %v", node.ContainerName, err)
+			} else {
+				node.CPUPercent = stats.cpuPercent
+				node.MemUsed = stats.memUsed
+				node.MemLimit = stats.memLimit
+				if stats.memLimit > 0 {
+					node.MemPercent = float64(stats.memUsed) / float64(stats.memLimit) * 100
+				}
+			}
+		}
+
 		nodes = append(nodes, node)
 	}
 
 	return nodes, nil
+}
+
+// containerStatsResult holds parsed container stats.
+type containerStatsResult struct {
+	cpuPercent float64
+	memUsed    uint64
+	memLimit   uint64
+}
+
+// containerStats fetches a one-shot stats snapshot for a container.
+func (d *DockerClient) containerStats(ctx context.Context, containerID string) (*containerStatsResult, error) {
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/stats?stream=false&one-shot=true",
+		dockerAPIVersion, containerID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create stats request: %w", err)
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("container stats %s: %w", containerID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("container stats %s: HTTP %d: %s", containerID, resp.StatusCode, string(body))
+	}
+
+	var raw struct {
+		CPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+			OnlineCPUs     int    `json:"online_cpus"`
+		} `json:"cpu_stats"`
+		PreCPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		} `json:"precpu_stats"`
+		MemoryStats struct {
+			Usage uint64 `json:"usage"`
+			Limit uint64 `json:"limit"`
+		} `json:"memory_stats"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decode stats %s: %w", containerID, err)
+	}
+
+	// Calculate CPU percentage from delta
+	cpuDelta := float64(raw.CPUStats.CPUUsage.TotalUsage - raw.PreCPUStats.CPUUsage.TotalUsage)
+	sysDelta := float64(raw.CPUStats.SystemCPUUsage - raw.PreCPUStats.SystemCPUUsage)
+	var cpuPercent float64
+	if sysDelta > 0 && cpuDelta > 0 {
+		cpuPercent = (cpuDelta / sysDelta) * float64(raw.CPUStats.OnlineCPUs) * 100.0
+	}
+
+	return &containerStatsResult{
+		cpuPercent: cpuPercent,
+		memUsed:    raw.MemoryStats.Usage,
+		memLimit:   raw.MemoryStats.Limit,
+	}, nil
 }
 
 // StartContainer starts a stopped container.

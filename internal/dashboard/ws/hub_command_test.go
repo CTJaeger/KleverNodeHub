@@ -26,7 +26,8 @@ func setupHubForCommand(t *testing.T) (*Hub, func()) {
 		RegisteredAt: time.Now().Unix(),
 	})
 
-	hub := NewHub(serverStore)
+	nodeStore := store.NewNodeStore(db)
+	hub := NewHub(serverStore, nodeStore)
 	return hub, func() { _ = db.Close() }
 }
 

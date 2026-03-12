@@ -28,7 +28,11 @@ type SystemMetricsRow struct {
 	ServerID    string  `json:"server_id"`
 	CPUPercent  float64 `json:"cpu_percent"`
 	MemPercent  float64 `json:"mem_percent"`
+	MemTotal    uint64  `json:"mem_total"`
+	MemUsed     uint64  `json:"mem_used"`
 	DiskPercent float64 `json:"disk_percent"`
+	DiskTotal   uint64  `json:"disk_total"`
+	DiskUsed    uint64  `json:"disk_used"`
 	LoadAvg1    float64 `json:"load_avg_1"`
 	CollectedAt int64   `json:"collected_at"`
 }
@@ -73,12 +77,14 @@ func (s *MetricsStore) InsertNodeMetrics(nodeID, serverID string, metrics map[st
 }
 
 // InsertSystemMetrics inserts a system metrics snapshot.
-func (s *MetricsStore) InsertSystemMetrics(serverID string, cpuPercent, memPercent, diskPercent, loadAvg1 float64, ts int64) error {
+func (s *MetricsStore) InsertSystemMetrics(serverID string, m *SystemMetricsRow) error {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 
-	_, err := s.db.db.Exec(`INSERT INTO system_metrics (server_id, cpu_percent, mem_percent, disk_percent, load_avg_1, collected_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		serverID, cpuPercent, memPercent, diskPercent, loadAvg1, ts)
+	_, err := s.db.db.Exec(
+		`INSERT INTO system_metrics (server_id, cpu_percent, mem_percent, mem_total, mem_used, disk_percent, disk_total, disk_used, load_avg_1, collected_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		serverID, m.CPUPercent, m.MemPercent, m.MemTotal, m.MemUsed, m.DiskPercent, m.DiskTotal, m.DiskUsed, m.LoadAvg1, m.CollectedAt)
 	if err != nil {
 		return fmt.Errorf("insert system metrics: %w", err)
 	}
@@ -135,7 +141,7 @@ func (s *MetricsStore) QueryArchive(nodeID, metricName string, from, to int64) (
 // QuerySystemMetrics returns system metrics for a server within a time range.
 func (s *MetricsStore) QuerySystemMetrics(serverID string, from, to int64) ([]SystemMetricsRow, error) {
 	rows, err := s.db.db.Query(
-		`SELECT server_id, cpu_percent, mem_percent, disk_percent, load_avg_1, collected_at
+		`SELECT server_id, cpu_percent, mem_percent, mem_total, mem_used, disk_percent, disk_total, disk_used, load_avg_1, collected_at
 		 FROM system_metrics
 		 WHERE server_id = ? AND collected_at >= ? AND collected_at <= ?
 		 ORDER BY collected_at ASC`,
@@ -148,7 +154,7 @@ func (s *MetricsStore) QuerySystemMetrics(serverID string, from, to int64) ([]Sy
 	var result []SystemMetricsRow
 	for rows.Next() {
 		var r SystemMetricsRow
-		if err := rows.Scan(&r.ServerID, &r.CPUPercent, &r.MemPercent, &r.DiskPercent, &r.LoadAvg1, &r.CollectedAt); err != nil {
+		if err := rows.Scan(&r.ServerID, &r.CPUPercent, &r.MemPercent, &r.MemTotal, &r.MemUsed, &r.DiskPercent, &r.DiskTotal, &r.DiskUsed, &r.LoadAvg1, &r.CollectedAt); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		result = append(result, r)
@@ -269,6 +275,23 @@ func (s *MetricsStore) QueryAutoResolution(nodeID, metricName string, from, to i
 		Recent  []DataPoint       `json:"recent"`
 	}
 	return &MergedResult{Archive: archivePoints, Recent: recentPoints}, nil
+}
+
+// LatestNodeMetrics returns the most recent value for each of the given metric names for a node.
+func (s *MetricsStore) LatestNodeMetrics(nodeID string, metricNames []string) (map[string]float64, error) {
+	result := make(map[string]float64, len(metricNames))
+	for _, name := range metricNames {
+		var value float64
+		err := s.db.db.QueryRow(
+			`SELECT metric_value FROM metrics_recent
+			 WHERE node_id = ? AND metric_name = ?
+			 ORDER BY collected_at DESC LIMIT 1`,
+			nodeID, name).Scan(&value)
+		if err == nil {
+			result[name] = value
+		}
+	}
+	return result, nil
 }
 
 // ExtractNumericMetrics extracts numeric values from a map[string]any,

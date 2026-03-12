@@ -7,19 +7,57 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <div class="app-top-strip">
+        <span>Operations View</span>
+        <span>Node telemetry, maintenance and validator controls</span>
+    </div>
     <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
     <div class="app">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h1>Klever Node Hub</h1>
-                <span class="version">v0.1.0</span>
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
             </div>
-            <nav class="sidebar-nav">
-                <a href="/overview">Overview</a>
-                <a href="#" onclick="API.logout()">Logout</a>
-            </nav>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -31,193 +69,293 @@
                 <div style="width:36px"></div>
             </div>
 
-            <!-- Back link -->
-            <a href="/overview" class="text-sm" style="display:inline-block;margin-bottom:16px;">&larr; Back to Overview</a>
+            <!-- Page Header Bar -->
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                    <a href="/overview" style="color:var(--text-secondary);font-size:13px;">Dashboard</a>
+                    <span style="color:var(--text-muted);">/</span>
+                    <span class="page-header-title" id="page-node-name">Node Detail</span>
+                </div>
+                <div class="page-header-center">
+                    <label class="page-search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                        <input id="node-page-search" class="page-search-input" placeholder="Filter logs..." oninput="setNodePageSearch(this.value)">
+                    </label>
+                </div>
+                <div class="page-header-right">
+                    <div class="page-header-status">
+                        <span class="status-dot connected"></span>
+                        <span id="node-live-status">Live node view</span>
+                    </div>
+                    <button class="page-header-icon-btn" onclick="loadNode(); loadMetrics();" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page-body">
 
             <!-- Node Header -->
-            <div class="card mb-16">
-                <div class="card-header">
-                    <div>
+            <div class="card node-hero mb-16">
+                <div class="node-hero-main">
+                    <div class="node-hero-copy">
+                        <div class="node-hero-eyebrow">Node Overview</div>
                         <h2 id="node-name">Loading...</h2>
-                        <span class="text-sm text-muted" id="node-server"></span>
+                        <span class="text-sm text-muted node-hero-sub" id="node-server"></span>
+                        <div class="node-hero-meta" id="node-hero-meta">
+                            <span class="node-chip">Waiting for node data...</span>
+                        </div>
                     </div>
-                    <span class="badge" id="node-status-badge"></span>
+                    <div class="node-hero-side">
+                        <div class="node-hero-status-row">
+                            <span class="badge" id="node-status-badge"></span>
+                            <span class="node-chip node-chip-accent" id="node-health-chip">Telemetry online</span>
+                        </div>
+                        <div class="node-hero-state-label">Operational Snapshot</div>
+                        <div class="node-hero-state-grid" id="node-hero-state">
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Nonce</span>
+                                <strong class="node-hero-state-value">Loading</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Peers</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">CPU</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Memory</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Action Buttons -->
-                <div class="btn-group mt-8">
-                    <button class="btn btn-sm btn-primary" onclick="nodeAction('start')" id="btn-start">Start</button>
-                    <button class="btn btn-sm btn-secondary" onclick="nodeAction('stop')" id="btn-stop">Stop</button>
-                    <button class="btn btn-sm btn-secondary" onclick="nodeAction('restart')" id="btn-restart">Restart</button>
-                </div>
-
-                <!-- Upgrade/Downgrade -->
-                <div class="mt-8" id="upgrade-section">
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <select id="upgrade-tag" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:140px;">
-                            <option value="">Select version...</option>
-                        </select>
-                        <button class="btn btn-sm btn-primary" onclick="doUpgrade()" id="btn-upgrade">Upgrade</button>
-                        <button class="btn btn-sm btn-secondary" onclick="doUpgrade()" id="btn-downgrade">Downgrade</button>
+                <div class="node-action-bar">
+                    <div class="node-action-panel">
+                        <div class="node-action-panel-head">
+                            <span class="node-action-kicker">Lifecycle</span>
+                            <span class="node-action-hint">Container controls</span>
+                        </div>
+                        <div class="node-action-group">
+                            <button class="btn btn-sm btn-primary" onclick="nodeAction('start')" id="btn-start">Start</button>
+                            <button class="btn btn-sm btn-secondary" onclick="nodeAction('stop')" id="btn-stop">Stop</button>
+                            <button class="btn btn-sm btn-secondary" onclick="nodeAction('restart')" id="btn-restart">Restart</button>
+                        </div>
                     </div>
-                    <div id="upgrade-progress" class="hidden mt-8">
+                    <div class="node-action-panel" id="upgrade-section">
+                        <div class="node-action-panel-head">
+                            <span class="node-action-kicker">Image Management</span>
+                            <span class="node-action-hint">Version rollout</span>
+                        </div>
+                        <div class="node-action-group node-action-group-upgrade">
+                            <select id="upgrade-tag" class="form-input node-action-select">
+                                <option value="">Select version...</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary" onclick="doUpgrade()" id="btn-upgrade">Upgrade</button>
+                            <button class="btn btn-sm btn-secondary" onclick="doUpgrade()" id="btn-downgrade">Downgrade</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="upgrade-progress" class="hidden mt-8">
                         <div class="progress-bar">
                             <div class="progress-bar-fill green" id="upgrade-bar" style="width:0%"></div>
                         </div>
                         <div class="text-sm text-muted mt-8" id="upgrade-status"></div>
-                    </div>
                 </div>
 
                 <!-- Action result -->
                 <div id="action-result" class="hidden mt-8"></div>
             </div>
 
-            <!-- Node Details -->
-            <div class="card mb-16">
-                <div class="card-header"><h3>Details</h3></div>
-                <div id="node-details">
-                    <div class="loading-text"><div class="spinner"></div><span>Loading...</span></div>
+            <div class="node-tabs-shell mb-16">
+                <div class="tabs node-tabs">
+                    <button class="tab node-tab active" type="button" data-tab="overview" onclick="switchNodeTab('overview')">Overview</button>
+                    <button class="tab node-tab" type="button" data-tab="config" onclick="switchNodeTab('config')">Configuration</button>
+                    <button class="tab node-tab" type="button" data-tab="keys" onclick="switchNodeTab('keys')">Keys</button>
+                    <button class="tab node-tab" type="button" data-tab="logs" onclick="switchNodeTab('logs')">Logs</button>
                 </div>
             </div>
 
-            <!-- Node Status Metrics -->
-            <div class="card mb-16" id="node-metrics-card">
-                <div class="card-header"><h3>Node Status</h3></div>
-                <div class="node-status-grid" id="node-status-grid">
-                    <div class="node-stat">
-                        <div class="stat-value" id="ns-nonce">-</div>
-                        <div class="stat-label">Block Nonce</div>
-                    </div>
-                    <div class="node-stat">
-                        <div class="stat-value" id="ns-epoch">-</div>
-                        <div class="stat-label">Epoch</div>
-                    </div>
-                    <div class="node-stat">
-                        <div class="stat-value" id="ns-peers">-</div>
-                        <div class="stat-label">Peers</div>
-                    </div>
-                    <div class="node-stat">
-                        <div class="stat-value" id="ns-consensus">-</div>
-                        <div class="stat-label">Consensus</div>
+            <div id="node-tab-overview" class="node-tab-panel active">
+                <div class="card mb-16">
+                    <div class="card-header"><h3>Resources</h3></div>
+                    <div class="node-gauges-grid">
+                        <div class="node-gauge-card">
+                            <div id="node-gauge-cpu"></div>
+                            <div class="node-gauge-title">CPU Load</div>
+                            <div id="node-gauge-cpu-detail" class="node-gauge-detail">Waiting for telemetry</div>
+                        </div>
+                        <div class="node-gauge-card">
+                            <div id="node-gauge-mem"></div>
+                            <div class="node-gauge-title">Memory Load</div>
+                            <div id="node-gauge-mem-detail" class="node-gauge-detail">Waiting for telemetry</div>
+                        </div>
+                        <div class="node-gauge-card">
+                            <div id="node-gauge-health"></div>
+                            <div class="node-gauge-title">Node Health</div>
+                            <div id="node-gauge-health-detail" class="node-gauge-detail">Waiting for status</div>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-8" id="sync-section" style="display:none;">
-                    <div class="text-sm text-muted">Sync Progress</div>
-                    <div class="progress-bar">
-                        <div class="progress-bar-fill green" id="sync-bar" style="width:0%"></div>
+
+                <!-- Node Status Metrics -->
+                <div class="card mb-16" id="node-metrics-card">
+                    <div class="card-header"><h3>Node Status</h3></div>
+                    <div class="node-status-grid" id="node-status-grid">
+                        <div class="node-stat">
+                            <div class="stat-value" id="ns-nonce">-</div>
+                            <div class="stat-label">Block Nonce</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="ns-epoch">-</div>
+                            <div class="stat-label">Epoch</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="ns-peers">-</div>
+                            <div class="stat-label">Peers</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="ns-consensus">-</div>
+                            <div class="stat-label">Consensus</div>
+                        </div>
                     </div>
-                    <div class="text-sm text-muted mt-8" id="sync-text"></div>
+                    <div class="mt-8" id="sync-section" style="display:none;">
+                        <div class="text-sm text-muted">Sync Progress</div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill green" id="sync-bar" style="width:0%"></div>
+                        </div>
+                        <div class="text-sm text-muted mt-8" id="sync-text"></div>
+                    </div>
+                </div>
+
+                <!-- Time-Series Charts -->
+                <div class="card mb-16">
+                    <div class="card-header">
+                        <h3>Metrics</h3>
+                        <div class="time-range" id="time-range">
+                            <button onclick="setTimeRange(3600)" class="active">1h</button>
+                            <button onclick="setTimeRange(21600)">6h</button>
+                            <button onclick="setTimeRange(86400)">24h</button>
+                            <button onclick="setTimeRange(604800)">7d</button>
+                            <button onclick="setTimeRange(2592000)">30d</button>
+                        </div>
+                    </div>
+                    <div class="metrics-grid">
+                        <div>
+                            <div class="chart-header"><h4>Block Nonce</h4></div>
+                            <div class="chart-container"><canvas id="chart-nonce"></canvas></div>
+                        </div>
+                        <div>
+                            <div class="chart-header"><h4>Connected Peers</h4></div>
+                            <div class="chart-container"><canvas id="chart-peers"></canvas></div>
+                        </div>
+                        <div>
+                            <div class="chart-header"><h4>Transactions Processed</h4></div>
+                            <div class="chart-container"><canvas id="chart-txs"></canvas></div>
+                        </div>
+                        <div>
+                            <div class="chart-header"><h4>Network I/O (bps)</h4></div>
+                            <div class="chart-container"><canvas id="chart-network"></canvas></div>
+                        </div>
+                        <div>
+                            <div class="chart-header"><h4>CPU Load %</h4></div>
+                            <div class="chart-container"><canvas id="chart-cpu"></canvas></div>
+                        </div>
+                        <div>
+                            <div class="chart-header"><h4>Memory Load %</h4></div>
+                            <div class="chart-container"><canvas id="chart-mem"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node Details -->
+                <div class="card mb-16">
+                    <div class="card-header"><h3>Details</h3></div>
+                    <div id="node-details" class="detail-grid">
+                        <div class="loading-text"><div class="spinner"></div><span>Loading...</span></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Time-Series Charts -->
-            <div class="card mb-16">
-                <div class="card-header">
-                    <h3>Metrics</h3>
-                    <div class="time-range" id="time-range">
-                        <button onclick="setTimeRange(3600)" class="active">1h</button>
-                        <button onclick="setTimeRange(21600)">6h</button>
-                        <button onclick="setTimeRange(86400)">24h</button>
-                        <button onclick="setTimeRange(604800)">7d</button>
-                        <button onclick="setTimeRange(2592000)">30d</button>
+            <div id="node-tab-config" class="node-tab-panel">
+                <!-- Configuration Editor -->
+                <div class="card mb-16">
+                    <div class="card-header">
+                        <h3>Configuration</h3>
+                        <div class="node-toolbar">
+                            <select id="config-file-select" onchange="loadConfigFile()" class="form-input node-inline-select">
+                                <option value="">Select file...</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary" onclick="saveConfig()" id="btn-save-config" disabled>Save</button>
+                            <button class="btn btn-sm btn-secondary" onclick="saveAndRestart()" id="btn-save-restart" disabled>Save &amp; Restart</button>
+                        </div>
                     </div>
-                </div>
-                <div class="metrics-grid">
-                    <div>
-                        <div class="chart-header"><h4>Block Nonce</h4></div>
-                        <div class="chart-container"><canvas id="chart-nonce"></canvas></div>
+                    <div id="config-editor-wrap" class="hidden">
+                        <textarea id="config-editor" class="node-code-editor" spellcheck="false"></textarea>
+                        <div class="node-toolbar node-toolbar-secondary mt-8">
+                            <select id="config-backup-select" class="form-input node-inline-select node-inline-select-wide">
+                                <option value="">Backups...</option>
+                            </select>
+                            <button class="btn btn-sm btn-secondary" onclick="restoreBackup()">Restore</button>
+                        </div>
                     </div>
-                    <div>
-                        <div class="chart-header"><h4>Connected Peers</h4></div>
-                        <div class="chart-container"><canvas id="chart-peers"></canvas></div>
-                    </div>
-                    <div>
-                        <div class="chart-header"><h4>Transactions Processed</h4></div>
-                        <div class="chart-container"><canvas id="chart-txs"></canvas></div>
-                    </div>
-                    <div>
-                        <div class="chart-header"><h4>Network I/O (bps)</h4></div>
-                        <div class="chart-container"><canvas id="chart-network"></canvas></div>
-                    </div>
-                    <div>
-                        <div class="chart-header"><h4>CPU Load %</h4></div>
-                        <div class="chart-container"><canvas id="chart-cpu"></canvas></div>
-                    </div>
-                    <div>
-                        <div class="chart-header"><h4>Memory Load %</h4></div>
-                        <div class="chart-container"><canvas id="chart-mem"></canvas></div>
+                    <div id="config-empty" class="empty-state node-empty-state">
+                        <p class="text-muted text-sm">Select a configuration file above to edit.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Configuration Editor -->
-            <div class="card mb-16">
-                <div class="card-header">
-                    <h3>Configuration</h3>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <select id="config-file-select" onchange="loadConfigFile()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
-                            <option value="">Select file...</option>
-                        </select>
-                        <button class="btn btn-sm btn-primary" onclick="saveConfig()" id="btn-save-config" disabled>Save</button>
-                        <button class="btn btn-sm btn-secondary" onclick="saveAndRestart()" id="btn-save-restart" disabled>Save &amp; Restart</button>
+            <div id="node-tab-keys" class="node-tab-panel">
+                <!-- Key Management -->
+                <div class="card mb-16">
+                    <div class="card-header">
+                        <h3>Validator Key</h3>
+                        <div class="node-toolbar">
+                            <button class="btn btn-sm btn-primary" onclick="generateKey()">Generate</button>
+                            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('key-import-file').click()">Import</button>
+                            <button class="btn btn-sm btn-secondary" onclick="exportKey()" id="btn-export-key">Export</button>
+                        </div>
                     </div>
-                </div>
-                <div id="config-editor-wrap" class="hidden">
-                    <textarea id="config-editor" style="width:100%;min-height:300px;font-family:monospace;font-size:13px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);padding:8px;resize:vertical;tab-size:4;white-space:pre;overflow:auto;" spellcheck="false"></textarea>
-                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-                        <select id="config-backup-select" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;min-width:200px;">
-                            <option value="">Backups...</option>
-                        </select>
-                        <button class="btn btn-sm btn-secondary" onclick="restoreBackup()">Restore</button>
+                    <input type="file" id="key-import-file" accept=".pem" style="display:none" onchange="importKeyFile(event)">
+                    <div id="key-info" class="node-key-panel">
+                        <div class="loading-text"><div class="spinner"></div><span>Loading key info...</span></div>
                     </div>
-                </div>
-                <div id="config-empty" class="empty-state">
-                    <p class="text-muted text-sm">Select a configuration file above to edit.</p>
+                    <div id="key-result" class="hidden mt-8"></div>
                 </div>
             </div>
 
-            <!-- Key Management -->
-            <div class="card mb-16">
-                <div class="card-header">
-                    <h3>Validator Key</h3>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-sm btn-primary" onclick="generateKey()">Generate</button>
-                        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('key-import-file').click()">Import</button>
-                        <button class="btn btn-sm btn-secondary" onclick="exportKey()" id="btn-export-key">Export</button>
+            <div id="node-tab-logs" class="node-tab-panel">
+                <!-- Log Viewer -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Logs</h3>
+                        <div class="node-toolbar node-toolbar-wrap">
+                            <input type="text" id="log-filter" placeholder="Filter..." oninput="filterLogs()" class="form-input node-inline-input">
+                            <select id="log-lines" onchange="loadLogs()" class="form-input node-inline-select">
+                                <option value="100">100 lines</option>
+                                <option value="500">500 lines</option>
+                                <option value="2000">2000 lines</option>
+                            </select>
+                            <button class="btn btn-sm btn-secondary" onclick="loadLogs()">Refresh</button>
+                            <button class="btn btn-sm btn-secondary" onclick="downloadLogs()">Download</button>
+                            <label class="node-log-toggle">
+                                <input type="checkbox" id="log-timestamps" checked onchange="renderLogView()"> Timestamps
+                            </label>
+                            <label class="node-log-toggle">
+                                <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
+                            </label>
+                        </div>
+                    </div>
+                    <div id="log-viewer" class="node-log-viewer">
+                        <div class="text-muted text-sm node-log-empty">Click Refresh to load logs.</div>
                     </div>
                 </div>
-                <input type="file" id="key-import-file" accept=".pem" style="display:none" onchange="importKeyFile(event)">
-                <div id="key-info">
-                    <div class="loading-text"><div class="spinner"></div><span>Loading key info...</span></div>
-                </div>
-                <div id="key-result" class="hidden mt-8"></div>
             </div>
-
-            <!-- Log Viewer -->
-            <div class="card">
-                <div class="card-header">
-                    <h3>Logs</h3>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <input type="text" id="log-filter" placeholder="Filter..." oninput="filterLogs()" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;font-size:13px;width:140px;">
-                        <select id="log-lines" onchange="loadLogs()" class="btn btn-sm" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);padding:4px 8px;">
-                            <option value="100">100 lines</option>
-                            <option value="500">500 lines</option>
-                            <option value="2000">2000 lines</option>
-                        </select>
-                        <button class="btn btn-sm btn-secondary" onclick="loadLogs()">Refresh</button>
-                        <button class="btn btn-sm btn-secondary" onclick="downloadLogs()">Download</button>
-                        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
-                            <input type="checkbox" id="log-timestamps" checked onchange="renderLogView()"> Timestamps
-                        </label>
-                        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
-                            <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
-                        </label>
-                    </div>
-                </div>
-                <div id="log-viewer" style="background:#0d1117;color:#c9d1d9;font-family:monospace;font-size:12px;line-height:1.5;padding:8px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all;border-radius:4px;">
-                    <div class="text-muted text-sm" style="padding:16px;text-align:center;">Click Refresh to load logs.</div>
-                </div>
-            </div>
+            </div><!-- /page-body -->
         </main>
     </div>
 
@@ -228,6 +366,12 @@
         let nodeId = '';
         let node = null;
         let currentRange = 3600; // default 1h
+        let activeNodeTab = 'overview';
+        const nodePanelLoaded = {
+            config: false,
+            keys: false,
+            logs: false
+        };
 
         async function init() {
             const parts = window.location.pathname.split('/');
@@ -238,6 +382,7 @@
                 return;
             }
 
+            switchNodeTab(getNodeTabFromHash(), false);
             await loadNode();
             await loadMetrics();
 
@@ -252,6 +397,7 @@
             });
 
             window.addEventListener('resize', () => loadMetrics());
+            window.addEventListener('hashchange', () => switchNodeTab(getNodeTabFromHash(), false));
         }
 
         async function loadNode() {
@@ -264,25 +410,44 @@
         function renderNode() {
             if (!node) return;
 
-            document.getElementById('node-name').textContent = node.display_name || node.name || node.container_name;
-            document.getElementById('node-server').textContent = 'Server: ' + (node.server_id || '-');
+            const nodeName = node.display_name || node.name || node.container_name;
+            const serverId = node.server_id || '';
+            const serverHref = serverId ? '/servers/' + encodeURIComponent(serverId) : '';
+            const serverHtml = serverId
+                ? 'Server: <a href="' + escAttr(serverHref) + '" class="node-server-link">' + esc(serverId) + '</a>'
+                : 'Server: -';
+            document.getElementById('node-name').textContent = nodeName;
+            document.getElementById('page-node-name').textContent = nodeName;
+            document.getElementById('node-server').innerHTML = serverHtml;
 
             const badge = document.getElementById('node-status-badge');
             badge.textContent = node.status || 'unknown';
             badge.className = 'badge badge-' + (node.status || 'stopped');
+            document.getElementById('node-health-chip').textContent = node.node_type === 'observer' ? 'Read replica' : 'Validator role';
 
             const isRunning = node.status === 'running';
             document.getElementById('btn-start').disabled = isRunning;
             document.getElementById('btn-stop').disabled = !isRunning;
 
+            document.getElementById('node-hero-meta').innerHTML =
+                nodeChip('Container', node.container_name || '-') +
+                nodeChip('Type', node.node_type || 'validator') +
+                nodeChip('Redundancy', node.redundancy_level === 0 ? 'Active' : 'Fallback L' + node.redundancy_level) +
+                nodeChip('Image', node.docker_image_tag || '-');
+
             document.getElementById('node-details').innerHTML =
-                infoRow('Container', node.container_name) +
-                infoRow('Type', node.node_type || 'validator') +
-                infoRow('Redundancy', node.redundancy_level === 0 ? 'Active' : 'Fallback (Level ' + node.redundancy_level + ')') +
-                infoRow('REST API Port', node.rest_api_port || '-') +
-                infoRow('Docker Image', node.docker_image_tag || '-') +
-                infoRow('Data Directory', node.data_directory || '-') +
-                infoRow('BLS Public Key', node.bls_public_key ? truncate(node.bls_public_key, 24) : '-');
+                detailSection('Identity', [
+                    detailItem('Container Name', node.container_name || '-'),
+                    detailItem('Node Type', node.node_type || 'validator'),
+                    detailItem('Redundancy Profile', node.redundancy_level === 0 ? 'Active' : 'Fallback (Level ' + node.redundancy_level + ')'),
+                    detailLinkItem('Server', node.server_id || '-', serverHref)
+                ]) +
+                detailSection('Runtime', [
+                    detailItem('REST API Port', node.rest_api_port || '-'),
+                    detailItem('Docker Image', node.docker_image_tag || '-'),
+                    detailItem('Data Directory', node.data_directory || '-', 'wide'),
+                    detailItem('BLS Public Key', node.bls_public_key ? truncate(node.bls_public_key, 52) : '-', 'wide mono')
+                ]);
         }
 
         async function loadMetrics() {
@@ -314,16 +479,34 @@
             }
             updateStatusFromLatest('klv_consensus_state', 'ns-consensus', from, now);
 
+            const latestNonce = nonceData && nonceData.length > 0 ? Charts._formatNumber(nonceData[nonceData.length - 1].value) : '-';
+            const latestPeers = peersData && peersData.length > 0 ? Math.round(peersData[peersData.length - 1].value).toLocaleString() : '-';
+            const latestCPU = cpuData && cpuData.length > 0 ? cpuData[cpuData.length - 1].value.toFixed(1) + '%' : '-';
+            const latestMem = memData && memData.length > 0 ? memData[memData.length - 1].value.toFixed(1) + '%' : '-';
+            document.getElementById('node-hero-state').innerHTML =
+                snapshotMetric('Nonce', latestNonce) +
+                snapshotMetric('Peers', latestPeers) +
+                snapshotMetric('CPU', latestCPU) +
+                snapshotMetric('Memory', latestMem);
+
+            document.getElementById('node-live-status').textContent = 'Synced ' + new Date().toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            renderNodeGauges(cpuData, memData, peersData);
+
             // Render charts
-            renderChart('chart-nonce', nonceData, { color: '#4fc3f7', xFormat });
-            renderChart('chart-peers', peersData, { color: '#3fb950', xFormat });
-            renderChart('chart-txs', txData, { color: '#d29922', xFormat });
+            renderChart('chart-nonce', nonceData, { color: '#e8a737', xFormat });
+            renderChart('chart-peers', peersData, { color: '#34d399', xFormat });
+            renderChart('chart-txs', txData, { color: '#60a5fa', xFormat });
             renderMultiChart('chart-network', [
-                { data: recvData, label: 'Recv', color: '#4fc3f7' },
-                { data: sentData, label: 'Sent', color: '#f85149' },
+                { data: recvData, label: 'Recv', color: '#60a5fa' },
+                { data: sentData, label: 'Sent', color: '#f87171' },
             ], { xFormat, yFormat: Charts.formatBps });
-            renderChart('chart-cpu', cpuData, { color: '#f85149', yLabel: '%', xFormat });
-            renderChart('chart-mem', memData, { color: '#d29922', yLabel: '%', xFormat });
+            renderChart('chart-cpu', cpuData, { color: '#f87171', yLabel: '%', xFormat });
+            renderChart('chart-mem', memData, { color: '#fbbf24', yLabel: '%', xFormat });
 
             // Sync progress
             updateSyncProgress(nonceData);
@@ -361,7 +544,7 @@
 
             Charts.timeSeries(canvas, {
                 labels: data.map(p => p.collected_at),
-                datasets: [{ values: data.map(p => p.value), color: opts.color || '#4fc3f7' }]
+                datasets: [{ values: data.map(p => p.value), color: opts.color || '#e8a737' }]
             }, {
                 yLabel: opts.yLabel,
                 yFormat: opts.yFormat,
@@ -442,6 +625,55 @@
                    '</span><span class="info-value">' + esc(String(value)) + '</span></div>';
         }
 
+        function detailItem(label, value) {
+            var className = 'detail-item';
+            if (arguments[2]) className += ' ' + esc(String(arguments[2]));
+            return '<div class="' + className + '"><span class="detail-item-label">' + esc(label) +
+                '</span><span class="detail-item-value">' + esc(String(value)) + '</span></div>';
+        }
+
+        function detailSection(title, items) {
+            return '<section class="detail-section">' +
+                '<div class="detail-section-title">' + esc(title) + '</div>' +
+                '<div class="detail-section-grid">' + items.join('') + '</div>' +
+                '</section>';
+        }
+
+        function detailLinkItem(label, value, href) {
+            if (!href) return detailItem(label, value);
+            return '<div class="detail-item"><span class="detail-item-label">' + esc(label) +
+                '</span><a href="' + escAttr(href) + '" class="detail-item-link">' + esc(String(value)) + '</a></div>';
+        }
+
+        function nodeChip(label, value) {
+            return '<span class="node-chip"><span class="node-chip-label">' + esc(label) +
+                '</span><span class="node-chip-value">' + esc(String(value)) + '</span></span>';
+        }
+
+        function snapshotMetric(label, value) {
+            return '<div class="node-hero-state-card"><span class="node-hero-state-key">' + esc(label) +
+                '</span><strong class="node-hero-state-value">' + esc(String(value)) + '</strong></div>';
+        }
+
+        function renderNodeGauges(cpuData, memData, peersData) {
+            const cpu = cpuData && cpuData.length > 0 ? cpuData[cpuData.length - 1].value : 0;
+            const mem = memData && memData.length > 0 ? memData[memData.length - 1].value : 0;
+            const peers = peersData && peersData.length > 0 ? peersData[peersData.length - 1].value : 0;
+            const health = node && node.status === 'running'
+                ? (peers > 0 ? 96 : 82)
+                : (node && node.status === 'syncing' ? 68 : 22);
+            const healthColor = health >= 80 ? 'var(--success)' : (health >= 50 ? 'var(--warning)' : 'var(--error)');
+
+            Charts.gauge(document.getElementById('node-gauge-cpu'), cpu, { size: 112 });
+            Charts.gauge(document.getElementById('node-gauge-mem'), mem, { size: 112 });
+            Charts.gauge(document.getElementById('node-gauge-health'), health, { size: 112, color: healthColor });
+
+            document.getElementById('node-gauge-cpu-detail').textContent = cpu.toFixed(1) + '% current load';
+            document.getElementById('node-gauge-mem-detail').textContent = mem.toFixed(1) + '% current usage';
+            document.getElementById('node-gauge-health-detail').textContent =
+                (node ? (node.status || 'unknown') : 'unknown') + ' · ' + Math.round(peers).toLocaleString() + ' peers';
+        }
+
         function truncate(str, len) {
             return str.length > len ? str.substring(0, len) + '...' : str;
         }
@@ -456,6 +688,10 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        }
+
+        function escAttr(str) {
+            return esc(str).replace(/"/g, '&quot;');
         }
 
         async function loadKeyInfo() {
@@ -545,10 +781,11 @@
                 const data = await API.getJSON('/api/nodes/' + nodeId + '/logs?tail=' + tail);
                 if (data && data.lines) {
                     logData = data.lines;
+                    syncNodePageSearchState();
                     renderLogView();
                 }
             } catch (e) {
-                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
+                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
             }
         }
 
@@ -566,10 +803,10 @@
                 count++;
                 let lineHtml = '';
                 if (showTimestamps && line.timestamp) {
-                    lineHtml += '<span style="color:#6e7681;">' + esc(line.timestamp) + '</span> ';
+                    lineHtml += '<span style="color:#6b7280;">' + esc(line.timestamp) + '</span> ';
                 }
                 if (line.stream === 'stderr') {
-                    lineHtml += '<span style="color:#f85149;">' + highlightLogLevel(esc(msg)) + '</span>';
+                    lineHtml += '<span style="color:#f87171;">' + highlightLogLevel(esc(msg)) + '</span>';
                 } else {
                     lineHtml += highlightLogLevel(esc(msg));
                 }
@@ -588,15 +825,76 @@
         }
 
         function filterLogs() {
+            syncNodePageSearchState();
             renderLogView();
+        }
+
+        function setNodePageSearch(query) {
+            const input = document.getElementById('log-filter');
+            if (!input) return;
+            if (query && activeNodeTab !== 'logs') {
+                switchNodeTab('logs');
+            }
+            input.value = query;
+            renderLogView();
+        }
+
+        function getNodeTabFromHash() {
+            const value = (window.location.hash || '').replace(/^#/, '');
+            return ['overview', 'config', 'keys', 'logs'].includes(value) ? value : 'overview';
+        }
+
+        async function switchNodeTab(name, updateHash = true) {
+            activeNodeTab = ['overview', 'config', 'keys', 'logs'].includes(name) ? name : 'overview';
+
+            document.querySelectorAll('.node-tab').forEach((tab) => {
+                tab.classList.toggle('active', tab.dataset.tab === activeNodeTab);
+            });
+            document.querySelectorAll('.node-tab-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.id === 'node-tab-' + activeNodeTab);
+            });
+
+            syncNodePageSearchState();
+            await ensureNodePanelLoaded(activeNodeTab);
+
+            if (updateHash) {
+                const hash = '#' + activeNodeTab;
+                if (window.location.hash !== hash) {
+                    history.replaceState(null, '', hash);
+                }
+            }
+        }
+
+        async function ensureNodePanelLoaded(name) {
+            if (name === 'config' && !nodePanelLoaded.config) {
+                nodePanelLoaded.config = true;
+                await loadConfigFiles();
+            }
+            if (name === 'keys' && !nodePanelLoaded.keys) {
+                nodePanelLoaded.keys = true;
+                await loadKeyInfo();
+            }
+            if (name === 'logs' && !nodePanelLoaded.logs) {
+                nodePanelLoaded.logs = true;
+                await loadLogs();
+            }
+        }
+
+        function syncNodePageSearchState() {
+            const search = document.getElementById('node-page-search');
+            const logFilter = document.getElementById('log-filter');
+            if (!search || !logFilter) return;
+
+            search.placeholder = activeNodeTab === 'logs' ? 'Filter logs...' : 'Type to jump into logs';
+            search.value = logFilter.value || '';
         }
 
         function highlightLogLevel(text) {
             return text
-                .replace(/\b(ERROR|FATAL|PANIC)\b/g, '<span style="color:#f85149;font-weight:bold;">$1</span>')
-                .replace(/\b(WARN|WARNING)\b/g, '<span style="color:#d29922;font-weight:bold;">$1</span>')
-                .replace(/\b(INFO)\b/g, '<span style="color:#3fb950;">$1</span>')
-                .replace(/\b(DEBUG)\b/g, '<span style="color:#6e7681;">$1</span>');
+                .replace(/\b(ERROR|FATAL|PANIC)\b/g, '<span style="color:#f87171;font-weight:bold;">$1</span>')
+                .replace(/\b(WARN|WARNING)\b/g, '<span style="color:#fbbf24;font-weight:bold;">$1</span>')
+                .replace(/\b(INFO)\b/g, '<span style="color:#34d399;">$1</span>')
+                .replace(/\b(DEBUG)\b/g, '<span style="color:#6b7280;">$1</span>');
         }
 
         function downloadLogs() {
@@ -734,8 +1032,9 @@
                 if (data && data.tags) {
                     data.tags.forEach(tag => {
                         const opt = document.createElement('option');
-                        opt.value = tag;
-                        opt.textContent = tag;
+                        const name = typeof tag === 'string' ? tag : tag.name;
+                        opt.value = name;
+                        opt.textContent = name;
                         select.appendChild(opt);
                     });
                 }
@@ -781,7 +1080,7 @@
             } else {
                 barEl.style.width = '100%';
                 barEl.className = 'progress-bar-fill';
-                barEl.style.background = 'var(--danger)';
+                barEl.style.background = 'var(--error)';
                 const errMsg = result?.data?.error || 'Unknown error';
                 statusEl.textContent = 'Failed: ' + errMsg;
                 showResult('Failed: ' + errMsg, true);
@@ -810,8 +1109,6 @@
 
         init();
         loadDockerTags();
-        loadConfigFiles();
-        loadKeyInfo();
     </script>
 </body>
 </html>
