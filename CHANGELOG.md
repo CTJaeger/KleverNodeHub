@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Docker Hub**: Automated multi-arch Docker image builds (linux/amd64, linux/arm64) in release workflow
+  - Dashboard: `ctjaeger/klever-node-hub`
+  - Agent: `ctjaeger/klever-agent`
+  - Dockerfiles updated with version ldflags via build args
 - **Klever Extension Login fix**: Correct signature verification using Klever's signed message format
   - Extension uses: `0x17 + "Klever Signed Message:\n" + len + message → Keccak-256 → Ed25519`
   - Replaced incorrect raw/SHA-256 verify with `kleverSignedMessageHash()` + Keccak-256 (`x/crypto/sha3`)
