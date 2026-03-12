@@ -256,6 +256,53 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 }
 
+// HandleListPasskeys returns the list of registered passkeys.
+// GET /api/auth/passkeys
+func (h *AuthHandler) HandleListPasskeys(w http.ResponseWriter, r *http.Request) {
+	creds := h.webauthn.Credentials()
+
+	// Return safe subset (no public keys)
+	type passkeyInfo struct {
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		RegisteredAt int64  `json:"registered_at"`
+		SignCount    uint32 `json:"sign_count"`
+	}
+
+	list := make([]passkeyInfo, len(creds))
+	for i, c := range creds {
+		list[i] = passkeyInfo{
+			ID:           c.ID,
+			Name:         c.Name,
+			RegisteredAt: c.RegisteredAt,
+			SignCount:    c.SignCount,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"passkeys": list})
+}
+
+// HandleDeletePasskey removes a passkey by ID.
+// DELETE /api/auth/passkeys/{id}
+func (h *AuthHandler) HandleDeletePasskey(w http.ResponseWriter, r *http.Request) {
+	passkeyID := r.PathValue("id")
+	if passkeyID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing passkey id"})
+		return
+	}
+
+	if err := h.webauthn.DeletePasskey(passkeyID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.onCredentialsChanged != nil {
+		h.onCredentialsChanged(h.webauthn.Credentials())
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // setAuthCookies sets the JWT cookies in the response.
 func setAuthCookies(w http.ResponseWriter, tokens *auth.TokenPair) {
 	http.SetCookie(w, &http.Cookie{

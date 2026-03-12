@@ -79,6 +79,7 @@
                     <button class="tab active" onclick="switchTab('general')">General</button>
                     <button class="tab" onclick="switchTab('metrics')">Metrics</button>
                     <button class="tab" onclick="switchTab('notifications')">Notifications</button>
+                    <button class="tab" onclick="switchTab('security')">Security</button>
                     <button class="tab" onclick="switchTab('agents')">Agents</button>
                 </div>
 
@@ -186,6 +187,21 @@
                     </div>
                 </div>
 
+                <!-- Security -->
+                <div id="tab-security" class="tab-content">
+                    <div class="settings-section">
+                        <h4>Passkeys</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Manage registered passkeys for login authentication. You must keep at least one passkey.</p>
+                        <div id="passkey-list" style="margin-bottom:16px;"></div>
+                        <button class="btn btn-primary btn-sm" onclick="registerNewPasskey()">+ Register New Passkey</button>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
+                        <h4>Recovery Codes</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;">Recovery codes allow login when passkeys are unavailable. To regenerate codes, use the CLI:</p>
+                        <pre style="background:var(--bg-secondary);padding:12px;border-radius:8px;font-size:13px;margin-top:8px;overflow-x:auto;">./klever-node-hub --reset-recovery-codes</pre>
+                    </div>
+                </div>
+
                 <!-- Agents -->
                 <div id="tab-agents" class="tab-content">
                     <div class="settings-section">
@@ -215,6 +231,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/passkey.js"></script>
     <script>
         let settingsData = {};
         let defaults = {};
@@ -444,9 +461,84 @@
             }).join('');
         }
 
+        // --- Passkey management ---
+        async function loadPasskeys() {
+            const data = await API.getJSON('/api/auth/passkeys');
+            if (!data) return;
+            const passkeys = data.passkeys || [];
+            const container = document.getElementById('passkey-list');
+            container.textContent = '';
+            if (passkeys.length === 0) {
+                const p = document.createElement('p');
+                p.style.cssText = 'color:var(--text-muted);font-size:13px;';
+                p.textContent = 'No passkeys registered. Register one to enable login.';
+                container.appendChild(p);
+                return;
+            }
+            passkeys.forEach(pk => {
+                const date = new Date(pk.registered_at * 1000).toLocaleDateString();
+                const canDelete = passkeys.length > 1;
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);';
+
+                const info = document.createElement('div');
+                info.style.flex = '1';
+                const nameEl = document.createElement('strong');
+                nameEl.textContent = pk.name;
+                const detail = document.createElement('div');
+                detail.style.cssText = 'color:var(--text-secondary);font-size:12px;';
+                detail.textContent = 'Registered: ' + date + ' | Sign count: ' + pk.sign_count;
+                info.appendChild(nameEl);
+                info.appendChild(detail);
+                row.appendChild(info);
+
+                if (canDelete) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-secondary btn-sm';
+                    btn.style.color = 'var(--danger)';
+                    btn.textContent = 'Delete';
+                    btn.addEventListener('click', () => deletePasskey(pk.id, pk.name));
+                    row.appendChild(btn);
+                } else {
+                    const span = document.createElement('span');
+                    span.style.cssText = 'color:var(--text-muted);font-size:12px;';
+                    span.textContent = 'Last passkey';
+                    row.appendChild(span);
+                }
+
+                container.appendChild(row);
+            });
+        }
+
+        async function registerNewPasskey() {
+            const name = prompt('Enter a name for this passkey (e.g., "MacBook Pro"):');
+            if (!name) return;
+
+            try {
+                await Passkey.register(name);
+                showStatus('Passkey "' + name + '" registered successfully');
+                await loadPasskeys();
+            } catch (err) {
+                showStatus('Registration failed: ' + err.message, true);
+            }
+        }
+
+        async function deletePasskey(id, name) {
+            if (!confirm('Delete passkey "' + name + '"? This cannot be undone.')) return;
+            const resp = await API.delete('/api/auth/passkeys/' + encodeURIComponent(id));
+            if (resp && resp.ok) {
+                showStatus('Passkey deleted');
+                await loadPasskeys();
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed to delete'), true);
+            }
+        }
+
         // Init
         loadSettings();
         loadChannels();
+        loadPasskeys();
     </script>
 </body>
 </html>
