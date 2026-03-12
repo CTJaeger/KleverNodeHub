@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #30**: Pagination and filtering for data tables
+  - `web/static/js/datatable.js` — reusable DataTable class (no dependencies)
+  - Client-side pagination (10/25/50/100 per page), global text search with debounce, column dropdown filters
+  - Page size persisted in localStorage, page navigation with Prev/Next and numbered buttons
+  - `renderHeader`/`renderFooter` support for HTML table wrapping
+  - Overview: servers rendered via DataTable with status filter and search across name/hostname/IP/region/agent
+  - Overview: agent binaries and server agent version tables use DataTable
+  - `window._dt` global registry for onclick handlers in innerHTML context
+
 - **Issue #29**: Multi-channel notification credentials and per-channel alert routing
   - `ChannelFilter` struct with severity and alert type filtering
   - `Manager.AddChannelWithFilter()`, `UpdateChannelFilter()`, `ChannelsWithFilters()` — per-channel filter support

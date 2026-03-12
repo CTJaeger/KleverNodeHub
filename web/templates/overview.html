@@ -318,10 +318,55 @@
     <script src="/static/js/api.js"></script>
     <script src="/static/js/ws.js"></script>
     <script src="/static/js/charts.js"></script>
+    <script src="/static/js/datatable.js"></script>
     <script>
         let servers = [];
         let nodes = [];
         let refreshInterval = null;
+
+        // DataTable for servers
+        const serverTable = new DataTable({
+            containerId: 'server-list',
+            pageSize: 10,
+            searchFields: ['name', 'hostname', 'ip_address', 'public_ip', 'region', 'status', 'agent_version'],
+            columns: [
+                { key: 'status', label: 'Status', filterable: true }
+            ],
+            emptyMessage: 'No servers registered yet.',
+            renderItem: function(server) {
+                const serverNodes = nodes.filter(n => n.server_id === server.id);
+                const badgeClass = server.status === 'online' ? 'badge-online' : 'badge-offline';
+                return '<div class="card">' +
+                    '<div class="card-header">' +
+                        '<h3>' + esc(server.name || server.hostname) + '</h3>' +
+                        '<span class="badge ' + badgeClass + '">' + esc(server.status) + '</span>' +
+                    '</div>' +
+                    '<div class="info-row"><span class="info-label">Hostname</span><span class="info-value">' + esc(server.hostname) + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.public_ip || server.ip_address) + '</span></div>' +
+                    (server.region ? '<div class="info-row"><span class="info-label">Region</span><span class="info-value">' + esc(server.region) + '</span></div>' : '') +
+                    '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
+                    '<div class="gauge-row">' +
+                        '<div class="gauge-item" id="gauge-cpu-' + server.id + '"></div>' +
+                        '<div class="gauge-item" id="gauge-mem-' + server.id + '"></div>' +
+                        '<div class="gauge-item" id="gauge-disk-' + server.id + '"></div>' +
+                    '</div>' +
+                    (serverNodes.length > 0 ? '<div class="mt-8">' + serverNodes.map(renderNodeBadge).join('') + '</div>' : '') +
+                '</div>';
+            },
+            onRender: function(pageData) {
+                pageData.forEach(server => {
+                    const m = serverMetrics[server.id];
+                    const cpuEl = document.getElementById('gauge-cpu-' + server.id);
+                    const memEl = document.getElementById('gauge-mem-' + server.id);
+                    const diskEl = document.getElementById('gauge-disk-' + server.id);
+                    if (cpuEl) Charts.gauge(cpuEl, m ? m.cpu_percent : 0, { label: 'CPU', size: 70 });
+                    if (memEl) Charts.gauge(memEl, m ? m.mem_percent : 0, { label: 'Memory', size: 70 });
+                    if (diskEl) Charts.gauge(diskEl, m ? m.disk_percent : 0, { label: 'Disk', size: 70 });
+                });
+            }
+        });
+        window._dt['server-list'] = serverTable;
 
         async function init() {
             await loadData();
@@ -374,45 +419,7 @@
         let serverMetrics = {}; // serverID → latest system metrics
 
         function renderServers() {
-            const container = document.getElementById('server-list');
-
-            if (servers.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>No servers registered yet.</p>' +
-                    '<button class="btn btn-primary" onclick="showAddServer()">Add Your First Server</button></div>';
-                return;
-            }
-
-            container.innerHTML = servers.map(server => {
-                const serverNodes = nodes.filter(n => n.server_id === server.id);
-                const badgeClass = server.status === 'online' ? 'badge-online' : 'badge-offline';
-                const m = serverMetrics[server.id];
-
-                return '<div class="card">' +
-                    '<div class="card-header">' +
-                        '<h3>' + esc(server.name || server.hostname) + '</h3>' +
-                        '<span class="badge ' + badgeClass + '">' + esc(server.status) + '</span>' +
-                    '</div>' +
-                    '<div class="info-row"><span class="info-label">Hostname</span><span class="info-value">' + esc(server.hostname) + '</span></div>' +
-                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.public_ip || server.ip_address) + '</span></div>' +
-                    (server.region ? '<div class="info-row"><span class="info-label">Region</span><span class="info-value">' + esc(server.region) + '</span></div>' : '') +
-                    '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
-                    '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
-                    '<div class="gauge-row">' +
-                        '<div class="gauge-item" id="gauge-cpu-' + server.id + '"></div>' +
-                        '<div class="gauge-item" id="gauge-mem-' + server.id + '"></div>' +
-                        '<div class="gauge-item" id="gauge-disk-' + server.id + '"></div>' +
-                    '</div>' +
-                    (serverNodes.length > 0 ? '<div class="mt-8">' + serverNodes.map(renderNodeBadge).join('') + '</div>' : '') +
-                '</div>';
-            }).join('');
-
-            // Render gauges after DOM is updated
-            servers.forEach(server => {
-                const m = serverMetrics[server.id];
-                Charts.gauge(document.getElementById('gauge-cpu-' + server.id), m ? m.cpu_percent : 0, { label: 'CPU', size: 70 });
-                Charts.gauge(document.getElementById('gauge-mem-' + server.id), m ? m.mem_percent : 0, { label: 'Memory', size: 70 });
-                Charts.gauge(document.getElementById('gauge-disk-' + server.id), m ? m.disk_percent : 0, { label: 'Disk', size: 70 });
-            });
+            serverTable.setData(servers);
         }
 
         async function loadServerMetrics() {
@@ -820,41 +827,51 @@
             }
         }
 
-        async function loadBinaries() {
-            const container = document.getElementById('binary-list');
-            const data = await API.getJSON('/api/agent/binaries');
-            if (!data || !data.binaries || data.binaries.length === 0) {
-                container.innerHTML = '<span class="text-muted">No binaries uploaded yet.</span>';
-                return;
-            }
-            let html = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>OS/Arch</th><th>Size</th><th>Checksum</th><th>Uploaded</th></tr></thead><tbody>';
-            data.binaries.forEach(b => {
+        const binaryTable = new DataTable({
+            containerId: 'binary-list',
+            pageSize: 10,
+            searchFields: ['version', 'os', 'arch'],
+            emptyMessage: 'No binaries uploaded yet.',
+            renderHeader: function() {
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>OS/Arch</th><th>Size</th><th>Checksum</th><th>Uploaded</th></tr></thead><tbody>';
+            },
+            renderItem: function(b) {
                 const size = (b.size / 1024 / 1024).toFixed(1) + ' MB';
                 const date = new Date(b.uploaded_at * 1000).toLocaleString();
-                html += '<tr><td>' + b.version + '</td><td>' + b.os + '/' + b.arch + '</td><td>' + size + '</td><td title="' + b.checksum + '">' + b.checksum.substring(0, 12) + '...</td><td>' + date + '</td></tr>';
-            });
-            html += '</tbody></table>';
-            if (data.latest_version) {
-                html += '<div class="text-sm text-muted mt-8">Latest version: <strong>' + data.latest_version + '</strong></div>';
-            }
-            container.innerHTML = html;
+                return '<tr><td>' + esc(b.version) + '</td><td>' + esc(b.os + '/' + b.arch) + '</td><td>' + size + '</td><td title="' + esc(b.checksum) + '">' + esc(b.checksum.substring(0, 12)) + '...</td><td>' + date + '</td></tr>';
+            },
+            renderFooter: function() { return '</tbody></table>'; }
+        });
+        window._dt['binary-list'] = binaryTable;
+
+        async function loadBinaries() {
+            const data = await API.getJSON('/api/agent/binaries');
+            binaryTable.setData(data && data.binaries ? data.binaries : []);
         }
 
-        async function loadAgentVersions() {
-            const container = document.getElementById('agent-version-list');
-            if (!servers || servers.length === 0) {
-                container.innerHTML = '<span class="text-muted">No servers registered.</span>';
-                return;
-            }
-            let html = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Agent Version</th><th>OS</th><th>Status</th><th>Action</th></tr></thead><tbody>';
-            servers.forEach(s => {
+        const agentVersionTable = new DataTable({
+            containerId: 'agent-version-list',
+            pageSize: 25,
+            searchFields: ['name', 'agent_version', 'os_info', 'status'],
+            columns: [
+                { key: 'status', label: 'Status', filterable: true }
+            ],
+            emptyMessage: 'No servers registered.',
+            renderHeader: function() {
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Agent Version</th><th>OS</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+            },
+            renderItem: function(s) {
                 const online = s.status === 'online';
                 const badge = online ? '<span class="badge badge-success">online</span>' : '<span class="badge badge-danger">offline</span>';
                 const btn = online ? '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + s.id + '\')">Update</button>' : '-';
-                html += '<tr><td>' + s.name + '</td><td>' + (s.agent_version || 'unknown') + '</td><td>' + (s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
-            });
-            html += '</tbody></table>';
-            container.innerHTML = html;
+                return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.agent_version || 'unknown') + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
+            },
+            renderFooter: function() { return '</tbody></table>'; }
+        });
+        window._dt['agent-version-list'] = agentVersionTable;
+
+        async function loadAgentVersions() {
+            agentVersionTable.setData(servers || []);
         }
 
         async function updateAgent(serverID) {
