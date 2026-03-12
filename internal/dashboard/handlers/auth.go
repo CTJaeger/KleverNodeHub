@@ -508,14 +508,41 @@ func (h *AuthHandler) HandleKleverVerify(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// HandleKleverSetup registers a Klever admin address (protected).
-// POST /api/setup/klever
-func (h *AuthHandler) HandleKleverSetup(w http.ResponseWriter, r *http.Request) {
+// HandleKleverSetupChallenge generates a challenge for wallet linking (protected).
+// POST /api/setup/klever/challenge
+func (h *AuthHandler) HandleKleverSetupChallenge(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Address string `json:"address"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	nonce, err := h.klever.CreateSetupChallenge(req.Address)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"challenge": nonce})
+}
+
+// HandleKleverSetup verifies ownership and registers a Klever admin address (protected).
+// POST /api/setup/klever
+func (h *AuthHandler) HandleKleverSetup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Address   string `json:"address"`
+		Challenge string `json:"challenge"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if err := h.klever.VerifySetupSignature(req.Address, req.Challenge, req.Signature); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "signature verification failed: " + err.Error()})
 		return
 	}
 

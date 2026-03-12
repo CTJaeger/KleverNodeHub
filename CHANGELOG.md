@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Klever Extension Login fix**: Correct signature verification using Klever's signed message format
+  - Extension uses: `0x17 + "Klever Signed Message:\n" + len + message → Keccak-256 → Ed25519`
+  - Replaced incorrect raw/SHA-256 verify with `kleverSignedMessageHash()` + Keccak-256 (`x/crypto/sha3`)
+- **Wallet linking security**: Linking now requires Challenge-Response proof of ownership (new `POST /api/setup/klever/challenge` endpoint)
 - **README**: Added CI badge, Go version badge, MIT license badge
 - **CI fix**: Fixed goimports formatting in klever.go and recovery.go (const/var alignment)
 - **Issue #31 — Password Login (Phase 1)**: Dashboard unusable via IP address (WebAuthn requires domain)

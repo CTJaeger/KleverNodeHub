@@ -128,8 +128,9 @@ func TestKleverFullSignVerify(t *testing.T) {
 		t.Fatalf("CreateChallenge: %v", err)
 	}
 
-	// Sign with private key
-	sig := ed25519.Sign(priv, []byte(nonce))
+	// Sign with private key (Klever Extension pre-hashes with SHA-256)
+	hash := kleverSignedMessageHash(nonce)
+	sig := ed25519.Sign(priv, hash)
 	sigHex := hex.EncodeToString(sig)
 
 	// Verify
@@ -173,7 +174,8 @@ func TestKleverChallengeConsumed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sig := ed25519.Sign(priv, []byte(nonce))
+	hash := kleverSignedMessageHash(nonce)
+	sig := ed25519.Sign(priv, hash)
 	sigHex := hex.EncodeToString(sig)
 
 	// First verify succeeds
