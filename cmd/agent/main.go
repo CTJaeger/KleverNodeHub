@@ -20,11 +20,11 @@ import (
 )
 
 const (
-	heartbeatInterval    = 30 * time.Second
-	discoveryInterval    = 5 * time.Minute
-	nodeMetricsInterval  = 15 * time.Second
-	reconnectBaseDelay   = 1 * time.Second
-	reconnectMaxDelay    = 60 * time.Second
+	heartbeatInterval   = 30 * time.Second
+	discoveryInterval   = 5 * time.Minute
+	nodeMetricsInterval = 15 * time.Second
+	reconnectBaseDelay  = 1 * time.Second
+	reconnectMaxDelay   = 60 * time.Second
 )
 
 func main() {

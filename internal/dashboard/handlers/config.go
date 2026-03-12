@@ -83,8 +83,8 @@ func (h *ConfigHandler) HandleReadFile(w http.ResponseWriter, r *http.Request) {
 
 // configWriteRequest is the request body for writing config files.
 type configWriteRequest struct {
-	Content  string `json:"content"`
-	Restart  bool   `json:"restart"`
+	Content string `json:"content"`
+	Restart bool   `json:"restart"`
 }
 
 // HandleWriteFile handles PUT /api/nodes/{id}/config/{filename}

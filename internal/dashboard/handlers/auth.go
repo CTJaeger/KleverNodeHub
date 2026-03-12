@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -97,7 +98,18 @@ func (h *AuthHandler) HandlePasskeyFinishRegister(w http.ResponseWriter, r *http
 		h.onCredentialsChanged(h.webauthn.Credentials())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "registered"})
+	// Issue JWT tokens so the user is authenticated after registration
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+		return
+	}
+
+	setAuthCookies(w, tokens)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":       "registered",
+		"access_token": tokens.AccessToken,
+	})
 }
 
 // HandlePasskeyFinishLogin completes the WebAuthn login ceremony and issues JWT tokens.
@@ -105,20 +117,25 @@ func (h *AuthHandler) HandlePasskeyFinishRegister(w http.ResponseWriter, r *http
 func (h *AuthHandler) HandlePasskeyFinishLogin(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
+		log.Println("login finish: missing session_id")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id query parameter required"})
 		return
 	}
 
 	parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
 	if err != nil {
+		log.Printf("login finish: parse assertion error: %v", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid assertion: " + err.Error()})
 		return
 	}
 
 	if err := h.webauthn.FinishLogin(sessionID, parsedResponse); err != nil {
+		log.Printf("login finish: webauthn verify error: %v", err)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		return
 	}
+
+	log.Println("login finish: success")
 
 	if h.onCredentialsChanged != nil {
 		h.onCredentialsChanged(h.webauthn.Credentials())

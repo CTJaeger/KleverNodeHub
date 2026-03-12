@@ -11,10 +11,10 @@ import (
 
 // UpdateResult holds the result of an agent binary update.
 type UpdateResult struct {
-	OldVersion string `json:"old_version"`
-	NewVersion string `json:"new_version"`
-	BackupPath string `json:"backup_path"`
-	NeedsRestart bool `json:"needs_restart"`
+	OldVersion   string `json:"old_version"`
+	NewVersion   string `json:"new_version"`
+	BackupPath   string `json:"backup_path"`
+	NeedsRestart bool   `json:"needs_restart"`
 }
 
 // VerifyAndReplaceBinary verifies the checksum of new binary data and replaces

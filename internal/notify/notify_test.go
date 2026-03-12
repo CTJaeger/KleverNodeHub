@@ -16,8 +16,8 @@ type mockChannel struct {
 	sendCount int32
 }
 
-func (m *mockChannel) Name() string         { return m.name }
-func (m *mockChannel) Validate() error       { return nil }
+func (m *mockChannel) Name() string    { return m.name }
+func (m *mockChannel) Validate() error { return nil }
 func (m *mockChannel) Send(_ *Alert) error {
 	atomic.AddInt32(&m.sendCount, 1)
 	return m.sendErr

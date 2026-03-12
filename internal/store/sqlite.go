@@ -16,8 +16,8 @@ import (
 
 // DB wraps the SQLite database connection with encryption support.
 type DB struct {
-	db  *sql.DB
-	mu  sync.RWMutex // Serialize writes (SQLite limitation)
+	db *sql.DB
+	mu sync.RWMutex // Serialize writes (SQLite limitation)
 }
 
 // Open opens or creates a SQLite database at the given path.

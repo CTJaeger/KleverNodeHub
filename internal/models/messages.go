@@ -3,7 +3,7 @@ package models
 // Message is the WebSocket message envelope between dashboard and agents.
 type Message struct {
 	ID        string `json:"id"`
-	Type      string `json:"type"`    // "command", "response", "event", "stream"
+	Type      string `json:"type"` // "command", "response", "event", "stream"
 	Action    string `json:"action"`
 	Payload   any    `json:"payload,omitempty"`
 	Timestamp int64  `json:"timestamp"`
@@ -104,7 +104,7 @@ type NodeNonceStallEvent struct {
 type ProvisionRequest struct {
 	ServerID        string            `json:"server_id"`
 	NodeName        string            `json:"node_name"`
-	Network         string            `json:"network"`          // "mainnet" or "testnet"
+	Network         string            `json:"network"` // "mainnet" or "testnet"
 	ImageTag        string            `json:"image_tag"`
 	Port            int               `json:"port"`
 	GenerateKeys    bool              `json:"generate_keys"`

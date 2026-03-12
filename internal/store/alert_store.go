@@ -13,7 +13,7 @@ type AlertRule struct {
 	Name        string  `json:"name"`
 	Enabled     bool    `json:"enabled"`
 	MetricName  string  `json:"metric_name"`
-	Condition   string  `json:"condition"`    // gt, lt, eq, stall
+	Condition   string  `json:"condition"` // gt, lt, eq, stall
 	Threshold   float64 `json:"threshold"`
 	DurationSec int     `json:"duration_sec"` // must breach for this many seconds
 	Severity    string  `json:"severity"`     // critical, warning, info

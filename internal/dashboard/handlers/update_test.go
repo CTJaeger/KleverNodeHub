@@ -13,7 +13,7 @@ func TestParseOSArch(t *testing.T) {
 		{"linux/amd64", "linux", "amd64"},
 		{"darwin/arm64", "darwin", "arm64"},
 		{"windows/amd64", "windows", "amd64"},
-		{"", "linux", "amd64"},       // default
+		{"", "linux", "amd64"},        // default
 		{"unknown", "linux", "amd64"}, // no slash → default
 	}
 

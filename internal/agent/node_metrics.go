@@ -35,9 +35,9 @@ type nodeEndpoint struct {
 }
 
 type nonceState struct {
-	nonce    uint64
-	firstAt  time.Time // when this nonce was first seen
-	alerted  bool      // whether we already sent a stall alert
+	nonce   uint64
+	firstAt time.Time // when this nonce was first seen
+	alerted bool      // whether we already sent a stall alert
 }
 
 // nodeStatusResponse is the raw JSON from /node/status.

@@ -68,10 +68,10 @@ type mountPoint struct {
 
 // containerListEntry is the minimal subset of Docker's container list response.
 type containerListEntry struct {
-	ID    string `json:"Id"`
+	ID    string   `json:"Id"`
 	Names []string `json:"Names"`
-	Image string `json:"Image"`
-	State string `json:"State"` // "running", "exited"
+	Image string   `json:"Image"`
+	State string   `json:"State"` // "running", "exited"
 }
 
 // ListKleverContainers returns IDs of all containers using the klever-go image.

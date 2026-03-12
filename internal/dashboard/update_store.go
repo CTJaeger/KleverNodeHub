@@ -15,10 +15,10 @@ import (
 // AgentBinaryInfo holds metadata about an uploaded agent binary.
 type AgentBinaryInfo struct {
 	Version    string `json:"version"`
-	Checksum   string `json:"checksum"`   // SHA-256 hex
+	Checksum   string `json:"checksum"` // SHA-256 hex
 	Size       int64  `json:"size"`
-	OS         string `json:"os"`         // e.g. "linux"
-	Arch       string `json:"arch"`       // e.g. "amd64"
+	OS         string `json:"os"`   // e.g. "linux"
+	Arch       string `json:"arch"` // e.g. "amd64"
 	UploadedAt int64  `json:"uploaded_at"`
 	FilePath   string `json:"-"` // internal, not serialized to API
 }
