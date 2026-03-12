@@ -114,22 +114,49 @@
                 <!-- Notifications -->
                 <div id="tab-notifications" class="tab-content">
                     <div class="settings-section">
+                        <h4>Notification Channels</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Configure where alerts are sent. Each channel can filter by severity and alert type.</p>
+                        <div id="channel-list" style="margin-bottom:16px;"></div>
+                        <button class="btn btn-primary btn-sm" onclick="showAddChannel()">+ Add Channel</button>
+                    </div>
+
+                    <div id="channel-form" class="settings-section" style="display:none;border:1px solid var(--border);padding:16px;border-radius:8px;margin-top:16px;">
+                        <h4 id="channel-form-title">Add Channel</h4>
                         <div class="setting-row">
-                            <div>
-                                <div class="setting-label">Default Severity Filter</div>
-                                <div class="setting-desc">Minimum severity for notifications</div>
-                            </div>
-                            <select class="form-input" id="s-notify_default_severity">
-                                <option value="info">Info</option>
-                                <option value="warning">Warning</option>
-                                <option value="critical">Critical</option>
+                            <div><div class="setting-label">Name</div></div>
+                            <input class="form-input" id="ch-name" placeholder="e.g. telegram-ops">
+                        </div>
+                        <div class="setting-row">
+                            <div><div class="setting-label">Type</div></div>
+                            <select class="form-input" id="ch-type" onchange="updateChannelFields()">
+                                <option value="telegram">Telegram</option>
+                                <option value="pushover">Pushover</option>
+                                <option value="webhook">Webhook</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-primary btn-sm" onclick="saveSection('notifications')">Save</button>
-                        <button class="btn btn-secondary btn-sm" onclick="resetSection('notifications')">Reset to Defaults</button>
-                        <a href="/overview" class="btn btn-secondary btn-sm" style="margin-left:auto;">Manage Channels</a>
+                        <div id="ch-fields"></div>
+                        <div class="setting-row" style="margin-top:12px;">
+                            <div><div class="setting-label">Severity Filter</div><div class="setting-desc">Leave empty for all</div></div>
+                            <div style="display:flex;gap:12px;">
+                                <label><input type="checkbox" class="ch-sev" value="critical"> Critical</label>
+                                <label><input type="checkbox" class="ch-sev" value="warning"> Warning</label>
+                                <label><input type="checkbox" class="ch-sev" value="info"> Info</label>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div><div class="setting-label">Alert Type Filter</div><div class="setting-desc">Leave empty for all</div></div>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                                <label><input type="checkbox" class="ch-atype" value="node_down"> Node Down</label>
+                                <label><input type="checkbox" class="ch-atype" value="nonce_stall"> Nonce Stall</label>
+                                <label><input type="checkbox" class="ch-atype" value="resource"> Resource</label>
+                                <label><input type="checkbox" class="ch-atype" value="metric"> Metric</label>
+                                <label><input type="checkbox" class="ch-atype" value="resolved"> Resolved</label>
+                            </div>
+                        </div>
+                        <div class="section-actions">
+                            <button class="btn btn-primary btn-sm" onclick="saveChannel()">Save Channel</button>
+                            <button class="btn btn-secondary btn-sm" onclick="hideChannelForm()">Cancel</button>
+                        </div>
                     </div>
                 </div>
 
@@ -246,8 +273,153 @@
             showStatus(category + ' settings reset to defaults');
         }
 
+        // --- Channel management ---
+        let editingChannel = null;
+
+        const channelFields = {
+            telegram: [
+                {key: 'bot_token', label: 'Bot Token', placeholder: '123456:ABC-DEF...'},
+                {key: 'chat_id', label: 'Chat ID', placeholder: '-1001234567890'}
+            ],
+            pushover: [
+                {key: 'user_key', label: 'User Key', placeholder: 'u...'},
+                {key: 'app_token', label: 'App Token', placeholder: 'a...'}
+            ],
+            webhook: [
+                {key: 'url', label: 'Webhook URL', placeholder: 'https://...'}
+            ]
+        };
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function updateChannelFields() {
+            const type = document.getElementById('ch-type').value;
+            const container = document.getElementById('ch-fields');
+            container.innerHTML = (channelFields[type] || []).map(f =>
+                '<div class="setting-row">' +
+                    '<div><div class="setting-label">' + esc(f.label) + '</div></div>' +
+                    '<input class="form-input ch-config" data-key="' + f.key + '" placeholder="' + esc(f.placeholder) + '">' +
+                '</div>'
+            ).join('');
+        }
+
+        function showAddChannel() {
+            editingChannel = null;
+            document.getElementById('channel-form-title').textContent = 'Add Channel';
+            document.getElementById('ch-name').value = '';
+            document.getElementById('ch-name').disabled = false;
+            document.getElementById('ch-type').value = 'telegram';
+            document.querySelectorAll('.ch-sev').forEach(c => c.checked = false);
+            document.querySelectorAll('.ch-atype').forEach(c => c.checked = false);
+            updateChannelFields();
+            document.getElementById('channel-form').style.display = 'block';
+        }
+
+        function editChannel(ch) {
+            editingChannel = ch.name;
+            document.getElementById('channel-form-title').textContent = 'Edit Channel: ' + ch.name;
+            document.getElementById('ch-name').value = ch.name;
+            document.getElementById('ch-name').disabled = true;
+            document.getElementById('ch-type').value = ch.type || 'telegram';
+            updateChannelFields();
+            // Set severity checkboxes
+            document.querySelectorAll('.ch-sev').forEach(c => {
+                c.checked = (ch.filter.severities || []).includes(c.value);
+            });
+            // Set alert type checkboxes
+            document.querySelectorAll('.ch-atype').forEach(c => {
+                c.checked = (ch.filter.alert_types || []).includes(c.value);
+            });
+            document.getElementById('channel-form').style.display = 'block';
+        }
+
+        function hideChannelForm() {
+            document.getElementById('channel-form').style.display = 'none';
+            editingChannel = null;
+        }
+
+        async function saveChannel() {
+            const name = document.getElementById('ch-name').value.trim();
+            const type = document.getElementById('ch-type').value;
+            const config = {};
+            document.querySelectorAll('.ch-config').forEach(el => {
+                if (el.value.trim()) config[el.dataset.key] = el.value.trim();
+            });
+            const severities = Array.from(document.querySelectorAll('.ch-sev:checked')).map(c => c.value);
+            const alertTypes = Array.from(document.querySelectorAll('.ch-atype:checked')).map(c => c.value);
+
+            const body = {
+                name: name,
+                type: type,
+                config: config,
+                filter: { severities: severities, alert_types: alertTypes }
+            };
+
+            let resp;
+            if (editingChannel) {
+                resp = await API.put('/api/notifications/channels/' + encodeURIComponent(editingChannel), body);
+            } else {
+                resp = await API.post('/api/notifications/channels', body);
+            }
+
+            if (resp && resp.ok) {
+                showStatus('Channel saved');
+                hideChannelForm();
+                await loadChannels();
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed to save'), true);
+            }
+        }
+
+        async function deleteChannel(name) {
+            if (!confirm('Delete channel "' + name + '"?')) return;
+            const resp = await API.delete('/api/notifications/channels/' + encodeURIComponent(name));
+            if (resp && resp.ok) {
+                showStatus('Channel deleted');
+                await loadChannels();
+            } else {
+                showStatus('Error deleting channel', true);
+            }
+        }
+
+        async function testChannel(name) {
+            const resp = await API.post('/api/notifications/channels/' + encodeURIComponent(name) + '/test');
+            if (resp && resp.ok) {
+                showStatus('Test notification sent to ' + name);
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Test failed: ' + (data.error || 'unknown error'), true);
+            }
+        }
+
+        async function loadChannels() {
+            const data = await API.getJSON('/api/notifications/channels');
+            if (!data) return;
+            const channels = data.channels || [];
+            const container = document.getElementById('channel-list');
+            if (channels.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No channels configured.</p>';
+                return;
+            }
+            container.innerHTML = channels.map(ch => {
+                const sevs = (ch.filter.severities || []).join(', ') || 'all';
+                const types = (ch.filter.alert_types || []).join(', ') || 'all';
+                return '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">' +
+                    '<div style="flex:1;">' +
+                        '<strong>' + esc(ch.name) + '</strong> <span style="color:var(--text-muted);">(' + esc(ch.type || '?') + ')</span>' +
+                        '<div style="color:var(--text-secondary);font-size:12px;">Severities: ' + esc(sevs) + ' | Types: ' + esc(types) + '</div>' +
+                    '</div>' +
+                    '<button class="btn btn-secondary btn-sm" onclick=\'editChannel(' + JSON.stringify(ch).replace(/'/g, "&#39;") + ')\'>Edit</button>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="testChannel(\'' + esc(ch.name) + '\')">Test</button>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="deleteChannel(\'' + esc(ch.name) + '\')" style="color:var(--danger);">Delete</button>' +
+                '</div>';
+            }).join('');
+        }
+
         // Init
         loadSettings();
+        loadChannels();
     </script>
 </body>
 </html>

@@ -16,11 +16,12 @@ const (
 
 // Alert represents a notification to be sent.
 type Alert struct {
-	Title    string `json:"title"`
-	Message  string `json:"message"`
-	Severity string `json:"severity"` // info, warning, critical
-	Source   string `json:"source"`   // e.g., "node:klever-node1", "system:server1"
-	Time     int64  `json:"time"`
+	Title     string `json:"title"`
+	Message   string `json:"message"`
+	Severity  string `json:"severity"`   // info, warning, critical
+	Source    string `json:"source"`     // e.g., "node:klever-node1", "system:server1"
+	AlertType string `json:"alert_type"` // e.g., "node_down", "nonce_stall", "resource", "version"
+	Time      int64  `json:"time"`
 }
 
 // Channel is the interface for notification delivery channels.
@@ -30,23 +31,55 @@ type Channel interface {
 	Validate() error
 }
 
-// HistoryEntry records a sent notification.
-type HistoryEntry struct {
-	ID        int64  `json:"id"`
-	Channel   string `json:"channel"`
-	Title     string `json:"title"`
-	Message   string `json:"message"`
-	Severity  string `json:"severity"`
-	Source    string `json:"source"`
-	Success   bool   `json:"success"`
-	Error     string `json:"error,omitempty"`
-	SentAt    int64  `json:"sent_at"`
+// ChannelFilter defines which alerts a channel should receive.
+type ChannelFilter struct {
+	Severities []string `json:"severities,omitempty"` // empty = all
+	AlertTypes []string `json:"alert_types,omitempty"` // empty = all
 }
 
-// Manager sends alerts to all registered channels.
+// MatchesFilter checks if an alert passes the filter.
+func (f *ChannelFilter) MatchesFilter(severity, alertType string) bool {
+	if len(f.Severities) > 0 && !containsStr(f.Severities, severity) {
+		return false
+	}
+	if len(f.AlertTypes) > 0 && alertType != "" && !containsStr(f.AlertTypes, alertType) {
+		return false
+	}
+	return true
+}
+
+func containsStr(slice []string, val string) bool {
+	for _, s := range slice {
+		if s == val {
+			return true
+		}
+	}
+	return false
+}
+
+// HistoryEntry records a sent notification.
+type HistoryEntry struct {
+	ID       int64  `json:"id"`
+	Channel  string `json:"channel"`
+	Title    string `json:"title"`
+	Message  string `json:"message"`
+	Severity string `json:"severity"`
+	Source   string `json:"source"`
+	Success  bool   `json:"success"`
+	Error    string `json:"error,omitempty"`
+	SentAt   int64  `json:"sent_at"`
+}
+
+// channelEntry pairs a channel with its filter.
+type channelEntry struct {
+	channel Channel
+	filter  ChannelFilter
+}
+
+// Manager sends alerts to registered channels with optional filtering.
 type Manager struct {
 	mu       sync.RWMutex
-	channels []Channel
+	channels []channelEntry
 	history  []HistoryEntry
 	maxHist  int
 }
@@ -58,23 +91,61 @@ func NewManager() *Manager {
 	}
 }
 
-// AddChannel registers a notification channel.
+// AddChannel registers a notification channel with no filter (receives all alerts).
 func (m *Manager) AddChannel(ch Channel) {
+	m.AddChannelWithFilter(ch, ChannelFilter{})
+}
+
+// AddChannelWithFilter registers a notification channel with a filter.
+func (m *Manager) AddChannelWithFilter(ch Channel, filter ChannelFilter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.channels = append(m.channels, ch)
+	m.channels = append(m.channels, channelEntry{channel: ch, filter: filter})
 }
 
 // RemoveChannel removes a channel by name.
 func (m *Manager) RemoveChannel(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, ch := range m.channels {
-		if ch.Name() == name {
+	for i, entry := range m.channels {
+		if entry.channel.Name() == name {
 			m.channels = append(m.channels[:i], m.channels[i+1:]...)
 			return
 		}
 	}
+}
+
+// UpdateChannelFilter updates the filter for a channel by name.
+func (m *Manager) UpdateChannelFilter(name string, filter ChannelFilter) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, entry := range m.channels {
+		if entry.channel.Name() == name {
+			m.channels[i].filter = filter
+			return nil
+		}
+	}
+	return fmt.Errorf("channel not found: %s", name)
+}
+
+// ChannelInfo contains channel name and its filter for API responses.
+type ChannelInfo struct {
+	Name   string        `json:"name"`
+	Filter ChannelFilter `json:"filter"`
+}
+
+// ChannelsWithFilters returns channel names and their filters.
+func (m *Manager) ChannelsWithFilters() []ChannelInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ChannelInfo, len(m.channels))
+	for i, entry := range m.channels {
+		result[i] = ChannelInfo{
+			Name:   entry.channel.Name(),
+			Filter: entry.filter,
+		}
+	}
+	return result
 }
 
 // Channels returns the list of registered channel names.
@@ -82,26 +153,30 @@ func (m *Manager) Channels() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	names := make([]string, len(m.channels))
-	for i, ch := range m.channels {
-		names[i] = ch.Name()
+	for i, entry := range m.channels {
+		names[i] = entry.channel.Name()
 	}
 	return names
 }
 
-// Send dispatches an alert to all registered channels (fan-out).
+// Send dispatches an alert to all matching channels (respects filters).
 func (m *Manager) Send(alert *Alert) {
 	if alert.Time == 0 {
 		alert.Time = time.Now().Unix()
 	}
 
 	m.mu.RLock()
-	channels := make([]Channel, len(m.channels))
-	copy(channels, m.channels)
+	entries := make([]channelEntry, len(m.channels))
+	copy(entries, m.channels)
 	m.mu.RUnlock()
 
-	for _, ch := range channels {
-		entry := HistoryEntry{
-			Channel:  ch.Name(),
+	for _, entry := range entries {
+		if !entry.filter.MatchesFilter(alert.Severity, alert.AlertType) {
+			continue
+		}
+
+		histEntry := HistoryEntry{
+			Channel:  entry.channel.Name(),
 			Title:    alert.Title,
 			Message:  alert.Message,
 			Severity: alert.Severity,
@@ -109,26 +184,26 @@ func (m *Manager) Send(alert *Alert) {
 			SentAt:   time.Now().Unix(),
 		}
 
-		if err := ch.Send(alert); err != nil {
-			entry.Success = false
-			entry.Error = err.Error()
-			log.Printf("notify: %s failed: %v", ch.Name(), err)
+		if err := entry.channel.Send(alert); err != nil {
+			histEntry.Success = false
+			histEntry.Error = err.Error()
+			log.Printf("notify: %s failed: %v", entry.channel.Name(), err)
 		} else {
-			entry.Success = true
+			histEntry.Success = true
 		}
 
-		m.addHistory(entry)
+		m.addHistory(histEntry)
 	}
 }
 
-// SendTest sends a test alert to a specific channel.
+// SendTest sends a test alert to a specific channel (bypasses filters).
 func (m *Manager) SendTest(channelName string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for _, ch := range m.channels {
-		if ch.Name() == channelName {
-			return ch.Send(&Alert{
+	for _, entry := range m.channels {
+		if entry.channel.Name() == channelName {
+			return entry.channel.Send(&Alert{
 				Title:    "Test Notification",
 				Message:  "This is a test notification from Klever Node Hub.",
 				Severity: SeverityInfo,
@@ -149,7 +224,6 @@ func (m *Manager) History(limit int) []HistoryEntry {
 		limit = len(m.history)
 	}
 
-	// Return most recent entries
 	start := len(m.history) - limit
 	if start < 0 {
 		start = 0
@@ -167,7 +241,6 @@ func (m *Manager) addHistory(entry HistoryEntry) {
 	entry.ID = int64(len(m.history) + 1)
 	m.history = append(m.history, entry)
 
-	// Trim old entries
 	if len(m.history) > m.maxHist {
 		m.history = m.history[len(m.history)-m.maxHist:]
 	}

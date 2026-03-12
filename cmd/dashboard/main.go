@@ -211,6 +211,7 @@ func main() {
 	mux.Handle("GET /api/nodes/{id}/keys/backups", authMw(http.HandlerFunc(keyHandler.HandleListKeyBackups)))
 	mux.Handle("GET /api/notifications/channels", authMw(http.HandlerFunc(notifyHandler.HandleListChannels)))
 	mux.Handle("POST /api/notifications/channels", authMw(http.HandlerFunc(notifyHandler.HandleAddChannel)))
+	mux.Handle("PUT /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleUpdateChannel)))
 	mux.Handle("DELETE /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleRemoveChannel)))
 	mux.Handle("POST /api/notifications/channels/{name}/test", authMw(http.HandlerFunc(notifyHandler.HandleTestChannel)))
 	mux.Handle("GET /api/notifications/history", authMw(http.HandlerFunc(notifyHandler.HandleHistory)))
