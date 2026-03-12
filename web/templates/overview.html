@@ -20,6 +20,7 @@
                 <a href="/overview" class="active">Overview</a>
                 <a href="#" onclick="showAlerts()">Alerts</a>
                 <a href="#" onclick="showAlertRules()">Alert Rules</a>
+                <a href="#" onclick="showAgentUpdate()">Agent Update</a>
                 <a href="#" onclick="showAddServer()">Add Server</a>
                 <a href="#" onclick="API.logout()">Logout</a>
             </nav>
@@ -252,6 +253,61 @@
                             <button class="btn btn-primary btn-sm" onclick="saveRule()">Save Rule</button>
                             <button class="btn btn-secondary btn-sm" onclick="cancelRule()">Cancel</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Agent Update Panel -->
+            <div id="agent-update-panel" class="hidden">
+                <div class="card mt-16">
+                    <div class="card-header">
+                        <h3>Agent Update</h3>
+                        <button class="btn btn-sm btn-secondary" onclick="hideAgentUpdate()">Close</button>
+                    </div>
+
+                    <!-- Upload Binary -->
+                    <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
+                        <h4>Upload Agent Binary</h4>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                            <div class="form-group">
+                                <label class="form-label">Version</label>
+                                <input class="form-input" id="upload-version" placeholder="e.g. v0.2.0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">OS</label>
+                                <select class="form-input" id="upload-os">
+                                    <option value="linux">linux</option>
+                                    <option value="darwin">darwin</option>
+                                    <option value="windows">windows</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Arch</label>
+                                <select class="form-input" id="upload-arch">
+                                    <option value="amd64">amd64</option>
+                                    <option value="arm64">arm64</option>
+                                    <option value="arm">arm</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Binary File</label>
+                            <input type="file" id="upload-binary" class="form-input">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="uploadBinary()">Upload</button>
+                        <span id="upload-status" class="text-sm text-muted" style="margin-left:8px;"></span>
+                    </div>
+
+                    <!-- Available Binaries -->
+                    <h4>Available Binaries</h4>
+                    <div id="binary-list" class="text-muted">Loading...</div>
+
+                    <!-- Agent Versions -->
+                    <h4 class="mt-16">Server Agent Versions</h4>
+                    <div id="agent-version-list"></div>
+
+                    <div class="mt-16">
+                        <button class="btn btn-primary btn-sm" onclick="updateAllAgents()">Update All Agents</button>
+                        <span id="update-all-status" class="text-sm text-muted" style="margin-left:8px;"></span>
                     </div>
                 </div>
             </div>
@@ -709,6 +765,136 @@
             await loadActiveAlerts();
             // Refresh active alerts every 30s
             setInterval(loadActiveAlerts, 30000);
+        }
+
+        // ── Agent Update ──
+        function showAgentUpdate() {
+            document.querySelectorAll('[id$="-panel"]').forEach(p => p.classList.add('hidden'));
+            document.getElementById('agent-update-panel').classList.remove('hidden');
+            loadBinaries();
+            loadAgentVersions();
+        }
+
+        function hideAgentUpdate() {
+            document.getElementById('agent-update-panel').classList.add('hidden');
+        }
+
+        async function uploadBinary() {
+            const version = document.getElementById('upload-version').value.trim();
+            const os = document.getElementById('upload-os').value;
+            const arch = document.getElementById('upload-arch').value;
+            const fileInput = document.getElementById('upload-binary');
+            const status = document.getElementById('upload-status');
+
+            if (!version || !fileInput.files.length) {
+                status.textContent = 'Version and binary file are required';
+                return;
+            }
+
+            status.textContent = 'Uploading...';
+            const form = new FormData();
+            form.append('version', version);
+            form.append('os', os);
+            form.append('arch', arch);
+            form.append('binary', fileInput.files[0]);
+
+            try {
+                const resp = await fetch('/api/agent/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + API.token },
+                    body: form
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    status.textContent = 'Error: ' + (data.error || resp.statusText);
+                    return;
+                }
+                status.textContent = 'Uploaded ' + data.version + ' (' + data.checksum.substring(0, 12) + '...)';
+                document.getElementById('upload-version').value = '';
+                fileInput.value = '';
+                loadBinaries();
+            } catch (e) {
+                status.textContent = 'Upload failed: ' + e.message;
+            }
+        }
+
+        async function loadBinaries() {
+            const container = document.getElementById('binary-list');
+            const data = await API.getJSON('/api/agent/binaries');
+            if (!data || !data.binaries || data.binaries.length === 0) {
+                container.innerHTML = '<span class="text-muted">No binaries uploaded yet.</span>';
+                return;
+            }
+            let html = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>OS/Arch</th><th>Size</th><th>Checksum</th><th>Uploaded</th></tr></thead><tbody>';
+            data.binaries.forEach(b => {
+                const size = (b.size / 1024 / 1024).toFixed(1) + ' MB';
+                const date = new Date(b.uploaded_at * 1000).toLocaleString();
+                html += '<tr><td>' + b.version + '</td><td>' + b.os + '/' + b.arch + '</td><td>' + size + '</td><td title="' + b.checksum + '">' + b.checksum.substring(0, 12) + '...</td><td>' + date + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            if (data.latest_version) {
+                html += '<div class="text-sm text-muted mt-8">Latest version: <strong>' + data.latest_version + '</strong></div>';
+            }
+            container.innerHTML = html;
+        }
+
+        async function loadAgentVersions() {
+            const container = document.getElementById('agent-version-list');
+            if (!servers || servers.length === 0) {
+                container.innerHTML = '<span class="text-muted">No servers registered.</span>';
+                return;
+            }
+            let html = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Agent Version</th><th>OS</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+            servers.forEach(s => {
+                const online = s.status === 'online';
+                const badge = online ? '<span class="badge badge-success">online</span>' : '<span class="badge badge-danger">offline</span>';
+                const btn = online ? '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + s.id + '\')">Update</button>' : '-';
+                html += '<tr><td>' + s.name + '</td><td>' + (s.agent_version || 'unknown') + '</td><td>' + (s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function updateAgent(serverID) {
+            if (!confirm('Send update to this agent?')) return;
+            try {
+                const resp = await fetch('/api/agent/update/' + serverID, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + API.token }
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    alert('Update failed: ' + (data.error || resp.statusText));
+                    return;
+                }
+                alert('Agent updated to ' + data.version);
+                loadAgentVersions();
+            } catch (e) {
+                alert('Update error: ' + e.message);
+            }
+        }
+
+        async function updateAllAgents() {
+            if (!confirm('Update ALL connected agents?')) return;
+            const status = document.getElementById('update-all-status');
+            status.textContent = 'Updating...';
+            try {
+                const resp = await fetch('/api/agent/update/all', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + API.token }
+                });
+                const data = await resp.json();
+                if (!data.results) {
+                    status.textContent = 'No results returned';
+                    return;
+                }
+                const ok = data.results.filter(r => r.success).length;
+                const fail = data.results.filter(r => !r.success).length;
+                status.textContent = ok + ' updated, ' + fail + ' failed';
+                loadAgentVersions();
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+            }
         }
 
         init();

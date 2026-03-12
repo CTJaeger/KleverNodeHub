@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #25**: Agent auto-update mechanism
+  - `updater.go`: SHA-256 checksum verification, binary backup + atomic replacement (Windows fallback), rollback support
+  - `UpdateStore`: Binary storage on disk with JSON index, store/get/list by OS/arch, persistence across restarts
+  - `UpdateHandler`: Upload binary (multipart, 100MB limit), list binaries, update single agent, update all agents, latest version endpoint
+  - Agent executor: `agent.update` command receives base64-encoded binary via WebSocket, verifies + replaces
+  - Whitelist: `agent.update` command registered (no container required)
+  - Dashboard API routes: POST upload, GET binaries, GET version, POST update/{server_id}, POST update/all
+  - Agent Update UI panel: upload form (version/os/arch/file), binary list table, server agent version list with per-server update buttons, update-all button
+  - 14 unit tests (SHA256Hex, UpdateStore CRUD/persistence/overwrite/checksum, ParseOSArch)
+
 - **Issue #24**: Alert rules engine with configurable thresholds
   - Migration 3: `alert_rules` and `alerts` tables with indexes
   - `AlertStore` with full CRUD for rules and alert records (create, update, delete, list, query)

@@ -31,6 +31,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"key.export":     {Description: "Export a validator key", RequiresContainer: false},
 	"key.backup":     {Description: "Backup the validator key", RequiresContainer: false},
 	"key.backups":    {Description: "List validator key backups", RequiresContainer: false},
+	"agent.update":   {Description: "Update agent binary", RequiresContainer: false},
 }
 
 // CommandSpec defines constraints for a whitelisted command.
