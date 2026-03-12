@@ -46,7 +46,7 @@ func setupDockerHandler(t *testing.T) (*DockerHandler, *ws.Hub, func()) {
 		CreatedAt:      time.Now().Unix(),
 	})
 
-	hub := ws.NewHub(serverStore)
+	hub := ws.NewHub(serverStore, nodeStore)
 	tagCache := dashboard.NewTagCache()
 	handler := NewDockerHandler(hub, nodeStore, tagCache)
 	return handler, hub, func() { _ = db.Close() }

@@ -63,6 +63,7 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Register in hub
 	agentConn := h.hub.Register(serverID)
+	h.hub.BroadcastToBrowsers("agent.connected", map[string]string{"server_id": serverID})
 
 	// Run read and write loops
 	ctx, cancel := context.WithCancel(r.Context())
@@ -95,6 +96,7 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Cleanup
 	h.hub.Unregister(serverID)
+	h.hub.BroadcastToBrowsers("agent.disconnected", map[string]string{"server_id": serverID})
 	_ = conn.Close(websocket.StatusNormalClosure, "closing")
 	log.Printf("agent WebSocket disconnected: %s", serverID)
 }
@@ -130,12 +132,23 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)
+			h.hub.BroadcastToBrowsers("agent.discovery", map[string]any{
+				"server_id": serverID,
+			})
+			h.hub.BroadcastToBrowsers("node.update", map[string]any{
+				"server_id": serverID,
+			})
 
 		case "node.metrics":
 			h.handleNodeMetrics(&msg)
+			h.hub.BroadcastToBrowsers("node.metrics", msg.Payload)
 
 		case "node.nonce_stall":
 			h.handleNonceStall(serverID, &msg)
+			h.hub.BroadcastToBrowsers("node.nonce_stall", map[string]any{
+				"server_id": serverID,
+				"payload":   msg.Payload,
+			})
 
 		case "command.result":
 			h.handleCommandResult(&msg)
@@ -162,9 +175,16 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 
 	log.Printf("discovery from %s: %d nodes found", serverID, len(report.Nodes))
 
+	existing, _ := h.nodeStore.ListByServer(serverID)
+
 	for _, discovered := range report.Nodes {
-		// Check if node already exists
-		existing, _ := h.nodeStore.ListByServer(serverID)
+		meta := map[string]any{
+			"cpu_percent": discovered.CPUPercent,
+			"mem_used":    discovered.MemUsed,
+			"mem_limit":   discovered.MemLimit,
+			"mem_percent": discovered.MemPercent,
+		}
+
 		found := false
 		for i := range existing {
 			if existing[i].ContainerName == discovered.ContainerName {
@@ -174,6 +194,7 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				existing[i].RestAPIPort = discovered.RestAPIPort
 				existing[i].DataDirectory = discovered.DataDirectory
 				existing[i].BLSPublicKey = discovered.BLSPublicKey
+				existing[i].Metadata = meta
 				_ = h.nodeStore.Update(&existing[i])
 				break
 			}
@@ -197,6 +218,7 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				DataDirectory:   discovered.DataDirectory,
 				BLSPublicKey:    discovered.BLSPublicKey,
 				Status:          discovered.Status,
+				Metadata:        meta,
 				CreatedAt:       time.Now().Unix(),
 			})
 		}
@@ -220,7 +242,18 @@ func (h *AgentHandler) handleHeartbeatMetrics(serverID string, msg *models.Messa
 	}
 
 	m := hb.Metrics
-	if err := h.metricsStore.InsertSystemMetrics(serverID, m.CPUPercent, m.MemPercent, m.DiskPercent, m.LoadAvg1, m.CollectedAt); err != nil {
+	row := &store.SystemMetricsRow{
+		CPUPercent:  m.CPUPercent,
+		MemPercent:  m.MemPercent,
+		MemTotal:    m.MemTotal,
+		MemUsed:     m.MemUsed,
+		DiskPercent: m.DiskPercent,
+		DiskTotal:   m.DiskTotal,
+		DiskUsed:    m.DiskUsed,
+		LoadAvg1:    m.LoadAvg1,
+		CollectedAt: m.CollectedAt,
+	}
+	if err := h.metricsStore.InsertSystemMetrics(serverID, row); err != nil {
 		log.Printf("store system metrics for %s: %v", serverID, err)
 	}
 }
@@ -252,8 +285,14 @@ func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
 		return
 	}
 
-	if err := h.metricsStore.InsertNodeMetrics(evt.NodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
-		log.Printf("store node metrics for %s: %v", evt.NodeID, err)
+	// Resolve container name to dashboard node ID
+	nodeID := evt.NodeID
+	if node, err := h.nodeStore.GetByContainerID(evt.NodeID); err == nil {
+		nodeID = node.ID
+	}
+
+	if err := h.metricsStore.InsertNodeMetrics(nodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
+		log.Printf("store node metrics for %s: %v", nodeID, err)
 	}
 }
 

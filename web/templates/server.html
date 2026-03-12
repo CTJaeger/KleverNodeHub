@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Server Detail</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-top-strip">
+        <span>Operations View</span>
+        <span>Server telemetry and node control</span>
+    </div>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Mobile Top Bar -->
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Klever Node Hub</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <!-- Page Header Bar -->
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                    <a href="/overview" style="color:var(--text-secondary);font-size:13px;">Dashboard</a>
+                    <span style="color:var(--text-muted);">/</span>
+                    <span class="page-header-title" id="page-server-name">Server</span>
+                </div>
+                <div class="page-header-center">
+                    <label class="page-search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                        <input id="server-search" class="page-search-input" placeholder="Search nodes, type, image or status..." oninput="setServerPageSearch(this.value)">
+                    </label>
+                </div>
+                <div class="page-header-right">
+                    <div class="page-header-status">
+                        <span class="status-dot connected"></span>
+                        <span id="server-live-status">Live server view</span>
+                    </div>
+                    <button class="page-header-icon-btn" onclick="loadData()" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page-body">
+
+            <!-- Server Header -->
+            <div class="card server-hero mb-16">
+                <div class="server-hero-main">
+                    <div class="node-hero-copy">
+                        <div class="node-hero-eyebrow">Server Overview</div>
+                        <h2 id="server-name">Loading...</h2>
+                        <span class="text-sm text-muted node-hero-sub" id="server-info"></span>
+                        <div class="node-hero-meta" id="server-hero-meta">
+                            <span class="node-chip">Waiting for server data...</span>
+                        </div>
+                    </div>
+                    <div class="node-hero-side">
+                        <div class="node-hero-status-row">
+                            <span class="badge" id="server-status">-</span>
+                            <span class="node-chip node-chip-accent" id="server-health-chip">Agent pending</span>
+                        </div>
+                        <div class="node-hero-state-label">Operational Snapshot</div>
+                        <div class="node-hero-state-grid" id="server-hero-state">
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Nodes</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Running</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">CPU</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                            <div class="node-hero-state-card">
+                                <span class="node-hero-state-key">Memory</span>
+                                <strong class="node-hero-state-value">-</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-tabs-shell mb-16">
+                <div class="tabs node-tabs">
+                    <button class="tab node-tab active" type="button" data-tab="overview" onclick="switchServerTab('overview')">Overview</button>
+                    <button class="tab node-tab" type="button" data-tab="nodes" onclick="switchServerTab('nodes')">Nodes</button>
+                </div>
+            </div>
+
+            <div id="server-tab-overview" class="node-tab-panel active">
+                <!-- Resources -->
+                <div class="card mb-16">
+                    <div class="card-header"><h3>Resources</h3></div>
+                    <div class="node-gauges-grid">
+                        <div class="node-gauge-card">
+                            <div id="gauge-cpu"></div>
+                            <div class="node-gauge-title">CPU Load</div>
+                            <div id="resource-cpu-detail" class="node-gauge-detail">0% used</div>
+                        </div>
+                        <div class="node-gauge-card">
+                            <div id="gauge-mem"></div>
+                            <div class="node-gauge-title">Memory Load</div>
+                            <div id="resource-mem-detail" class="node-gauge-detail">0 B / 0 B</div>
+                        </div>
+                        <div class="node-gauge-card">
+                            <div id="gauge-disk"></div>
+                            <div class="node-gauge-title">Storage Load</div>
+                            <div id="resource-disk-detail" class="node-gauge-detail">0 B / 0 B</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Server Details -->
+                <div class="card mb-16">
+                    <div class="card-header"><h3>Details</h3></div>
+                    <div id="server-details" class="detail-grid">
+                        <div class="loading-text"><div class="spinner"></div><span>Loading server details...</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="server-tab-nodes" class="node-tab-panel">
+                <div class="card mb-16">
+                    <div class="card-header"><h3>Node Summary</h3></div>
+                    <div class="node-status-grid" id="server-node-summary">
+                        <div class="node-stat">
+                            <div class="stat-value" id="summary-total-nodes">0</div>
+                            <div class="stat-label">Total Nodes</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="summary-running-nodes">0</div>
+                            <div class="stat-label">Running</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="summary-syncing-nodes">0</div>
+                            <div class="stat-label">Syncing</div>
+                        </div>
+                        <div class="node-stat">
+                            <div class="stat-value" id="summary-stopped-nodes">0</div>
+                            <div class="stat-label">Stopped</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nodes Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Nodes</h3>
+                    </div>
+                    <div class="data-table-container node-table-scroll" style="overflow:visible;">
+                        <div class="node-table-head node-table-head-server">
+                            <div class="node-table-head-cell">Node</div>
+                            <div class="node-table-head-cell">Type</div>
+                            <div class="node-table-head-cell">Nonce</div>
+                            <div class="node-table-head-cell">Sync</div>
+                            <div class="node-table-head-cell">CPU</div>
+                            <div class="node-table-head-cell">Memory</div>
+                            <div class="node-table-head-cell">Image</div>
+                            <div class="node-table-head-cell">Port</div>
+                            <div class="node-table-head-cell node-table-head-status">Status</div>
+                            <div class="node-table-head-cell node-table-head-actions">Actions</div>
+                        </div>
+                        <div id="nodes-list">
+                            <div class="data-table-count">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            </div><!-- page-body -->
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script>
+        var serverID = window.location.pathname.split('/').pop();
+        var server = null;
+        var nodes = [];
+        var metrics = null;
+        var serverPageSearchQuery = '';
+        var activeServerTab = 'overview';
+
+        function esc(s) {
+            var d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function escJS(s) {
+            return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '-';
+            return new Date(ts * 1000).toLocaleString();
+        }
+
+        async function loadData() {
+            try {
+                server = await API.getJSON('/api/servers/' + serverID);
+            } catch (e) {
+                server = null;
+            }
+
+            try {
+                var nodeData = await API.getJSON('/api/nodes?server_id=' + serverID);
+                nodes = (nodeData && nodeData.nodes) ? nodeData.nodes : [];
+            } catch (e) {
+                nodes = [];
+            }
+
+            try {
+                var from = Math.floor(Date.now() / 1000) - 300;
+                var metricsData = await API.getJSON('/api/servers/' + serverID + '/metrics?from=' + from);
+                if (metricsData && metricsData.length > 0) {
+                    metrics = metricsData[metricsData.length - 1];
+                }
+            } catch (e) {
+                metrics = null;
+            }
+
+            renderServer();
+            renderGauges();
+            renderNodeSummary();
+            renderNodes();
+            document.getElementById('server-live-status').textContent =
+                'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderServer() {
+            if (!server) {
+                document.getElementById('server-name').textContent = 'Server not found';
+                return;
+            }
+
+            var name = server.name || server.hostname || serverID;
+            document.getElementById('server-name').textContent = name;
+            document.getElementById('page-server-name').textContent = name;
+            document.title = 'Klever Node Hub - ' + name;
+
+            document.getElementById('server-info').textContent = [
+                server.hostname,
+                server.public_ip || server.ip_address || '-',
+                server.region
+            ].filter(Boolean).join(' \u00B7 ');
+            document.getElementById('server-hero-meta').innerHTML =
+                nodeChip('Host', server.hostname || '-') +
+                nodeChip('Public IP', server.public_ip || server.ip_address || '-') +
+                nodeChip('Region', server.region || '-') +
+                nodeChip('Agent', server.agent_version || '-');
+
+            var badge = document.getElementById('server-status');
+            badge.textContent = server.status || 'unknown';
+            badge.className = 'badge ' + (server.status === 'online' ? 'badge-online' : 'badge-offline');
+            var healthChip = document.getElementById('server-health-chip');
+            healthChip.textContent = server.status === 'online' ? 'Agent connected' : 'Agent offline';
+            healthChip.className = server.status === 'online' ? 'node-chip node-chip-accent' : 'node-chip';
+            document.getElementById('server-details').innerHTML =
+                detailSection('Identity', [
+                    detailItem('Hostname', server.hostname || '-'),
+                    detailItem('Region', server.region || '-'),
+                    detailItem('IP Address', server.ip_address || '-'),
+                    detailItem('Public IP', server.public_ip || '-')
+                ]) +
+                detailSection('Platform', [
+                    detailItem('Operating System', server.os_info || '-', 'wide'),
+                    detailItem('Agent Version', server.agent_version || '-'),
+                    detailItem('Registered', formatTime(server.registered_at)),
+                    detailItem('Last Heartbeat', formatTime(server.last_heartbeat))
+                ]);
+
+            var runningNodes = nodes.filter(function(node) { return node.status === 'running'; }).length;
+            var cpu = metrics ? (metrics.cpu_percent || 0) : 0;
+            var mem = metrics ? (metrics.mem_percent || 0) : 0;
+            document.getElementById('server-hero-state').innerHTML =
+                snapshotMetric('Nodes', String(nodes.length)) +
+                snapshotMetric('Running', String(runningNodes)) +
+                snapshotMetric('CPU', cpu.toFixed(1) + '%') +
+                snapshotMetric('Memory', mem.toFixed(1) + '%');
+        }
+
+        function renderGauges() {
+            var cpu = metrics ? (metrics.cpu_percent || 0) : 0;
+            var mem = metrics ? (metrics.mem_percent || 0) : 0;
+            var disk = metrics ? (metrics.disk_percent || 0) : 0;
+
+            Charts.gauge(document.getElementById('gauge-cpu'), cpu, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-mem'), mem, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-disk'), disk, { size: 120 });
+
+            document.getElementById('resource-cpu-detail').textContent = cpu.toFixed(1) + '% used';
+            document.getElementById('resource-mem-detail').textContent =
+                Charts.formatBytes(metrics ? metrics.mem_used || 0 : 0) + ' / ' + Charts.formatBytes(metrics ? metrics.mem_total || 0 : 0);
+            document.getElementById('resource-disk-detail').textContent =
+                Charts.formatBytes(metrics ? metrics.disk_used || 0 : 0) + ' / ' + Charts.formatBytes(metrics ? metrics.disk_total || 0 : 0);
+        }
+
+        function renderNodes() {
+            var list = document.getElementById('nodes-list');
+            list.textContent = '';
+            var filteredNodes = nodes.filter(function(node) {
+                if (!serverPageSearchQuery) return true;
+                var q = serverPageSearchQuery.toLowerCase();
+                return [
+                    node.display_name,
+                    node.name,
+                    node.container_name,
+                    node.node_type,
+                    node.status,
+                    node.docker_image_tag,
+                    node.rest_api_port
+                ].some(function(v) {
+                    return v != null && String(v).toLowerCase().includes(q);
+                });
+            });
+
+            if (filteredNodes.length === 0) {
+                list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">' + (nodes.length === 0 ? 'No nodes provisioned' : 'No nodes match your search') + '</div>';
+                return;
+            }
+
+            list.innerHTML = filteredNodes.map(function(node) {
+                var meta = node.metadata || {};
+                var nonce = meta.klv_nonce;
+                var isSyncing = meta.klv_is_syncing;
+                var cpuPct = meta.cpu_percent || 0;
+                var memPct = meta.mem_percent || 0;
+                var memUsed = meta.mem_used || 0;
+                var memLimit = meta.mem_limit || 0;
+                var nodeName = esc(node.display_name || node.name || node.container_name || node.id);
+                var nodeIDJS = escJS(node.id || '');
+                var nodeNameJS = escJS(node.display_name || node.name || node.container_name || node.id || '');
+                var nodeURLJS = escJS('/node/' + encodeURIComponent(node.id));
+                var syncHtml = '<span class="text-muted">-</span>';
+                if (isSyncing != null) {
+                    syncHtml = isSyncing === 0
+                        ? '<span class="badge badge-running">synced</span>'
+                        : '<span class="badge badge-syncing">syncing</span>';
+                }
+                function metricBar(pct, label) {
+                    pct = Math.max(0, Math.min(100, pct || 0));
+                    var fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
+                    return '<div class="server-metric">' +
+                        '<div class="server-metric-fill" style="width:' + fillWidth + '%;background:' + Charts._gaugeColor(pct) + ';"></div>' +
+                        '<span class="server-metric-value">' + esc(label) + '</span>' +
+                    '</div>';
+                }
+
+                return '<div class="node-row node-row-grid node-row-grid-server" role="link" tabindex="0" aria-label="' + nodeName + '" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
+                    '<div class="node-cell node-cell-primary" data-label="Node">' +
+                        '<span class="node-row-name">' + nodeName + '</span>' +
+                    '</div>' +
+                    '<div class="node-cell" data-label="Type">' + esc(node.node_type || '-') + '</div>' +
+                    '<div class="node-cell node-cell-mono" data-label="Nonce">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</div>' +
+                    '<div class="node-cell" data-label="Sync">' + syncHtml + '</div>' +
+                    '<div class="node-cell node-cell-metric" data-label="CPU">' +
+                        metricBar(cpuPct, cpuPct.toFixed(1) + '%') +
+                    '</div>' +
+                    '<div class="node-cell node-cell-metric" data-label="Memory">' +
+                        metricBar(memPct, Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit)) +
+                    '</div>' +
+                    '<div class="node-cell" data-label="Image">' + esc(node.docker_image_tag || '-') + '</div>' +
+                    '<div class="node-cell" data-label="Port">' + esc(String(node.rest_api_port || '-')) + '</div>' +
+                    '<div class="node-cell node-cell-status" data-label="Status">' +
+                        '<span class="badge badge-' + esc(node.status || 'stopped') + '">' + esc(node.status || 'unknown') + '</span>' +
+                    '</div>' +
+                    '<div class="node-cell node-cell-actions" data-label="Actions">' +
+                        '<div class="actions-menu-wrap">' +
+                            '<button class="actions-menu-btn" aria-label="Node actions" onclick="toggleNodeActions(event, \'' + nodeIDJS + '\')">...</button>' +
+                            '<div class="actions-dropdown" id="node-actions-' + esc(node.id) + '">' +
+                                '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + nodeURLJS + '\')">Details</button>' +
+                                '<div class="actions-dropdown-divider"></div>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'start\')">Start</button>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'stop\')">Stop</button>' +
+                                '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'restart\')">Restart</button>' +
+                                '<div class="actions-dropdown-divider"></div>' +
+                                '<button class="actions-dropdown-item danger" onclick="deleteNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">Delete node</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function setServerPageSearch(query) {
+            serverPageSearchQuery = query || '';
+            if (serverPageSearchQuery && activeServerTab !== 'nodes') {
+                switchServerTab('nodes');
+            }
+            renderNodes();
+        }
+
+        function renderNodeSummary() {
+            var syncing = nodes.filter(function(node) {
+                var meta = node.metadata || {};
+                return meta.klv_is_syncing === 1;
+            }).length;
+            var running = nodes.filter(function(node) { return node.status === 'running'; }).length;
+            var stopped = nodes.filter(function(node) { return node.status !== 'running'; }).length;
+
+            document.getElementById('summary-total-nodes').textContent = nodes.length;
+            document.getElementById('summary-running-nodes').textContent = running;
+            document.getElementById('summary-syncing-nodes').textContent = syncing;
+            document.getElementById('summary-stopped-nodes').textContent = stopped;
+        }
+
+        function getServerTabFromHash() {
+            var value = (window.location.hash || '').replace(/^#/, '');
+            return value === 'nodes' ? 'nodes' : 'overview';
+        }
+
+        function switchServerTab(name, updateHash) {
+            if (updateHash === undefined) updateHash = true;
+            activeServerTab = name === 'nodes' ? 'nodes' : 'overview';
+            document.querySelectorAll('.node-tab[data-tab]').forEach(function(tab) {
+                tab.classList.toggle('active', tab.getAttribute('data-tab') === activeServerTab);
+            });
+            document.querySelectorAll('#server-tab-overview, #server-tab-nodes').forEach(function(panel) {
+                panel.classList.toggle('active', panel.id === 'server-tab-' + activeServerTab);
+            });
+            syncServerSearchState();
+            if (updateHash) {
+                var hash = '#' + activeServerTab;
+                if (window.location.hash !== hash) {
+                    history.replaceState(null, '', hash);
+                }
+            }
+        }
+
+        function syncServerSearchState() {
+            var search = document.getElementById('server-search');
+            if (!search) return;
+            search.placeholder = activeServerTab === 'nodes'
+                ? 'Search nodes, type, image or status...'
+                : 'Type to jump into nodes';
+        }
+
+        async function deleteNode(id, name) {
+            if (!confirm('Delete node "' + name + '"? This removes it from the dashboard only (container is not affected).')) return;
+            var resp = await API.delete('/api/nodes/' + id);
+            if (resp && resp.ok) {
+                loadData();
+            }
+        }
+
+        function closeNodeActions() {
+            document.querySelectorAll('#nodes-list .actions-dropdown.active').forEach(function(d) {
+                d.classList.remove('active');
+            });
+        }
+
+        function toggleNodeActions(event, id) {
+            event.preventDefault();
+            event.stopPropagation();
+            var dd = document.getElementById('node-actions-' + id);
+            if (!dd) return false;
+            var willOpen = !dd.classList.contains('active');
+            closeNodeActions();
+            if (willOpen) dd.classList.add('active');
+            return false;
+        }
+
+        function deleteNodeFromMenu(event, id, name) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            deleteNode(id, name);
+            return false;
+        }
+
+        function openDetailsFromMenu(event, url) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            window.location.href = url;
+            return false;
+        }
+
+        async function runNodeActionFromMenu(event, id, action) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            var result = await API.postJSON('/api/nodes/' + id + '/' + action, {});
+            if (!(result && result.ok && result.data && result.data.success)) {
+                window.alert('Failed to ' + action + ' node: ' + ((result && result.data && result.data.error) || 'Unknown error'));
+                return false;
+            }
+            await loadData();
+            return false;
+        }
+
+        function navigateRow(event, url) {
+            if (event.target.closest('.actions-menu-wrap')) return false;
+            window.location.href = url;
+            return false;
+        }
+
+        function activateRow(event, url) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigateRow(event, url);
+                return false;
+            }
+            return true;
+        }
+
+        // Close dropdowns on click outside
+        document.addEventListener('click', function() {
+            closeNodeActions();
+        });
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        }
+
+        function detailItem(label, value) {
+            var className = 'detail-item';
+            if (arguments[2]) className += ' ' + esc(String(arguments[2]));
+            return '<div class="' + className + '"><span class="detail-item-label">' + esc(label) +
+                '</span><span class="detail-item-value">' + esc(String(value)) + '</span></div>';
+        }
+
+        function detailSection(title, items) {
+            return '<section class="detail-section">' +
+                '<div class="detail-section-title">' + esc(title) + '</div>' +
+                '<div class="detail-section-grid">' + items.join('') + '</div>' +
+                '</section>';
+        }
+
+        function nodeChip(label, value) {
+            return '<span class="node-chip"><span class="node-chip-label">' + esc(label) +
+                '</span><span class="node-chip-value">' + esc(String(value)) + '</span></span>';
+        }
+
+        function snapshotMetric(label, value) {
+            return '<div class="node-hero-state-card"><span class="node-hero-state-key">' + esc(label) +
+                '</span><strong class="node-hero-state-value">' + esc(String(value)) + '</strong></div>';
+        }
+
+        loadData();
+        switchServerTab(getServerTabFromHash(), false);
+        window.addEventListener('hashchange', function() {
+            switchServerTab(getServerTabFromHash(), false);
+        });
+    </script>
+</body>
+</html>

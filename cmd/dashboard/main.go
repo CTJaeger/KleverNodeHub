@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -31,13 +32,22 @@ func main() {
 
 	// CLI flags
 	addr := flag.String("addr", ":9443", "Listen address (host:port)")
+	domain := flag.String("domain", "localhost", "Domain for WebAuthn RP ID and TLS (e.g. localhost, myserver.local, node.example.com)")
 	dataDir := flag.String("data-dir", defaultDataDir(), "Data directory for DB, certs, config")
+	resetRecoveryCodes := flag.Bool("reset-recovery-codes", false, "Generate new recovery codes and exit")
 	flag.Parse()
 
 	// Ensure data directory exists
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
 		log.Fatalf("create data dir: %v", err)
 	}
+
+	// --- Handle --reset-recovery-codes ---
+	if *resetRecoveryCodes {
+		resetRecoveryCodesAndExit(*dataDir)
+		return
+	}
+
 	log.Printf("data directory: %s", *dataDir)
 
 	// --- Database ---
@@ -75,15 +85,20 @@ func main() {
 	}
 
 	// --- Auth: WebAuthn ---
-	hostname := "localhost"
-	if h, _ := os.Hostname(); h != "" {
-		hostname = h
+	rpOrigins := []string{fmt.Sprintf("https://%s%s", *domain, *addr)}
+	if *domain != "localhost" {
+		rpOrigins = append(rpOrigins, fmt.Sprintf("https://localhost%s", *addr))
+	}
+	instanceID, err := loadOrCreateInstanceID(settingsStore)
+	if err != nil {
+		log.Fatalf("instance ID: %v", err)
 	}
 	waCredentials := loadPasskeyCredentials(settingsStore)
 	webauthnMgr, err := auth.NewWebAuthnManager(auth.WebAuthnConfig{
 		RPDisplayName: "Klever Node Hub",
-		RPID:          hostname,
-		RPOrigins:     []string{fmt.Sprintf("https://%s%s", hostname, *addr)},
+		RPID:          *domain,
+		RPOrigins:     rpOrigins,
+		InstanceID:    instanceID,
 	}, waCredentials)
 	if err != nil {
 		// Non-fatal: WebAuthn may fail on some systems, passkey login won't work
@@ -92,6 +107,7 @@ func main() {
 			RPDisplayName: "Klever Node Hub",
 			RPID:          "localhost",
 			RPOrigins:     []string{fmt.Sprintf("https://localhost%s", *addr)},
+			InstanceID:    instanceID,
 		}, waCredentials)
 	}
 
@@ -118,13 +134,17 @@ func main() {
 	metricsScheduler.Start()
 
 	// --- WebSocket Hub ---
-	hub := ws.NewHub(serverStore)
+	// Reset all servers to offline on startup; agents will set online when they connect
+	if err := serverStore.ResetAllStatus("offline"); err != nil {
+		log.Printf("reset server status: %v", err)
+	}
+	hub := ws.NewHub(serverStore, nodeStore)
 	hub.StartHealthCheck(60 * time.Second)
 
 	// --- Handlers ---
 	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr)
 	nodeHandler := handlers.NewNodeHandler(hub, nodeStore)
-	serverHandler := handlers.NewServerHandler(serverStore, nodeStore)
+	serverHandler := handlers.NewServerHandler(serverStore, nodeStore, metricsStore)
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
@@ -137,6 +157,12 @@ func main() {
 	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
 	alertStore := store.NewAlertStore(db)
 	alertHandler := handlers.NewAlertHandler(alertStore)
+	// Resolve stale alerts from previous run
+	if resolved, err := alertStore.ResolveAllFiring(); err != nil {
+		log.Printf("resolve stale alerts: %v", err)
+	} else if resolved > 0 {
+		log.Printf("resolved %d stale alerts from previous run", resolved)
+	}
 	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
@@ -152,7 +178,7 @@ func main() {
 	})
 
 	// --- Server + Routes ---
-	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr})
+	srv := dashboard.NewServer(&dashboard.ServerConfig{Addr: *addr, CA: ca})
 	if err := srv.SetupRoutes(); err != nil {
 		log.Fatalf("setup routes: %v", err)
 	}
@@ -180,12 +206,20 @@ func main() {
 	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore, geoResolver)
 	mux.HandleFunc("GET /ws/agent", wsHandler.HandleUpgrade)
 
+	// WebSocket endpoint for browser clients (authenticated via JWT cookie)
+	browserWsHandler := ws.NewBrowserHandler(hub)
+	mux.Handle("GET /ws", authMw(http.HandlerFunc(browserWsHandler.HandleUpgrade)))
+
 	// Protected routes (JWT required)
+	mux.Handle("GET /api/auth/passkeys", authMw(http.HandlerFunc(authHandler.HandleListPasskeys)))
+	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
 	mux.Handle("GET /api/servers", authMw(http.HandlerFunc(serverHandler.HandleList)))
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
+	mux.Handle("DELETE /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleDelete)))
 	mux.Handle("GET /api/nodes", authMw(http.HandlerFunc(serverHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleGetNode)))
+	mux.Handle("DELETE /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleDeleteNode)))
 	mux.Handle("POST /api/nodes/{id}/start", authMw(http.HandlerFunc(nodeHandler.HandleStart)))
 	mux.Handle("POST /api/nodes/{id}/stop", authMw(http.HandlerFunc(nodeHandler.HandleStop)))
 	mux.Handle("POST /api/nodes/{id}/restart", authMw(http.HandlerFunc(nodeHandler.HandleRestart)))
@@ -372,6 +406,59 @@ func loadOrCreateCA(caDir string, encKey []byte) (*crypto.CA, error) {
 
 	log.Println("created new certificate authority")
 	return ca, nil
+}
+
+// loadOrCreateInstanceID loads or generates a unique instance ID for this dashboard.
+// This ID is used as part of the WebAuthn user ID so that multiple dashboard instances
+// sharing the same RP ID (e.g., "localhost") don't overwrite each other's passkeys.
+func loadOrCreateInstanceID(settings *store.SettingsStore) (string, error) {
+	id, err := settings.Get("instance_id")
+	if err != nil {
+		return "", fmt.Errorf("read instance ID: %w", err)
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate instance ID: %w", err)
+	}
+	id = hex.EncodeToString(b)
+	if err := settings.Set("instance_id", id); err != nil {
+		return "", fmt.Errorf("save instance ID: %w", err)
+	}
+	log.Printf("generated new dashboard instance ID: %s", id)
+	return id, nil
+}
+
+// resetRecoveryCodesAndExit opens the DB, generates new recovery codes, saves them, and exits.
+func resetRecoveryCodesAndExit(dataDir string) {
+	dbPath := filepath.Join(dataDir, "dashboard.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		log.Fatalf("open database: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	settingsStore := store.NewSettingsStore(db)
+
+	// Load existing codes to preserve count context
+	existingCodes := loadRecoveryCodes(settingsStore)
+	recoveryMgr := auth.NewRecoveryManager(existingCodes)
+
+	plaintextCodes, _, err := recoveryMgr.GenerateCodes()
+	if err != nil {
+		log.Fatalf("generate recovery codes: %v", err)
+	}
+	saveRecoveryCodes(settingsStore, recoveryMgr.Codes())
+
+	fmt.Println("=== NEW RECOVERY CODES ===")
+	for i, code := range plaintextCodes {
+		fmt.Printf("  %d: %s\n", i+1, code)
+	}
+	fmt.Println("==========================")
+	fmt.Println("Previous codes have been invalidated. Save these codes securely.")
 }
 
 // saveRecoveryCodes persists recovery codes to the settings store.

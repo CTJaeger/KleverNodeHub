@@ -3,7 +3,7 @@ package models
 // Message is the WebSocket message envelope between dashboard and agents.
 type Message struct {
 	ID        string `json:"id"`
-	Type      string `json:"type"`    // "command", "response", "event", "stream"
+	Type      string `json:"type"` // "command", "response", "event", "stream"
 	Action    string `json:"action"`
 	Payload   any    `json:"payload,omitempty"`
 	Timestamp int64  `json:"timestamp"`
@@ -66,15 +66,19 @@ type RegistrationResponse struct {
 
 // DiscoveredNode is a node found during agent auto-discovery.
 type DiscoveredNode struct {
-	ContainerID     string `json:"container_id"`
-	ContainerName   string `json:"container_name"`
-	Status          string `json:"status"`
-	RestAPIPort     int    `json:"rest_api_port"`
-	DisplayName     string `json:"display_name,omitempty"`
-	RedundancyLevel int    `json:"redundancy_level"`
-	DockerImageTag  string `json:"docker_image_tag,omitempty"`
-	DataDirectory   string `json:"data_directory,omitempty"`
-	BLSPublicKey    string `json:"bls_public_key,omitempty"`
+	ContainerID     string  `json:"container_id"`
+	ContainerName   string  `json:"container_name"`
+	Status          string  `json:"status"`
+	RestAPIPort     int     `json:"rest_api_port"`
+	DisplayName     string  `json:"display_name,omitempty"`
+	RedundancyLevel int     `json:"redundancy_level"`
+	DockerImageTag  string  `json:"docker_image_tag,omitempty"`
+	DataDirectory   string  `json:"data_directory,omitempty"`
+	BLSPublicKey    string  `json:"bls_public_key,omitempty"`
+	CPUPercent      float64 `json:"cpu_percent"`
+	MemUsed         uint64  `json:"mem_used"`
+	MemLimit        uint64  `json:"mem_limit"`
+	MemPercent      float64 `json:"mem_percent"`
 }
 
 // DiscoveryReport is sent by the agent after scanning for Klever nodes.
@@ -104,7 +108,7 @@ type NodeNonceStallEvent struct {
 type ProvisionRequest struct {
 	ServerID        string            `json:"server_id"`
 	NodeName        string            `json:"node_name"`
-	Network         string            `json:"network"`          // "mainnet" or "testnet"
+	Network         string            `json:"network"` // "mainnet" or "testnet"
 	ImageTag        string            `json:"image_tag"`
 	Port            int               `json:"port"`
 	GenerateKeys    bool              `json:"generate_keys"`

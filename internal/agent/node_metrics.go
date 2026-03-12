@@ -35,9 +35,9 @@ type nodeEndpoint struct {
 }
 
 type nonceState struct {
-	nonce    uint64
-	firstAt  time.Time // when this nonce was first seen
-	alerted  bool      // whether we already sent a stall alert
+	nonce   uint64
+	firstAt time.Time // when this nonce was first seen
+	alerted bool      // whether we already sent a stall alert
 }
 
 // nodeStatusResponse is the raw JSON from /node/status.
@@ -94,7 +94,7 @@ func (c *NodeMetricsCollector) UpdateNodes(report *models.DiscoveryReport) {
 		if n.RestAPIPort <= 0 {
 			continue
 		}
-		nodeID := n.ContainerID
+		nodeID := n.ContainerName
 		current[nodeID] = true
 		c.nodes[nodeID] = nodeEndpoint{host: "127.0.0.1", port: n.RestAPIPort}
 	}

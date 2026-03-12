@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	tokenLength = 32                // 32 bytes = 256 bits
-	tokenExpiry = 1 * time.Hour     // Tokens expire after 1 hour
+	tokenLength = 32            // 32 bytes = 256 bits
+	tokenExpiry = 1 * time.Hour // Tokens expire after 1 hour
 )
 
 // RegistrationToken is a one-time token for agent registration.

@@ -39,24 +39,36 @@ type pendingCommand struct {
 	timer    *time.Timer
 }
 
+// BrowserConn represents an active browser WebSocket connection.
+type BrowserConn struct {
+	ID     string
+	SendCh chan []byte
+}
+
 // Hub manages all active agent connections.
 type Hub struct {
 	mu          sync.RWMutex
 	connections map[string]*AgentConn // serverID -> connection
 	serverStore *store.ServerStore
+	nodeStore   *store.NodeStore
 	stopCh      chan struct{}
 
 	pendingMu sync.Mutex
 	pending   map[string]*pendingCommand // commandID -> pending
+
+	browserMu    sync.RWMutex
+	browserConns map[string]*BrowserConn // clientID -> connection
 }
 
 // NewHub creates a new connection hub.
-func NewHub(serverStore *store.ServerStore) *Hub {
+func NewHub(serverStore *store.ServerStore, nodeStore *store.NodeStore) *Hub {
 	return &Hub{
-		connections: make(map[string]*AgentConn),
-		serverStore: serverStore,
-		stopCh:      make(chan struct{}),
-		pending:     make(map[string]*pendingCommand),
+		connections:  make(map[string]*AgentConn),
+		serverStore:  serverStore,
+		nodeStore:    nodeStore,
+		stopCh:       make(chan struct{}),
+		pending:      make(map[string]*pendingCommand),
+		browserConns: make(map[string]*BrowserConn),
 	}
 }
 
@@ -78,6 +90,7 @@ func (h *Hub) Register(serverID string) *AgentConn {
 	h.connections[serverID] = conn
 
 	_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
+	_ = h.serverStore.UpdateStatus(serverID, "online")
 
 	log.Printf("agent connected: %s", serverID)
 	return conn
@@ -91,6 +104,8 @@ func (h *Hub) Unregister(serverID string) {
 	if conn, ok := h.connections[serverID]; ok {
 		close(conn.SendCh)
 		delete(h.connections, serverID)
+		_ = h.serverStore.UpdateStatus(serverID, "offline")
+		_ = h.nodeStore.UpdateStatusByServer(serverID, "unknown")
 		log.Printf("agent disconnected: %s", serverID)
 	}
 }
@@ -134,6 +149,60 @@ func (h *Hub) Broadcast(msg *models.Message) {
 		case conn.SendCh <- data:
 		default:
 			log.Printf("broadcast: buffer full for %s", conn.ServerID)
+		}
+	}
+}
+
+// RegisterBrowser adds a browser client connection.
+func (h *Hub) RegisterBrowser(clientID string) *BrowserConn {
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+
+	if existing, ok := h.browserConns[clientID]; ok {
+		close(existing.SendCh)
+	}
+
+	conn := &BrowserConn{
+		ID:     clientID,
+		SendCh: make(chan []byte, 64),
+	}
+	h.browserConns[clientID] = conn
+	log.Printf("browser client connected: %s", clientID)
+	return conn
+}
+
+// UnregisterBrowser removes a browser client connection.
+func (h *Hub) UnregisterBrowser(clientID string) {
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+
+	if conn, ok := h.browserConns[clientID]; ok {
+		close(conn.SendCh)
+		delete(h.browserConns, clientID)
+		log.Printf("browser client disconnected: %s", clientID)
+	}
+}
+
+// BroadcastToBrowsers sends a JSON event to all connected browser clients.
+func (h *Hub) BroadcastToBrowsers(action string, payload any) {
+	msg := map[string]any{
+		"action":  action,
+		"payload": payload,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("browser broadcast marshal error: %v", err)
+		return
+	}
+
+	h.browserMu.RLock()
+	defer h.browserMu.RUnlock()
+
+	for _, conn := range h.browserConns {
+		select {
+		case conn.SendCh <- data:
+		default:
+			log.Printf("browser broadcast: buffer full for %s", conn.ID)
 		}
 	}
 }
@@ -268,5 +337,6 @@ func (h *Hub) checkHeartbeats(timeout time.Duration) {
 	for _, id := range stale {
 		log.Printf("agent heartbeat timeout: %s", id)
 		h.Unregister(id)
+		h.BroadcastToBrowsers("agent.disconnected", map[string]string{"server_id": id})
 	}
 }

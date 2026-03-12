@@ -11,14 +11,14 @@ import (
 
 const (
 	// Default retention periods
-	defaultHotWindow       = 7 * 24 * time.Hour  // 7 days raw data
+	defaultHotWindow        = 7 * 24 * time.Hour  // 7 days raw data
 	defaultArchiveRetention = 90 * 24 * time.Hour // 90 days archived data
-	defaultBucketSize      = 5 * time.Minute      // 5-minute aggregation
+	defaultBucketSize       = 5 * time.Minute     // 5-minute aggregation
 
 	// Job intervals
-	decimationInterval     = 1 * time.Hour
-	purgeInterval          = 24 * time.Hour
-	systemCleanupInterval  = 6 * time.Hour
+	decimationInterval    = 1 * time.Hour
+	purgeInterval         = 24 * time.Hour
+	systemCleanupInterval = 6 * time.Hour
 )
 
 // Scheduler runs background maintenance jobs for metrics storage.

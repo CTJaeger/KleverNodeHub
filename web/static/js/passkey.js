@@ -47,11 +47,10 @@ const Passkey = {
         };
 
         // Finish registration — send attestation to server
-        const finishResp = await API.postJSON('/api/auth/passkey/register/finish', {
-            session_id,
-            name,
-            credential: attestation,
-        });
+        const finishResp = await API.postJSON(
+            '/api/auth/passkey/register/finish?session_id=' + encodeURIComponent(session_id) + '&name=' + encodeURIComponent(name),
+            attestation,
+        );
 
         if (!finishResp || !finishResp.ok) {
             throw new Error(finishResp?.data?.error || 'Failed to finish registration');
@@ -103,10 +102,10 @@ const Passkey = {
         };
 
         // Finish login — send assertion to server
-        const finishResp = await API.postJSON('/api/auth/passkey/login/finish', {
-            session_id,
-            credential: assertionData,
-        });
+        const finishResp = await API.postJSON(
+            '/api/auth/passkey/login/finish?session_id=' + encodeURIComponent(session_id),
+            assertionData,
+        );
 
         if (!finishResp || !finishResp.ok) {
             throw new Error(finishResp?.data?.error || 'Failed to finish login');
