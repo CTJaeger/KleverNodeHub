@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/sha3"
 )
 
 // KleverAuthManager handles Klever Extension wallet authentication.
@@ -117,6 +119,58 @@ func (k *KleverAuthManager) CreateChallenge(address string) (string, error) {
 	return nonce, nil
 }
 
+// CreateSetupChallenge generates a nonce for any valid klv1... address (no registered address required).
+// Used during wallet linking in settings to prove ownership before saving.
+func (k *KleverAuthManager) CreateSetupChallenge(address string) (string, error) {
+	if !isValidKleverAddress(address) {
+		return "", ErrInvalidAddress
+	}
+
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	nonceBytes := make([]byte, challengeBytes)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	nonce := hex.EncodeToString(nonceBytes)
+
+	now := time.Now()
+	for id, ch := range k.challenges {
+		if now.After(ch.expiresAt) {
+			delete(k.challenges, id)
+		}
+	}
+
+	k.challenges[nonce] = &kleverChallenge{
+		nonce:     nonce,
+		address:   address,
+		expiresAt: now.Add(challengeTTL),
+	}
+
+	return nonce, nil
+}
+
+// VerifySetupSignature verifies a signature for wallet linking (no registered address check).
+// On success, the caller should save the address.
+func (k *KleverAuthManager) VerifySetupSignature(address, nonce, signature string) error {
+	k.mu.Lock()
+	ch, ok := k.challenges[nonce]
+	if !ok || time.Now().After(ch.expiresAt) {
+		delete(k.challenges, nonce)
+		k.mu.Unlock()
+		return ErrChallengeExpired
+	}
+	if !strings.EqualFold(ch.address, address) {
+		k.mu.Unlock()
+		return ErrAddressMismatch
+	}
+	delete(k.challenges, nonce)
+	k.mu.Unlock()
+
+	return verifyEd25519Signature(address, nonce, signature)
+}
+
 // VerifySignature verifies an Ed25519 signature from the Klever Extension.
 // The signature should be hex-encoded (128 hex chars = 64 bytes).
 func (k *KleverAuthManager) VerifySignature(address, nonce, signature string) error {
@@ -135,20 +189,37 @@ func (k *KleverAuthManager) VerifySignature(address, nonce, signature string) er
 	delete(k.challenges, nonce)
 	k.mu.Unlock()
 
-	// Decode public key from klv1... address
+	return verifyEd25519Signature(address, nonce, signature)
+}
+
+// kleverSignedMessageHash builds the Klever Extension signed message hash.
+// Format: 0x17 + "Klever Signed Message:\n" + len(message) + message → Keccak-256
+func kleverSignedMessageHash(message string) []byte {
+	prefix := append([]byte{0x17}, []byte("Klever Signed Message:\n")...)
+	lenStr := fmt.Sprintf("%d", len(message))
+	full := append(prefix, []byte(lenStr)...)
+	full = append(full, []byte(message)...)
+
+	h := sha3.NewLegacyKeccak256()
+	h.Write(full)
+	return h.Sum(nil)
+}
+
+// verifyEd25519Signature verifies an Ed25519 signature against a klv1... address.
+// The Klever Extension prepends a prefix and hashes with Keccak-256 before signing.
+func verifyEd25519Signature(address, message, signature string) error {
 	pubKey, err := kleverAddressToPublicKey(address)
 	if err != nil {
 		return fmt.Errorf("decode address: %w", err)
 	}
 
-	// Decode hex signature
 	sigBytes, err := hex.DecodeString(signature)
 	if err != nil || len(sigBytes) != ed25519.SignatureSize {
 		return ErrInvalidSignature
 	}
 
-	// Verify Ed25519 signature over the nonce message
-	if !ed25519.Verify(pubKey, []byte(nonce), sigBytes) {
+	hash := kleverSignedMessageHash(message)
+	if !ed25519.Verify(pubKey, hash, sigBytes) {
 		return ErrInvalidSignature
 	}
 

@@ -526,13 +526,35 @@
         async function linkKleverWallet() {
             const address = document.getElementById('klever-address').value.trim();
             if (!address) { showStatus('Enter a wallet address', true); return; }
-            const resp = await API.post('/api/setup/klever', { address: address });
-            if (resp && resp.ok) {
-                showStatus('Klever wallet linked');
-                await loadKleverStatus();
-            } else {
-                const data = resp ? await resp.json() : {};
-                showStatus('Error: ' + (data.error || 'failed to link wallet'), true);
+            if (!KleverAuth.isAvailable()) { showStatus('Klever Extension not detected — cannot verify ownership', true); return; }
+
+            try {
+                // Step 1: Get challenge from server
+                const challengeResp = await API.postJSON('/api/setup/klever/challenge', { address: address });
+                if (!challengeResp || !challengeResp.ok) {
+                    showStatus('Error: ' + (challengeResp?.data?.error || 'failed to get challenge'), true);
+                    return;
+                }
+
+                // Step 2: Sign challenge with Klever Extension (proves ownership)
+                const challenge = challengeResp.data.challenge;
+                await window.kleverWeb.initialize();
+                const signature = await window.kleverWeb.signMessage(challenge);
+
+                // Step 3: Verify signature and link wallet
+                const resp = await API.postJSON('/api/setup/klever', {
+                    address: address,
+                    challenge: challenge,
+                    signature: signature
+                });
+                if (resp && resp.ok) {
+                    showStatus('Klever wallet linked (ownership verified)');
+                    await loadKleverStatus();
+                } else {
+                    showStatus('Error: ' + (resp?.data?.error || 'verification failed'), true);
+                }
+            } catch (err) {
+                showStatus('Signing failed: ' + err.message, true);
             }
         }
 

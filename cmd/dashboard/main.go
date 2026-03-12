@@ -244,6 +244,7 @@ func main() {
 	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
 	mux.Handle("PUT /api/auth/password", authMw(http.HandlerFunc(authHandler.HandleChangePassword)))
 	mux.Handle("GET /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverStatus)))
+	mux.Handle("POST /api/setup/klever/challenge", authMw(http.HandlerFunc(authHandler.HandleKleverSetupChallenge)))
 	mux.Handle("POST /api/setup/klever", authMw(http.HandlerFunc(authHandler.HandleKleverSetup)))
 	mux.Handle("DELETE /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverRemove)))
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
