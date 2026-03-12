@@ -1,30 +1,23 @@
 package dashboard
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io/fs"
 	"log"
-	"math/big"
 	"net/http"
 	"time"
 
+	kvcrypto "github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 	"github.com/CTJaeger/KleverNodeHub/web"
 )
 
 // ServerConfig holds the dashboard HTTP server configuration.
 type ServerConfig struct {
-	Addr     string // Listen address, e.g. ":9443"
-	CertFile string // Path to TLS cert (optional, auto-generates if empty)
-	KeyFile  string // Path to TLS key (optional, auto-generates if empty)
+	Addr string       // Listen address, e.g. ":9443"
+	CA   *kvcrypto.CA // CA for mTLS (if nil, uses self-signed cert)
 }
 
 // Server is the main dashboard HTTP server.
@@ -66,7 +59,9 @@ func (s *Server) SetupRoutes() error {
 	s.mux.HandleFunc("GET /login", s.servePage("templates/login.html"))
 	s.mux.HandleFunc("GET /overview", s.servePage("templates/overview.html"))
 	s.mux.HandleFunc("GET /node/{id}", s.servePage("templates/node.html"))
+	s.mux.HandleFunc("GET /servers/{id}", s.servePage("templates/server.html"))
 	s.mux.HandleFunc("GET /settings", s.servePage("templates/settings.html"))
+	s.mux.HandleFunc("GET /alerts", s.servePage("templates/alerts.html"))
 
 	return nil
 }
@@ -109,7 +104,7 @@ func (s *Server) setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-XSS-Protection", "1; mode=block")
 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 	w.Header().Set("Content-Security-Policy",
-		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:;")
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss: ws:;")
 }
 
 // SecurityHeadersMiddleware wraps a handler with security headers.
@@ -138,75 +133,26 @@ func (s *Server) Start() error {
 
 	log.Printf("Dashboard starting on https://localhost%s", s.config.Addr)
 
-	if s.config.CertFile != "" && s.config.KeyFile != "" {
-		return srv.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
-	}
-
-	// Use auto-generated certificate
+	// Certs are already in the TLS config
 	return srv.ListenAndServeTLS("", "")
 }
 
 // getTLSConfig creates the TLS configuration.
+// When a CA is provided, the server cert is signed by the CA so agents can verify it.
+// Browser connections skip mTLS client auth (agents use mTLS on the /ws/agent path).
 func (s *Server) getTLSConfig() (*tls.Config, error) {
-	cfg := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-		},
-	}
-
-	// Auto-generate self-signed cert if none provided
-	if s.config.CertFile == "" || s.config.KeyFile == "" {
-		cert, err := generateSelfSignedCert()
+	if s.config.CA != nil {
+		tlsCfg, err := kvcrypto.DashboardTLSConfig(s.config.CA)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dashboard TLS from CA: %w", err)
 		}
-		cfg.Certificates = []tls.Certificate{cert}
+		// Allow browsers without client certs (agents still present theirs)
+		tlsCfg.ClientAuth = tls.RequestClientCert
+		return tlsCfg, nil
 	}
 
-	return cfg, nil
-}
-
-// generateSelfSignedCert creates a self-signed TLS certificate for development/first-run.
-func generateSelfSignedCert() (tls.Certificate, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("generate key: %w", err)
-	}
-
-	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-
-	template := x509.Certificate{
-		SerialNumber: serial,
-		Subject: pkix.Name{
-			Organization: []string{"Klever Node Hub"},
-			CommonName:   "localhost",
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{"localhost"},
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("create certificate: %w", err)
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	keyDER, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("marshal key: %w", err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
-
-	return tls.X509KeyPair(certPEM, keyPEM)
+	// No CA available — this shouldn't happen in normal operation
+	return &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}, nil
 }

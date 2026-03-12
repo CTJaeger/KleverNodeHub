@@ -152,9 +152,9 @@ func TestUpdateNodes(t *testing.T) {
 
 	report := &models.DiscoveryReport{
 		Nodes: []models.DiscoveredNode{
-			{ContainerID: "abc123", RestAPIPort: 8080},
-			{ContainerID: "def456", RestAPIPort: 8081},
-			{ContainerID: "ghi789", RestAPIPort: 0}, // should be skipped
+			{ContainerID: "abc123", ContainerName: "node1", RestAPIPort: 8080},
+			{ContainerID: "def456", ContainerName: "node2", RestAPIPort: 8081},
+			{ContainerID: "ghi789", ContainerName: "node3", RestAPIPort: 0}, // should be skipped
 		},
 	}
 	c.UpdateNodes(report)
@@ -166,7 +166,7 @@ func TestUpdateNodes(t *testing.T) {
 	// Update with fewer nodes
 	report2 := &models.DiscoveryReport{
 		Nodes: []models.DiscoveredNode{
-			{ContainerID: "abc123", RestAPIPort: 8080},
+			{ContainerID: "abc123", ContainerName: "node1", RestAPIPort: 8080},
 		},
 	}
 	c.UpdateNodes(report2)
@@ -277,8 +277,8 @@ func TestCollectAll_MultipleNodes(t *testing.T) {
 	c := NewNodeMetricsCollector(WithHTTPClient(srv.Client()))
 	c.UpdateNodes(&models.DiscoveryReport{
 		Nodes: []models.DiscoveredNode{
-			{ContainerID: "node-a", RestAPIPort: port},
-			{ContainerID: "node-b", RestAPIPort: port},
+			{ContainerName: "node-a", RestAPIPort: port},
+			{ContainerName: "node-b", RestAPIPort: port},
 		},
 	})
 	// Override host (httptest uses 127.0.0.1)

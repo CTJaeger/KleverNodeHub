@@ -50,6 +50,7 @@ type Hub struct {
 	mu          sync.RWMutex
 	connections map[string]*AgentConn // serverID -> connection
 	serverStore *store.ServerStore
+	nodeStore   *store.NodeStore
 	stopCh      chan struct{}
 
 	pendingMu sync.Mutex
@@ -60,10 +61,11 @@ type Hub struct {
 }
 
 // NewHub creates a new connection hub.
-func NewHub(serverStore *store.ServerStore) *Hub {
+func NewHub(serverStore *store.ServerStore, nodeStore *store.NodeStore) *Hub {
 	return &Hub{
 		connections:  make(map[string]*AgentConn),
 		serverStore:  serverStore,
+		nodeStore:    nodeStore,
 		stopCh:       make(chan struct{}),
 		pending:      make(map[string]*pendingCommand),
 		browserConns: make(map[string]*BrowserConn),
@@ -88,6 +90,7 @@ func (h *Hub) Register(serverID string) *AgentConn {
 	h.connections[serverID] = conn
 
 	_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
+	_ = h.serverStore.UpdateStatus(serverID, "online")
 
 	log.Printf("agent connected: %s", serverID)
 	return conn
@@ -101,6 +104,8 @@ func (h *Hub) Unregister(serverID string) {
 	if conn, ok := h.connections[serverID]; ok {
 		close(conn.SendCh)
 		delete(h.connections, serverID)
+		_ = h.serverStore.UpdateStatus(serverID, "offline")
+		_ = h.nodeStore.UpdateStatusByServer(serverID, "unknown")
 		log.Printf("agent disconnected: %s", serverID)
 	}
 }
@@ -332,5 +337,6 @@ func (h *Hub) checkHeartbeats(timeout time.Duration) {
 	for _, id := range stale {
 		log.Printf("agent heartbeat timeout: %s", id)
 		h.Unregister(id)
+		h.BroadcastToBrowsers("agent.disconnected", map[string]string{"server_id": id})
 	}
 }

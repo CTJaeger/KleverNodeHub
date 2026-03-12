@@ -94,7 +94,7 @@ func (c *NodeMetricsCollector) UpdateNodes(report *models.DiscoveryReport) {
 		if n.RestAPIPort <= 0 {
 			continue
 		}
-		nodeID := n.ContainerID
+		nodeID := n.ContainerName
 		current[nodeID] = true
 		c.nodes[nodeID] = nodeEndpoint{host: "127.0.0.1", port: n.RestAPIPort}
 	}

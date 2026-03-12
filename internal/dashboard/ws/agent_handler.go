@@ -135,6 +135,9 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 			h.hub.BroadcastToBrowsers("agent.discovery", map[string]any{
 				"server_id": serverID,
 			})
+			h.hub.BroadcastToBrowsers("node.update", map[string]any{
+				"server_id": serverID,
+			})
 
 		case "node.metrics":
 			h.handleNodeMetrics(&msg)
@@ -174,6 +177,13 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 
 	for _, discovered := range report.Nodes {
 		// Check if node already exists
+		meta := map[string]any{
+			"cpu_percent": discovered.CPUPercent,
+			"mem_used":    discovered.MemUsed,
+			"mem_limit":   discovered.MemLimit,
+			"mem_percent": discovered.MemPercent,
+		}
+
 		existing, _ := h.nodeStore.ListByServer(serverID)
 		found := false
 		for i := range existing {
@@ -184,6 +194,7 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				existing[i].RestAPIPort = discovered.RestAPIPort
 				existing[i].DataDirectory = discovered.DataDirectory
 				existing[i].BLSPublicKey = discovered.BLSPublicKey
+				existing[i].Metadata = meta
 				_ = h.nodeStore.Update(&existing[i])
 				break
 			}
@@ -207,6 +218,7 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				DataDirectory:   discovered.DataDirectory,
 				BLSPublicKey:    discovered.BLSPublicKey,
 				Status:          discovered.Status,
+				Metadata:        meta,
 				CreatedAt:       time.Now().Unix(),
 			})
 		}
@@ -230,7 +242,18 @@ func (h *AgentHandler) handleHeartbeatMetrics(serverID string, msg *models.Messa
 	}
 
 	m := hb.Metrics
-	if err := h.metricsStore.InsertSystemMetrics(serverID, m.CPUPercent, m.MemPercent, m.DiskPercent, m.LoadAvg1, m.CollectedAt); err != nil {
+	row := &store.SystemMetricsRow{
+		CPUPercent:  m.CPUPercent,
+		MemPercent:  m.MemPercent,
+		MemTotal:    m.MemTotal,
+		MemUsed:     m.MemUsed,
+		DiskPercent: m.DiskPercent,
+		DiskTotal:   m.DiskTotal,
+		DiskUsed:    m.DiskUsed,
+		LoadAvg1:    m.LoadAvg1,
+		CollectedAt: m.CollectedAt,
+	}
+	if err := h.metricsStore.InsertSystemMetrics(serverID, row); err != nil {
 		log.Printf("store system metrics for %s: %v", serverID, err)
 	}
 }
@@ -262,8 +285,14 @@ func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
 		return
 	}
 
-	if err := h.metricsStore.InsertNodeMetrics(evt.NodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
-		log.Printf("store node metrics for %s: %v", evt.NodeID, err)
+	// Resolve container name to dashboard node ID
+	nodeID := evt.NodeID
+	if node, err := h.nodeStore.GetByContainerID(evt.NodeID); err == nil {
+		nodeID = node.ID
+	}
+
+	if err := h.metricsStore.InsertNodeMetrics(nodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
+		log.Printf("store node metrics for %s: %v", nodeID, err)
 	}
 }
 

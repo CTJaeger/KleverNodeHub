@@ -48,7 +48,10 @@ func TestInsertAndQuerySystemMetrics(t *testing.T) {
 	s := setupMetricsStore(t)
 
 	ts := time.Now().Unix()
-	if err := s.InsertSystemMetrics("server-1", 45.5, 62.3, 78.1, 1.25, ts); err != nil {
+	if err := s.InsertSystemMetrics("server-1", &SystemMetricsRow{
+		CPUPercent: 45.5, MemPercent: 62.3, MemTotal: 8000000000, MemUsed: 4984000000,
+		DiskPercent: 78.1, DiskTotal: 100000000000, DiskUsed: 78100000000, LoadAvg1: 1.25, CollectedAt: ts,
+	}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -185,7 +188,9 @@ func TestPurgeSystemMetrics(t *testing.T) {
 	s := setupMetricsStore(t)
 
 	oldTs := time.Now().Add(-10 * 24 * time.Hour).Unix()
-	if err := s.InsertSystemMetrics("server-1", 50, 60, 70, 1.0, oldTs); err != nil {
+	if err := s.InsertSystemMetrics("server-1", &SystemMetricsRow{
+		CPUPercent: 50, MemPercent: 60, DiskPercent: 70, LoadAvg1: 1.0, CollectedAt: oldTs,
+	}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 

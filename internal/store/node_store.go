@@ -59,6 +59,15 @@ func (s *NodeStore) GetByID(id string) (*models.Node, error) {
 	return scanNode(row)
 }
 
+// GetByContainerID retrieves a node by its Docker container ID.
+func (s *NodeStore) GetByContainerID(containerID string) (*models.Node, error) {
+	row := s.db.db.QueryRow(`
+		SELECT id, server_id, name, container_name, node_type, redundancy_level, rest_api_port, display_name, docker_image_tag, data_directory, bls_public_key, status, created_at, updated_at, metadata
+		FROM nodes WHERE container_name = ?`, containerID)
+
+	return scanNode(row)
+}
+
 // ListByServer retrieves all nodes for a server.
 func (s *NodeStore) ListByServer(serverID string) ([]models.Node, error) {
 	rows, err := s.db.db.Query(`
@@ -159,6 +168,21 @@ func (s *NodeStore) UpdateStatus(id, status string) error {
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("node not found: %s", id)
+	}
+	return nil
+}
+
+// UpdateStatusByServer sets the status of all nodes belonging to a server.
+func (s *NodeStore) UpdateStatusByServer(serverID, status string) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+
+	_, err := s.db.db.Exec(
+		"UPDATE nodes SET status=?, updated_at=? WHERE server_id=?",
+		status, time.Now().Unix(), serverID,
+	)
+	if err != nil {
+		return fmt.Errorf("update nodes status by server: %w", err)
 	}
 	return nil
 }

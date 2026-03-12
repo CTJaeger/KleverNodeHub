@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Server Detail</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Mobile Top Bar -->
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Klever Node Hub</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <!-- Page Header Bar -->
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                    <a href="/overview" style="color:var(--text-secondary);font-size:13px;">Dashboard</a>
+                    <span style="color:var(--text-muted);">/</span>
+                    <span class="page-header-title" id="page-server-name">Server</span>
+                </div>
+                <div class="page-header-right">
+                    <button class="page-header-icon-btn" onclick="loadData()" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page-body">
+
+            <!-- Server Header -->
+            <div class="card mb-16">
+                <div class="card-header">
+                    <div>
+                        <h2 id="server-name">Loading...</h2>
+                        <span class="text-sm text-muted" id="server-info"></span>
+                    </div>
+                    <span class="badge" id="server-status">-</span>
+                </div>
+            </div>
+
+            <!-- Resources -->
+            <div class="card" style="margin-bottom:20px;">
+                <div class="stat-card-header" style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:var(--text-secondary);padding-bottom:12px;border-bottom:1px solid var(--border-color);">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Resources
+                </div>
+                <div style="display:flex;justify-content:space-around;padding:24px 0;flex-wrap:wrap;gap:20px;">
+                    <div style="text-align:center;">
+                        <div id="gauge-cpu"></div>
+                        <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">CPU</div>
+                        <div id="resource-cpu-detail" style="font-size:11px;color:var(--text-muted);">0% used</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div id="gauge-mem"></div>
+                        <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Memory</div>
+                        <div id="resource-mem-detail" style="font-size:11px;color:var(--text-muted);">0 B / 0 B</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div id="gauge-disk"></div>
+                        <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Storage</div>
+                        <div id="resource-disk-detail" style="font-size:11px;color:var(--text-muted);">0 B / 0 B</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Details -->
+            <div class="card mb-16">
+                <div class="card-header"><h3>Details</h3></div>
+                <div class="card-body">
+                    <table class="data-table" style="width:100%">
+                        <tbody>
+                            <tr><td class="text-muted">Hostname</td><td id="detail-hostname" style="text-align:right">-</td></tr>
+                            <tr><td class="text-muted">IP Address</td><td id="detail-ip" style="text-align:right">-</td></tr>
+                            <tr><td class="text-muted">OS</td><td id="detail-os" style="text-align:right">-</td></tr>
+                            <tr><td class="text-muted">Agent Version</td><td id="detail-agent" style="text-align:right">-</td></tr>
+                            <tr><td class="text-muted">Registered</td><td id="detail-registered" style="text-align:right">-</td></tr>
+                            <tr><td class="text-muted">Last Heartbeat</td><td id="detail-heartbeat" style="text-align:right">-</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Nodes Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Nodes</h3>
+                </div>
+                <div class="data-table-container" style="overflow:visible;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>NODE</th>
+                                <th>STATUS</th>
+                                <th>NONCE</th>
+                                <th>SYNC</th>
+                                <th>TYPE</th>
+                                <th>CPU</th>
+                                <th>MEMORY</th>
+                                <th>IMAGE</th>
+                                <th>PORT</th>
+                                <th style="width:50px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="nodes-tbody">
+                            <tr><td colspan="10" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            </div><!-- page-body -->
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script>
+        var serverID = window.location.pathname.split('/').pop();
+        var server = null;
+        var nodes = [];
+        var metrics = null;
+
+        function esc(s) {
+            var d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '-';
+            return new Date(ts * 1000).toLocaleString();
+        }
+
+        async function loadData() {
+            try {
+                server = await API.getJSON('/api/servers/' + serverID);
+            } catch (e) {
+                server = null;
+            }
+
+            try {
+                var nodeData = await API.getJSON('/api/nodes?server_id=' + serverID);
+                nodes = (nodeData && nodeData.nodes) ? nodeData.nodes : [];
+            } catch (e) {
+                nodes = [];
+            }
+
+            try {
+                var from = Math.floor(Date.now() / 1000) - 300;
+                var metricsData = await API.getJSON('/api/servers/' + serverID + '/metrics?from=' + from);
+                if (metricsData && metricsData.length > 0) {
+                    metrics = metricsData[metricsData.length - 1];
+                }
+            } catch (e) {
+                metrics = null;
+            }
+
+            renderServer();
+            renderGauges();
+            renderNodes();
+        }
+
+        function renderServer() {
+            if (!server) {
+                document.getElementById('server-name').textContent = 'Server not found';
+                return;
+            }
+
+            var name = server.name || server.hostname || serverID;
+            document.getElementById('server-name').textContent = name;
+            document.getElementById('page-server-name').textContent = name;
+            document.title = 'Klever Node Hub - ' + name;
+
+            document.getElementById('server-info').textContent = server.hostname + ' \u00B7 ' + (server.ip_address || '-');
+
+            var badge = document.getElementById('server-status');
+            badge.textContent = server.status || 'unknown';
+            badge.className = 'badge ' + (server.status === 'online' ? 'badge-online' : 'badge-offline');
+
+            document.getElementById('detail-hostname').textContent = server.hostname || '-';
+            document.getElementById('detail-ip').textContent = server.ip_address || '-';
+            document.getElementById('detail-os').textContent = server.os_info || '-';
+            document.getElementById('detail-agent').textContent = server.agent_version || '-';
+            document.getElementById('detail-registered').textContent = formatTime(server.registered_at);
+            document.getElementById('detail-heartbeat').textContent = formatTime(server.last_heartbeat);
+        }
+
+        function renderGauges() {
+            var cpu = metrics ? (metrics.cpu_percent || 0) : 0;
+            var mem = metrics ? (metrics.mem_percent || 0) : 0;
+            var disk = metrics ? (metrics.disk_percent || 0) : 0;
+
+            Charts.gauge(document.getElementById('gauge-cpu'), cpu, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-mem'), mem, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-disk'), disk, { size: 120 });
+
+            document.getElementById('resource-cpu-detail').textContent = cpu.toFixed(1) + '% used';
+            document.getElementById('resource-mem-detail').textContent =
+                Charts.formatBytes(metrics ? metrics.mem_used || 0 : 0) + ' / ' + Charts.formatBytes(metrics ? metrics.mem_total || 0 : 0);
+            document.getElementById('resource-disk-detail').textContent =
+                Charts.formatBytes(metrics ? metrics.disk_used || 0 : 0) + ' / ' + Charts.formatBytes(metrics ? metrics.disk_total || 0 : 0);
+        }
+
+        function renderNodes() {
+            var tbody = document.getElementById('nodes-tbody');
+            tbody.textContent = '';
+
+            if (nodes.length === 0) {
+                var emptyRow = document.createElement('tr');
+                var emptyCell = document.createElement('td');
+                emptyCell.colSpan = 10;
+                emptyCell.className = 'text-center text-muted';
+                emptyCell.textContent = 'No nodes provisioned';
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
+                return;
+            }
+
+            nodes.forEach(function(node) {
+                var tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.onclick = function(e) {
+                    if (e.target.closest('.actions-menu-wrap')) return;
+                    location.href = '/node/' + node.id;
+                };
+
+                // Name
+                var nameCell = document.createElement('td');
+                var nameStrong = document.createElement('strong');
+                nameStrong.textContent = node.name || node.container_name;
+                nameCell.appendChild(nameStrong);
+                tr.appendChild(nameCell);
+
+                // Status
+                var statusCell = document.createElement('td');
+                var statusBadge = document.createElement('span');
+                statusBadge.className = 'badge badge-' + (node.status || 'stopped');
+                statusBadge.textContent = node.status || 'unknown';
+                statusCell.appendChild(statusBadge);
+                tr.appendChild(statusCell);
+
+                // Nonce
+                var nonceCell = document.createElement('td');
+                var nodeMeta = node.metadata || {};
+                var nonce = nodeMeta.klv_nonce;
+                nonceCell.style.fontFamily = 'monospace';
+                nonceCell.textContent = nonce != null ? Math.floor(nonce).toLocaleString() : '-';
+                tr.appendChild(nonceCell);
+
+                // Sync
+                var syncCell = document.createElement('td');
+                var isSyncing = nodeMeta.klv_is_syncing;
+                if (isSyncing != null) {
+                    var syncBadge = document.createElement('span');
+                    if (isSyncing === 0) {
+                        syncBadge.className = 'badge badge-running';
+                        syncBadge.textContent = 'synced';
+                    } else {
+                        syncBadge.className = 'badge badge-warning';
+                        syncBadge.textContent = 'syncing';
+                    }
+                    syncCell.appendChild(syncBadge);
+                } else {
+                    syncCell.className = 'text-muted';
+                    syncCell.textContent = '-';
+                }
+                tr.appendChild(syncCell);
+
+                // Type
+                var typeCell = document.createElement('td');
+                typeCell.textContent = node.node_type || '-';
+                tr.appendChild(typeCell);
+
+                // CPU
+                var cpuCell = document.createElement('td');
+                var meta = node.metadata || {};
+                var cpuPct = meta.cpu_percent || 0;
+                var cpuBar = document.createElement('div');
+                cpuBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                var cpuTrack = document.createElement('div');
+                cpuTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
+                var cpuFill = document.createElement('div');
+                cpuFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(cpuPct) + ';width:' + Math.min(cpuPct, 100) + '%;';
+                cpuTrack.appendChild(cpuFill);
+                cpuBar.appendChild(cpuTrack);
+                var cpuLabel = document.createElement('span');
+                cpuLabel.className = 'text-muted';
+                cpuLabel.style.fontSize = '12px';
+                cpuLabel.textContent = cpuPct.toFixed(1) + '%';
+                cpuBar.appendChild(cpuLabel);
+                cpuCell.appendChild(cpuBar);
+                tr.appendChild(cpuCell);
+
+                // Memory
+                var memCell = document.createElement('td');
+                var memPct = meta.mem_percent || 0;
+                var memUsed = meta.mem_used || 0;
+                var memLimit = meta.mem_limit || 0;
+                var memBar = document.createElement('div');
+                memBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                var memTrack = document.createElement('div');
+                memTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
+                var memFill = document.createElement('div');
+                memFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(memPct) + ';width:' + Math.min(memPct, 100) + '%;';
+                memTrack.appendChild(memFill);
+                memBar.appendChild(memTrack);
+                var memLabel = document.createElement('span');
+                memLabel.className = 'text-muted';
+                memLabel.style.fontSize = '12px';
+                memLabel.textContent = Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit);
+                memBar.appendChild(memLabel);
+                memCell.appendChild(memBar);
+                tr.appendChild(memCell);
+
+                // Image
+                var imageCell = document.createElement('td');
+                imageCell.className = 'text-muted';
+                imageCell.textContent = node.docker_image_tag || '-';
+                tr.appendChild(imageCell);
+
+                // Port
+                var portCell = document.createElement('td');
+                portCell.className = 'text-muted';
+                portCell.textContent = node.rest_api_port || '-';
+                tr.appendChild(portCell);
+
+                // Actions
+                var actionsCell = document.createElement('td');
+                var actionsWrap = document.createElement('div');
+                actionsWrap.className = 'actions-menu-wrap';
+                var actionsBtn = document.createElement('button');
+                actionsBtn.className = 'actions-menu-btn';
+                actionsBtn.textContent = '\u22EF';
+                actionsBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    var dd = actionsWrap.querySelector('.actions-dropdown');
+                    document.querySelectorAll('.actions-dropdown.active').forEach(function(d) {
+                        if (d !== dd) d.classList.remove('active');
+                    });
+                    dd.classList.toggle('active');
+                };
+                actionsWrap.appendChild(actionsBtn);
+
+                var dropdown = document.createElement('div');
+                dropdown.className = 'actions-dropdown';
+
+                var deleteItem = document.createElement('div');
+                deleteItem.className = 'actions-dropdown-item danger';
+                deleteItem.textContent = 'Delete';
+                deleteItem.onclick = function(e) {
+                    e.stopPropagation();
+                    dropdown.classList.remove('active');
+                    deleteNode(node.id, node.name || node.container_name);
+                };
+                dropdown.appendChild(deleteItem);
+                actionsWrap.appendChild(dropdown);
+                actionsCell.appendChild(actionsWrap);
+                tr.appendChild(actionsCell);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteNode(id, name) {
+            if (!confirm('Delete node "' + name + '"? This removes it from the dashboard only (container is not affected).')) return;
+            var resp = await API.delete('/api/nodes/' + id);
+            if (resp && resp.ok) {
+                loadData();
+            }
+        }
+
+        // Close dropdowns on click outside
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.actions-dropdown.active').forEach(function(d) {
+                d.classList.remove('active');
+            });
+        });
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

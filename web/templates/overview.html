@@ -13,18 +13,72 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h1>Klever Node Hub</h1>
-                <span class="version">v0.1.0</span>
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
             </div>
-            <nav class="sidebar-nav">
-                <a href="/overview" class="active">Overview</a>
-                <a href="#" onclick="showAlerts()">Alerts</a>
-                <a href="#" onclick="showAlertRules()">Alert Rules</a>
-                <a href="#" onclick="showAgentUpdate()">Agent Update</a>
-                <a href="#" onclick="showAddServer()">Add Server</a>
-                <a href="/settings">Settings</a>
-                <a href="#" onclick="API.logout()">Logout</a>
-            </nav>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link active">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Management</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="showAddServer(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                            Add Server
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="showAgentUpdate(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Agent Update
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="connection-status" id="connection-badge">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="connection-text">Connecting...</span>
+                </div>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -36,69 +90,175 @@
                 <div style="width:36px"></div>
             </div>
 
-            <!-- Connection Status -->
-            <div id="connection-status" class="alert alert-warning hidden">
-                Dashboard connection lost. Reconnecting...
+            <!-- Page Header Bar -->
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    <span class="page-header-title">Dashboard</span>
+                    <span class="page-header-sub" id="sync-time"></span>
+                </div>
+                <div class="page-header-right">
+                    <button class="page-header-icon-btn" onclick="loadData()" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                    <button class="page-header-icon-btn" onclick="location.href='/settings'" title="Settings">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </button>
+                </div>
             </div>
 
-            <!-- Active Alerts Banner -->
-            <div id="alert-banner" class="hidden mb-16"></div>
+            <div class="page-body">
+                <!-- Connection Status -->
+                <div id="connection-status" class="alert alert-warning hidden">
+                    Dashboard connection lost. Reconnecting...
+                </div>
+
+                <!-- Active Alerts Banner -->
+                <div id="alert-banner" class="hidden mb-16"></div>
 
             <!-- Stats Summary -->
-            <div class="card mb-16">
-                <div style="display:flex;gap:24px;flex-wrap:wrap;">
-                    <div>
-                        <div class="text-muted text-sm">Servers</div>
-                        <div style="font-size:24px;font-weight:700;" id="stat-servers">-</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                        <span>Servers</span>
                     </div>
-                    <div>
-                        <div class="text-muted text-sm">Nodes</div>
-                        <div style="font-size:24px;font-weight:700;" id="stat-nodes">-</div>
+                    <div class="stat-card-body">
+                        <div class="stat-card-label">TOTAL / ONLINE</div>
+                        <div class="stat-card-value"><span id="stat-servers">0</span> / <span id="stat-online" class="text-accent">0</span></div>
+                        <div class="stat-card-sub" id="stat-nodes-sub">0 nodes</div>
                     </div>
-                    <div>
-                        <div class="text-muted text-sm">Online</div>
-                        <div style="font-size:24px;font-weight:700;color:var(--success);" id="stat-online">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                        <span>Nodes Running</span>
                     </div>
-                    <div>
-                        <div class="text-muted text-sm">Running Nodes</div>
-                        <div style="font-size:24px;font-weight:700;color:var(--success);" id="stat-running">-</div>
+                    <div class="stat-card-body">
+                        <div class="stat-card-label">RUNNING / TOTAL</div>
+                        <div class="stat-card-value text-accent"><span id="stat-running">0</span> / <span id="stat-nodes">0</span></div>
+                        <div class="stat-card-sub" id="stat-syncing-sub">0 syncing</div>
                     </div>
-                    <div>
-                        <div class="text-muted text-sm">Stopped</div>
-                        <div style="font-size:24px;font-weight:700;color:var(--text-secondary);" id="stat-stopped">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span>Alerts</span>
                     </div>
-                    <div>
-                        <div class="text-muted text-sm">Syncing</div>
-                        <div style="font-size:24px;font-weight:700;color:var(--warning);" id="stat-syncing">-</div>
+                    <div class="stat-card-body">
+                        <div class="stat-card-label">ACTIVE ALERTS</div>
+                        <div class="stat-card-value" id="stat-alerts">0</div>
+                        <div class="stat-card-sub" id="stat-alerts-sub">0 critical</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span>Stopped</span>
+                    </div>
+                    <div class="stat-card-body">
+                        <div class="stat-card-label">STOPPED NODES</div>
+                        <div class="stat-card-value text-warning"><span id="stat-stopped">0</span></div>
+                        <div class="stat-card-sub" id="stat-syncing-count"><span id="stat-syncing">0</span> syncing</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Server List -->
-            <div class="card-header">
-                <h2>Servers</h2>
-                <div class="btn-group">
-                    <button class="btn btn-primary btn-sm" onclick="showProvision()">+ Provision Node</button>
-                    <button class="btn btn-secondary btn-sm" onclick="showAddServer()">+ Add Server</button>
+            <!-- Resources Panel -->
+            <div class="card" style="margin-bottom:20px;">
+                <div class="stat-card-header">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>Resources</span>
                 </div>
-            </div>
-
-            <div id="server-list" class="card-grid">
-                <div class="empty-state">
-                    <div class="loading-text" style="justify-content:center;">
-                        <div class="spinner"></div>
-                        <span>Loading servers...</span>
+                <div style="display:flex;justify-content:space-around;align-items:flex-start;padding:24px 16px;flex-wrap:wrap;gap:24px;">
+                    <div style="text-align:center;">
+                        <div id="gauge-total-cpu" style="display:inline-block;"></div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:8px;">CPU</div>
+                        <div id="resource-cpu-detail" class="text-sm text-muted" style="margin-top:4px;">0% used</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div id="gauge-total-mem" style="display:inline-block;"></div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:8px;">Memory</div>
+                        <div id="resource-mem-detail" class="text-sm text-muted" style="margin-top:4px;">0 B / 0 B</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div id="gauge-total-disk" style="display:inline-block;"></div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:8px;">Storage</div>
+                        <div id="resource-disk-detail" class="text-sm text-muted" style="margin-top:4px;">0 B / 0 B</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Add Server Modal -->
-            <div id="add-server-modal" class="hidden">
-                <div class="card mt-16">
-                    <div class="card-header">
-                        <h3>Add New Server</h3>
-                        <button class="btn btn-sm btn-secondary" onclick="hideAddServer()">Close</button>
+            <!-- Servers Status Table -->
+            <div class="data-table-container" style="margin-bottom:20px;">
+                <div class="data-table-header">
+                    <span class="data-table-title">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                        Servers Status
+                    </span>
+                    <div class="btn-group">
+                        <button class="btn btn-primary btn-sm" onclick="showProvision()">+ Provision Node</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showAddServer()">+ Add Server</button>
                     </div>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Server</th>
+                            <th>Status</th>
+                            <th>IP Address</th>
+                            <th>Agent</th>
+                            <th>CPU</th>
+                            <th>Memory</th>
+                            <th>Nodes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="server-table-body">
+                        <tr><td colspan="8" class="text-muted" style="text-align:center;padding:32px;">No servers registered yet. <a href="#" onclick="showAddServer(); return false;" style="color:var(--accent);">Add your first server</a></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Nodes Table -->
+            <div class="data-table-container" id="nodes-table-container" style="margin-bottom:20px;display:none;">
+                <div class="data-table-header">
+                    <span class="data-table-title">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                        Provisioned Nodes
+                    </span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Status</th>
+                            <th>Nonce</th>
+                            <th>Sync</th>
+                            <th>Server</th>
+                            <th>Type</th>
+                            <th>CPU</th>
+                            <th>Memory</th>
+                            <th>Image</th>
+                            <th>Port</th>
+                        </tr>
+                    </thead>
+                    <tbody id="nodes-table-body">
+                    </tbody>
+                </table>
+            </div>
+
+            </div><!-- /page-body -->
+        </main>
+
+        <!-- Add Server Modal -->
+        <div class="modal-backdrop" id="modal-add-server" onclick="if(event.target===this) hideAddServer()">
+            <div class="modal-panel">
+                <div class="modal-panel-header">
+                    <h3>Add New Server</h3>
+                    <button class="modal-close-btn" onclick="hideAddServer()">&times;</button>
+                </div>
+                <div class="modal-panel-body">
                     <p class="text-sm text-muted mb-16">
                         Generate a one-time registration token and run the install script on your server.
                     </p>
@@ -115,15 +275,16 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Provision Node Wizard -->
-            <div id="provision-modal" class="hidden">
-                <div class="card mt-16">
-                    <div class="card-header">
-                        <h3>Provision New Node</h3>
-                        <button class="btn btn-sm btn-secondary" onclick="hideProvision()">Close</button>
-                    </div>
-
+        <!-- Provision Node Modal -->
+        <div class="modal-backdrop" id="modal-provision" onclick="if(event.target===this) hideProvision()">
+            <div class="modal-panel">
+                <div class="modal-panel-header">
+                    <h3>Provision New Node</h3>
+                    <button class="modal-close-btn" onclick="hideProvision()">&times;</button>
+                </div>
+                <div class="modal-panel-body">
                     <!-- Step 1: Server + Config -->
                     <div id="prov-step-config">
                         <div class="form-group">
@@ -168,103 +329,16 @@
                     </div>
                 </div>
             </div>
-            <!-- Alerts Panel -->
-            <div id="alerts-panel" class="hidden">
-                <div class="card mt-16">
-                    <div class="card-header">
-                        <h3>Alert History</h3>
-                        <button class="btn btn-sm btn-secondary" onclick="hideAlerts()">Close</button>
-                    </div>
-                    <div id="alerts-list"></div>
+        </div>
+
+        <!-- Agent Update Modal -->
+        <div class="modal-backdrop" id="modal-agent-update" onclick="if(event.target===this) hideAgentUpdate()">
+            <div class="modal-panel modal-panel-lg">
+                <div class="modal-panel-header">
+                    <h3>Agent Update</h3>
+                    <button class="modal-close-btn" onclick="hideAgentUpdate()">&times;</button>
                 </div>
-            </div>
-
-            <!-- Alert Rules Panel -->
-            <div id="alert-rules-panel" class="hidden">
-                <div class="card mt-16">
-                    <div class="card-header">
-                        <h3>Alert Rules</h3>
-                        <div class="btn-group">
-                            <button class="btn btn-sm btn-primary" onclick="showAddRule()">+ Add Rule</button>
-                            <button class="btn btn-sm btn-secondary" onclick="hideAlertRules()">Close</button>
-                        </div>
-                    </div>
-                    <div id="alert-rules-list"></div>
-
-                    <!-- Add/Edit Rule Form -->
-                    <div id="add-rule-form" class="hidden mt-16" style="border-top:1px solid var(--border);padding-top:16px;">
-                        <h4 id="rule-form-title">Add Alert Rule</h4>
-                        <input type="hidden" id="rule-id">
-                        <div class="form-group">
-                            <label class="form-label">Name</label>
-                            <input class="form-input" id="rule-name" placeholder="e.g. High CPU Alert">
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                            <div class="form-group">
-                                <label class="form-label">Metric</label>
-                                <select class="form-input" id="rule-metric">
-                                    <option value="klv_nonce">klv_nonce</option>
-                                    <option value="klv_connectedPeers">klv_connectedPeers</option>
-                                    <option value="klv_isSyncing">klv_isSyncing</option>
-                                    <option value="cpu_percent">cpu_percent</option>
-                                    <option value="mem_percent">mem_percent</option>
-                                    <option value="disk_percent">disk_percent</option>
-                                    <option value="agent.heartbeat">agent.heartbeat</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Condition</label>
-                                <select class="form-input" id="rule-condition">
-                                    <option value="gt">Greater than (&gt;)</option>
-                                    <option value="lt">Less than (&lt;)</option>
-                                    <option value="eq">Equals (=)</option>
-                                    <option value="stall">Stall (no change)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-                            <div class="form-group">
-                                <label class="form-label">Threshold</label>
-                                <input class="form-input" id="rule-threshold" type="number" step="any" value="0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Duration (sec)</label>
-                                <input class="form-input" id="rule-duration" type="number" value="0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Cooldown (min)</label>
-                                <input class="form-input" id="rule-cooldown" type="number" value="5">
-                            </div>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                            <div class="form-group">
-                                <label class="form-label">Severity</label>
-                                <select class="form-input" id="rule-severity">
-                                    <option value="critical">Critical</option>
-                                    <option value="warning">Warning</option>
-                                    <option value="info">Info</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Node Filter</label>
-                                <input class="form-input" id="rule-node-filter" value="*" placeholder="* for all nodes">
-                            </div>
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn btn-primary btn-sm" onclick="saveRule()">Save Rule</button>
-                            <button class="btn btn-secondary btn-sm" onclick="cancelRule()">Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Agent Update Panel -->
-            <div id="agent-update-panel" class="hidden">
-                <div class="card mt-16">
-                    <div class="card-header">
-                        <h3>Agent Update</h3>
-                        <button class="btn btn-sm btn-secondary" onclick="hideAgentUpdate()">Close</button>
-                    </div>
-
+                <div class="modal-panel-body">
                     <!-- Upload Binary -->
                     <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
                         <h4>Upload Agent Binary</h4>
@@ -312,7 +386,7 @@
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
     </div>
 
     <script src="/static/js/api.js"></script>
@@ -382,24 +456,35 @@
             WS.on('node.update', () => loadData());
             WS.on('connected', () => {
                 document.getElementById('connection-status').classList.add('hidden');
+                var dot = document.getElementById('status-dot');
+                var txt = document.getElementById('connection-text');
+                if (dot) dot.className = 'status-dot connected';
+                if (txt) txt.textContent = 'Connected';
             });
             WS.on('disconnected', () => {
                 document.getElementById('connection-status').classList.remove('hidden');
+                var dot = document.getElementById('status-dot');
+                var txt = document.getElementById('connection-text');
+                if (dot) dot.className = 'status-dot';
+                if (txt) txt.textContent = 'Connecting...';
             });
         }
 
         async function loadData() {
-            const [serverData, nodeData] = await Promise.all([
-                API.getJSON('/api/servers'),
-                API.getJSON('/api/nodes'),
-            ]);
+            try {
+                const [serverData, nodeData] = await Promise.all([
+                    API.getJSON('/api/servers'),
+                    API.getJSON('/api/nodes'),
+                ]);
 
-            if (serverData) {
-                servers = serverData.servers || [];
+                servers = serverData?.servers || [];
                 nodes = nodeData?.nodes || [];
-                renderServers();
-                updateStats();
+            } catch (e) {
+                servers = [];
+                nodes = [];
             }
+            renderServers();
+            updateStats();
         }
 
         function updateStats() {
@@ -407,6 +492,7 @@
             document.getElementById('stat-nodes').textContent = nodes.length;
             const online = servers.filter(s => s.status === 'online').length;
             document.getElementById('stat-online').textContent = online;
+            document.getElementById('stat-nodes-sub').textContent = nodes.length + ' node' + (nodes.length !== 1 ? 's' : '');
 
             const running = nodes.filter(n => n.status === 'running').length;
             const stopped = nodes.filter(n => n.status === 'stopped').length;
@@ -414,12 +500,218 @@
             document.getElementById('stat-running').textContent = running;
             document.getElementById('stat-stopped').textContent = stopped;
             document.getElementById('stat-syncing').textContent = syncing;
+            document.getElementById('stat-syncing-sub').textContent = syncing + ' syncing';
         }
 
         let serverMetrics = {}; // serverID → latest system metrics
 
         function renderServers() {
             serverTable.setData(servers);
+            renderResourceGauges();
+            renderNodes();
+        }
+
+        function renderNodes() {
+            const container = document.getElementById('nodes-table-container');
+            const tbody = document.getElementById('nodes-table-body');
+
+            if (nodes.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = '';
+            tbody.textContent = '';
+
+            // Build a server name lookup
+            const serverMap = {};
+            servers.forEach(function(s) { serverMap[s.id] = s.name || s.hostname; });
+
+            nodes.forEach(function(n) {
+                const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.onclick = function() { location.href = '/node/' + n.id; };
+
+                // Node name
+                const nameCell = document.createElement('td');
+                const nameStrong = document.createElement('strong');
+                nameStrong.textContent = n.display_name || n.name || n.container_name;
+                nameCell.appendChild(nameStrong);
+                if (n.bls_public_key) {
+                    const keyDiv = document.createElement('div');
+                    keyDiv.className = 'text-sm text-muted';
+                    keyDiv.style.marginTop = '2px';
+                    keyDiv.style.fontFamily = 'monospace';
+                    keyDiv.textContent = n.bls_public_key.substring(0, 16) + '...';
+                    keyDiv.title = n.bls_public_key;
+                    nameCell.appendChild(keyDiv);
+                }
+                tr.appendChild(nameCell);
+
+                // Status
+                const statusCell = document.createElement('td');
+                const statusBadge = document.createElement('span');
+                statusBadge.className = 'badge badge-' + (n.status || 'stopped');
+                statusBadge.textContent = n.status || 'stopped';
+                statusCell.appendChild(statusBadge);
+                tr.appendChild(statusCell);
+
+                // Nonce
+                const nonceCell = document.createElement('td');
+                const meta2 = n.metadata || {};
+                const nonce = meta2.klv_nonce;
+                nonceCell.style.fontFamily = 'monospace';
+                nonceCell.textContent = nonce != null ? Math.floor(nonce).toLocaleString() : '-';
+                tr.appendChild(nonceCell);
+
+                // Sync
+                const syncCell = document.createElement('td');
+                const isSyncing = meta2.klv_is_syncing;
+                if (isSyncing != null) {
+                    const syncBadge = document.createElement('span');
+                    if (isSyncing === 0) {
+                        syncBadge.className = 'badge badge-running';
+                        syncBadge.textContent = 'synced';
+                    } else {
+                        syncBadge.className = 'badge badge-warning';
+                        syncBadge.textContent = 'syncing';
+                    }
+                    syncCell.appendChild(syncBadge);
+                } else {
+                    syncCell.className = 'text-muted';
+                    syncCell.textContent = '-';
+                }
+                tr.appendChild(syncCell);
+
+                // Server
+                const serverCell = document.createElement('td');
+                serverCell.className = 'text-muted';
+                serverCell.textContent = serverMap[n.server_id] || n.server_id;
+                tr.appendChild(serverCell);
+
+                // Type
+                const typeCell = document.createElement('td');
+                typeCell.textContent = n.node_type || '-';
+                tr.appendChild(typeCell);
+
+                // CPU
+                const cpuCell = document.createElement('td');
+                const meta = n.metadata || {};
+                const cpuPct = meta.cpu_percent || 0;
+                const cpuBar = document.createElement('div');
+                cpuBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                const cpuTrack = document.createElement('div');
+                cpuTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
+                const cpuFill = document.createElement('div');
+                cpuFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(cpuPct) + ';width:' + Math.min(cpuPct, 100) + '%;';
+                cpuTrack.appendChild(cpuFill);
+                cpuBar.appendChild(cpuTrack);
+                const cpuLabel = document.createElement('span');
+                cpuLabel.className = 'text-muted';
+                cpuLabel.style.fontSize = '12px';
+                cpuLabel.textContent = cpuPct.toFixed(1) + '%';
+                cpuBar.appendChild(cpuLabel);
+                cpuCell.appendChild(cpuBar);
+                tr.appendChild(cpuCell);
+
+                // Memory
+                const memCell = document.createElement('td');
+                const memPct = meta.mem_percent || 0;
+                const memUsed = meta.mem_used || 0;
+                const memLimit = meta.mem_limit || 0;
+                const memBar = document.createElement('div');
+                memBar.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                const memTrack = document.createElement('div');
+                memTrack.style.cssText = 'width:60px;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;';
+                const memFill = document.createElement('div');
+                memFill.style.cssText = 'height:100%;border-radius:3px;background:' + Charts._gaugeColor(memPct) + ';width:' + Math.min(memPct, 100) + '%;';
+                memTrack.appendChild(memFill);
+                memBar.appendChild(memTrack);
+                const memLabel = document.createElement('span');
+                memLabel.className = 'text-muted';
+                memLabel.style.fontSize = '12px';
+                memLabel.textContent = Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit);
+                memBar.appendChild(memLabel);
+                memCell.appendChild(memBar);
+                tr.appendChild(memCell);
+
+                // Image
+                const imageCell = document.createElement('td');
+                imageCell.className = 'text-muted';
+                imageCell.textContent = n.docker_image_tag || '-';
+                tr.appendChild(imageCell);
+
+                // Port
+                const portCell = document.createElement('td');
+                portCell.className = 'text-muted';
+                portCell.textContent = n.rest_api_port || '-';
+                tr.appendChild(portCell);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function createResourceBar(percent) {
+            var pct = Math.max(0, Math.min(100, percent || 0));
+            var wrapper = document.createElement('div');
+            wrapper.style.display = 'flex';
+            wrapper.style.alignItems = 'center';
+            wrapper.style.gap = '8px';
+            wrapper.style.minWidth = '100px';
+
+            var bar = document.createElement('div');
+            bar.className = 'resource-bar';
+            bar.style.flex = '1';
+            var fill = document.createElement('div');
+            fill.className = 'resource-bar-fill ' + (pct < 60 ? 'green' : pct < 85 ? 'orange' : 'red');
+            fill.style.width = pct.toFixed(1) + '%';
+            bar.appendChild(fill);
+            wrapper.appendChild(bar);
+
+            var label = document.createElement('span');
+            label.className = 'text-sm';
+            label.style.minWidth = '36px';
+            label.style.textAlign = 'right';
+            label.textContent = pct.toFixed(1) + '%';
+            wrapper.appendChild(label);
+
+            return wrapper;
+        }
+
+        function renderResourceGauges() {
+            // Aggregate metrics across all servers
+            var totalCpu = 0, totalMem = 0, totalDisk = 0;
+            var totalMemUsed = 0, totalMemTotal = 0;
+            var totalDiskUsed = 0, totalDiskTotal = 0;
+            var count = 0;
+
+            servers.forEach(function(s) {
+                var m = serverMetrics[s.id];
+                if (m) {
+                    totalCpu += m.cpu_percent || 0;
+                    totalMem += m.mem_percent || 0;
+                    totalDisk += m.disk_percent || 0;
+                    totalMemUsed += m.mem_used || 0;
+                    totalMemTotal += m.mem_total || 0;
+                    totalDiskUsed += m.disk_used || 0;
+                    totalDiskTotal += m.disk_total || 0;
+                    count++;
+                }
+            });
+
+            var avgCpu = count > 0 ? totalCpu / count : 0;
+            var avgMem = count > 0 ? totalMem / count : 0;
+            var avgDisk = count > 0 ? totalDisk / count : 0;
+
+            Charts.gauge(document.getElementById('gauge-total-cpu'), avgCpu, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-total-mem'), avgMem, { size: 120 });
+            Charts.gauge(document.getElementById('gauge-total-disk'), avgDisk, { size: 120 });
+
+            document.getElementById('resource-cpu-detail').textContent = avgCpu.toFixed(1) + '% used';
+            document.getElementById('resource-mem-detail').textContent =
+                Charts.formatBytes(totalMemUsed) + ' / ' + Charts.formatBytes(totalMemTotal);
+            document.getElementById('resource-disk-detail').textContent =
+                Charts.formatBytes(totalDiskUsed) + ' / ' + Charts.formatBytes(totalDiskTotal);
         }
 
         async function loadServerMetrics() {
@@ -441,12 +733,20 @@
                 '<span class="badge ' + statusClass + '">' + esc(node.name || node.container_name) + '</span></a>';
         }
 
+        async function deleteServer(id, name) {
+            if (!confirm('Delete server "' + name + '"? This cannot be undone.')) return;
+            const resp = await API.delete('/api/servers/' + id);
+            if (resp && resp.ok) {
+                loadData();
+            }
+        }
+
         function showAddServer() {
-            document.getElementById('add-server-modal').classList.remove('hidden');
+            document.getElementById('modal-add-server').classList.add('active');
         }
 
         function hideAddServer() {
-            document.getElementById('add-server-modal').classList.add('hidden');
+            document.getElementById('modal-add-server').classList.remove('active');
             document.getElementById('token-display').classList.add('hidden');
         }
 
@@ -468,11 +768,11 @@
 
         // --- Provision Wizard ---
         function showProvision() {
-            document.getElementById('provision-modal').classList.remove('hidden');
+            document.getElementById('modal-provision').classList.add('active');
             document.getElementById('prov-step-config').classList.remove('hidden');
             document.getElementById('prov-step-progress').classList.add('hidden');
 
-            // Populate server dropdown
+            // Populate server dropdown (values are already escaped via esc())
             const sel = document.getElementById('prov-server');
             sel.innerHTML = servers
                 .filter(s => s.status === 'online')
@@ -484,7 +784,7 @@
         }
 
         function hideProvision() {
-            document.getElementById('provision-modal').classList.add('hidden');
+            document.getElementById('modal-provision').classList.remove('active');
         }
 
         async function loadDockerTags() {
@@ -492,9 +792,10 @@
                 const data = await API.getJSON('/api/docker/tags');
                 if (data && data.tags) {
                     const sel = document.getElementById('prov-tag');
-                    sel.innerHTML = data.tags.slice(0, 20).map(t =>
-                        '<option value="' + esc(t) + '">' + esc(t) + '</option>'
-                    ).join('');
+                    sel.innerHTML = data.tags.slice(0, 20).map(t => {
+                        const name = typeof t === 'string' ? t : t.name;
+                        return '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+                    }).join('');
                 }
             } catch (e) { /* keep default "latest" */ }
         }
@@ -602,171 +903,18 @@
 
             let html = '';
             if (critical.length > 0) {
-                html += '<div class="alert alert-error mb-8" style="cursor:pointer" onclick="showAlerts()">' +
+                html += '<div class="alert alert-error mb-8" style="cursor:pointer" onclick="location.href=\'/alerts\'">' +
                     critical.length + ' critical alert' + (critical.length > 1 ? 's' : '') + ': ' +
                     esc(critical.map(a => a.rule_name).join(', ')) + '</div>';
             }
             if (warnings.length > 0) {
-                html += '<div class="alert alert-warning" style="cursor:pointer" onclick="showAlerts()">' +
+                html += '<div class="alert alert-warning" style="cursor:pointer" onclick="location.href=\'/alerts\'">' +
                     warnings.length + ' warning' + (warnings.length > 1 ? 's' : '') + ': ' +
                     esc(warnings.map(a => a.rule_name).join(', ')) + '</div>';
             }
 
             banner.innerHTML = html;
             banner.classList.remove('hidden');
-        }
-
-        function showAlerts() {
-            document.getElementById('alerts-panel').classList.remove('hidden');
-            document.getElementById('alert-rules-panel').classList.add('hidden');
-            loadAlertHistory();
-        }
-
-        function hideAlerts() {
-            document.getElementById('alerts-panel').classList.add('hidden');
-        }
-
-        async function loadAlertHistory() {
-            const data = await API.getJSON('/api/alerts/history?limit=50');
-            if (!data) return;
-
-            const alerts = data.alerts || [];
-            const container = document.getElementById('alerts-list');
-
-            if (alerts.length === 0) {
-                container.innerHTML = '<p class="text-muted" style="padding:16px;">No alerts yet.</p>';
-                return;
-            }
-
-            container.innerHTML = alerts.map(a => {
-                const stateColor = a.state === 'firing' ? 'var(--error)' : a.state === 'resolved' ? 'var(--success)' : 'var(--warning)';
-                const sevBadge = a.severity === 'critical' ? 'badge-offline' : a.severity === 'warning' ? 'badge-syncing' : 'badge-online';
-                const time = new Date((a.fired_at || a.created_at) * 1000).toLocaleString();
-                return '<div class="info-row" style="border-left:3px solid ' + stateColor + ';padding-left:12px;margin:4px 0;">' +
-                    '<div style="flex:1">' +
-                        '<span class="badge ' + sevBadge + '" style="margin-right:8px;">' + esc(a.severity) + '</span>' +
-                        '<strong>' + esc(a.rule_name) + '</strong>' +
-                        '<div class="text-sm text-muted">' + esc(a.message) + '</div>' +
-                        '<div class="text-sm text-muted">' + time + ' — ' + esc(a.state) + '</div>' +
-                    '</div>' +
-                    (a.state === 'firing' && !a.acked ? '<button class="btn btn-sm btn-secondary" onclick="ackAlert(\'' + esc(a.id) + '\')">Ack</button>' : '') +
-                '</div>';
-            }).join('');
-        }
-
-        async function ackAlert(id) {
-            await API.postJSON('/api/alerts/' + id + '/acknowledge', {});
-            loadAlertHistory();
-            loadActiveAlerts();
-        }
-
-        // --- Alert Rules ---
-        function showAlertRules() {
-            document.getElementById('alert-rules-panel').classList.remove('hidden');
-            document.getElementById('alerts-panel').classList.add('hidden');
-            loadAlertRules();
-        }
-
-        function hideAlertRules() {
-            document.getElementById('alert-rules-panel').classList.add('hidden');
-            cancelRule();
-        }
-
-        async function loadAlertRules() {
-            const data = await API.getJSON('/api/alerts/rules');
-            if (!data) return;
-
-            const rules = data.rules || [];
-            const container = document.getElementById('alert-rules-list');
-
-            if (rules.length === 0) {
-                container.innerHTML = '<p class="text-muted" style="padding:16px;">No alert rules configured.</p>';
-                return;
-            }
-
-            container.innerHTML = rules.map(r => {
-                const statusText = r.enabled ? 'enabled' : 'disabled';
-                const statusColor = r.enabled ? 'var(--success)' : 'var(--text-secondary)';
-                const condLabel = { gt: '>', lt: '<', eq: '=', stall: 'stall' }[r.condition] || r.condition;
-                return '<div class="info-row" style="margin:4px 0;">' +
-                    '<div style="flex:1">' +
-                        '<strong>' + esc(r.name) + '</strong>' + (r.builtin ? ' <span class="text-sm text-muted">(built-in)</span>' : '') +
-                        '<div class="text-sm text-muted">' + esc(r.metric_name) + ' ' + condLabel + ' ' + r.threshold +
-                        (r.duration_sec > 0 ? ' for ' + r.duration_sec + 's' : '') +
-                        ' — ' + esc(r.severity) + ', cooldown ' + r.cooldown_min + 'min</div>' +
-                    '</div>' +
-                    '<span class="text-sm" style="color:' + statusColor + ';margin-right:8px;">' + statusText + '</span>' +
-                    '<button class="btn btn-sm btn-secondary" onclick="editRule(\'' + esc(r.id) + '\')" style="margin-right:4px;">Edit</button>' +
-                    (!r.builtin ? '<button class="btn btn-sm btn-secondary" onclick="deleteRule(\'' + esc(r.id) + '\')">Del</button>' : '') +
-                '</div>';
-            }).join('');
-        }
-
-        let editingRules = [];
-        function showAddRule() {
-            document.getElementById('add-rule-form').classList.remove('hidden');
-            document.getElementById('rule-form-title').textContent = 'Add Alert Rule';
-            document.getElementById('rule-id').value = '';
-            document.getElementById('rule-name').value = '';
-            document.getElementById('rule-metric').value = 'cpu_percent';
-            document.getElementById('rule-condition').value = 'gt';
-            document.getElementById('rule-threshold').value = '90';
-            document.getElementById('rule-duration').value = '0';
-            document.getElementById('rule-cooldown').value = '5';
-            document.getElementById('rule-severity').value = 'warning';
-            document.getElementById('rule-node-filter').value = '*';
-        }
-
-        async function editRule(id) {
-            const data = await API.getJSON('/api/alerts/rules');
-            if (!data) return;
-            const rule = (data.rules || []).find(r => r.id === id);
-            if (!rule) return;
-
-            document.getElementById('add-rule-form').classList.remove('hidden');
-            document.getElementById('rule-form-title').textContent = 'Edit Alert Rule';
-            document.getElementById('rule-id').value = rule.id;
-            document.getElementById('rule-name').value = rule.name;
-            document.getElementById('rule-metric').value = rule.metric_name;
-            document.getElementById('rule-condition').value = rule.condition;
-            document.getElementById('rule-threshold').value = rule.threshold;
-            document.getElementById('rule-duration').value = rule.duration_sec;
-            document.getElementById('rule-cooldown').value = rule.cooldown_min;
-            document.getElementById('rule-severity').value = rule.severity;
-            document.getElementById('rule-node-filter').value = rule.node_filter;
-        }
-
-        function cancelRule() {
-            document.getElementById('add-rule-form').classList.add('hidden');
-        }
-
-        async function saveRule() {
-            const rule = {
-                name: document.getElementById('rule-name').value,
-                metric_name: document.getElementById('rule-metric').value,
-                condition: document.getElementById('rule-condition').value,
-                threshold: parseFloat(document.getElementById('rule-threshold').value) || 0,
-                duration_sec: parseInt(document.getElementById('rule-duration').value) || 0,
-                cooldown_min: parseInt(document.getElementById('rule-cooldown').value) || 5,
-                severity: document.getElementById('rule-severity').value,
-                node_filter: document.getElementById('rule-node-filter').value || '*',
-                enabled: true
-            };
-
-            const id = document.getElementById('rule-id').value;
-            if (id) rule.id = id;
-
-            const result = await API.postJSON('/api/alerts/rules', rule);
-            if (result && result.ok) {
-                cancelRule();
-                loadAlertRules();
-            }
-        }
-
-        async function deleteRule(id) {
-            if (!confirm('Delete this alert rule?')) return;
-            await API.request('/api/alerts/rules/' + id, { method: 'DELETE' });
-            loadAlertRules();
         }
 
         // Load alerts on init
@@ -778,14 +926,13 @@
 
         // ── Agent Update ──
         function showAgentUpdate() {
-            document.querySelectorAll('[id$="-panel"]').forEach(p => p.classList.add('hidden'));
-            document.getElementById('agent-update-panel').classList.remove('hidden');
+            document.getElementById('modal-agent-update').classList.add('active');
             loadBinaries();
             loadAgentVersions();
         }
 
         function hideAgentUpdate() {
-            document.getElementById('agent-update-panel').classList.add('hidden');
+            document.getElementById('modal-agent-update').classList.remove('active');
         }
 
         async function uploadBinary() {

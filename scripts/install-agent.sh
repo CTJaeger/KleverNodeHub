@@ -50,6 +50,51 @@ log "Klever Node Hub — Agent Installer"
 log "Architecture: ${GOOS}/${GOARCH}"
 log "Dashboard: ${DASHBOARD_URL}"
 
+# Install Docker if not present
+if ! command -v docker &>/dev/null; then
+    log "Docker not found. Installing Docker..."
+    if command -v apt-get &>/dev/null; then
+        apt-get update -qq
+        apt-get install -y -qq ca-certificates curl gnupg
+        install -m 0755 -d /etc/apt/keyrings
+        DISTRO=$(. /etc/os-release && echo "$ID")
+        curl -fsSL "https://download.docker.com/linux/${DISTRO}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DISTRO} \
+          $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+        apt-get update -qq
+        apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    elif command -v yum &>/dev/null; then
+        yum install -y -q yum-utils
+        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        yum install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    else
+        warn "Could not detect package manager. Trying Docker convenience script..."
+        curl -fsSL https://get.docker.com | sh
+    fi
+    systemctl enable docker
+    systemctl start docker
+    log "Docker installed and started"
+else
+    log "Docker already installed: $(docker --version)"
+fi
+
+# Install jq if not present
+if ! command -v jq &>/dev/null; then
+    log "Installing jq..."
+    if command -v apt-get &>/dev/null; then
+        apt-get install -y -qq jq
+    elif command -v yum &>/dev/null; then
+        yum install -y -q jq
+    else
+        warn "Could not install jq automatically. Please install it manually."
+    fi
+    log "jq installed"
+else
+    log "jq already installed"
+fi
+
 # Download agent binary
 RELEASE_URL="https://github.com/CTJaeger/KleverNodeHub/releases/latest/download/klever-agent-${GOOS}-${GOARCH}"
 
@@ -91,7 +136,7 @@ log "Systemd service created and enabled"
 
 # Register with dashboard
 log "Registering with dashboard..."
-if ! "${AGENT_BIN}" register --token "$TOKEN" --dashboard "$DASHBOARD_URL" --config-dir "$AGENT_CONFIG_DIR"; then
+if ! "${AGENT_BIN}" --register-token "$TOKEN" --dashboard-url "$DASHBOARD_URL" --config-dir "$AGENT_CONFIG_DIR"; then
     error "Registration failed"
 fi
 

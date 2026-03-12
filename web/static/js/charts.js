@@ -23,7 +23,7 @@ const Charts = {
         el.innerHTML = `
             <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="gauge-svg">
                 <circle cx="${size/2}" cy="${size/2}" r="${r}"
-                    fill="none" stroke="var(--border)" stroke-width="${stroke}" />
+                    fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${stroke}" />
                 <circle cx="${size/2}" cy="${size/2}" r="${r}"
                     fill="none" stroke="${color}" stroke-width="${stroke}"
                     stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
@@ -39,9 +39,9 @@ const Charts = {
     },
 
     _gaugeColor(pct) {
-        if (pct < 60) return 'var(--success)';
+        if (pct < 60) return 'var(--accent)';
         if (pct < 85) return 'var(--warning)';
-        return 'var(--danger)';
+        return 'var(--error)';
     },
 
     /**
@@ -60,7 +60,7 @@ const Charts = {
         canvas.height = h * dpr;
         ctx.scale(dpr, dpr);
 
-        const color = opts.color || '#4fc3f7';
+        const color = opts.color || '#e8a737';
         const min = Math.min(...values);
         const max = Math.max(...values);
         const range = max - min || 1;
@@ -131,7 +131,7 @@ const Charts = {
         const xRange = xMax - xMin || 1;
 
         // Grid lines + Y labels
-        ctx.strokeStyle = 'rgba(139,148,158,0.15)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
         ctx.lineWidth = 1;
         ctx.fillStyle = 'var(--text-secondary)';
         ctx.font = '11px monospace';
@@ -163,7 +163,7 @@ const Charts = {
         // Draw datasets
         data.datasets.forEach(ds => {
             ctx.beginPath();
-            ctx.strokeStyle = ds.color || '#4fc3f7';
+            ctx.strokeStyle = ds.color || '#e8a737';
             ctx.lineWidth = 2;
 
             labels.forEach((t, i) => {
@@ -180,7 +180,7 @@ const Charts = {
             ctx.lineTo(lastX, pad.top + chartH);
             ctx.lineTo(firstX, pad.top + chartH);
             ctx.closePath();
-            ctx.fillStyle = (ds.color || '#4fc3f7').replace(')', ',0.08)').replace('rgb', 'rgba');
+            ctx.fillStyle = (ds.color || '#e8a737').replace(')', ',0.08)').replace('rgb', 'rgba');
             if (ds.color && ds.color.startsWith('#')) {
                 ctx.fillStyle = ds.color + '14';
             }
@@ -205,7 +205,7 @@ const Charts = {
             const ly = h - 4;
             ctx.font = '11px sans-serif';
             data.datasets.forEach(ds => {
-                ctx.fillStyle = ds.color || '#4fc3f7';
+                ctx.fillStyle = ds.color || '#e8a737';
                 ctx.fillRect(lx, ly - 8, 12, 3);
                 ctx.fillStyle = 'var(--text-secondary)';
                 ctx.textAlign = 'left';

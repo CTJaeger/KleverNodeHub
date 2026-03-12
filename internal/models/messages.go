@@ -66,15 +66,19 @@ type RegistrationResponse struct {
 
 // DiscoveredNode is a node found during agent auto-discovery.
 type DiscoveredNode struct {
-	ContainerID     string `json:"container_id"`
-	ContainerName   string `json:"container_name"`
-	Status          string `json:"status"`
-	RestAPIPort     int    `json:"rest_api_port"`
-	DisplayName     string `json:"display_name,omitempty"`
-	RedundancyLevel int    `json:"redundancy_level"`
-	DockerImageTag  string `json:"docker_image_tag,omitempty"`
-	DataDirectory   string `json:"data_directory,omitempty"`
-	BLSPublicKey    string `json:"bls_public_key,omitempty"`
+	ContainerID     string  `json:"container_id"`
+	ContainerName   string  `json:"container_name"`
+	Status          string  `json:"status"`
+	RestAPIPort     int     `json:"rest_api_port"`
+	DisplayName     string  `json:"display_name,omitempty"`
+	RedundancyLevel int     `json:"redundancy_level"`
+	DockerImageTag  string  `json:"docker_image_tag,omitempty"`
+	DataDirectory   string  `json:"data_directory,omitempty"`
+	BLSPublicKey    string  `json:"bls_public_key,omitempty"`
+	CPUPercent      float64 `json:"cpu_percent"`
+	MemUsed         uint64  `json:"mem_used"`
+	MemLimit        uint64  `json:"mem_limit"`
+	MemPercent      float64 `json:"mem_percent"`
 }
 
 // DiscoveryReport is sent by the agent after scanning for Klever nodes.

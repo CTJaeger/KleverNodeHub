@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 
 const (
 	heartbeatInterval   = 30 * time.Second
-	discoveryInterval   = 5 * time.Minute
+	discoveryInterval   = 30 * time.Second
 	nodeMetricsInterval = 15 * time.Second
 	reconnectBaseDelay  = 1 * time.Second
 	reconnectMaxDelay   = 60 * time.Second
@@ -127,8 +128,17 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer dialCancel()
 
+	tlsConfig, err := ag.TLSConfig()
+	if err != nil {
+		return fmt.Errorf("TLS config: %w", err)
+	}
+
 	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
-		// TODO: Add mTLS client certificate from agent config
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: tlsConfig,
+			},
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
@@ -165,6 +175,9 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	// Result channel for async command execution
 	resultCh := make(chan *models.Message, 16)
 
+	// Discovery trigger channel (e.g. after provisioning)
+	discoverNow := make(chan struct{}, 1)
+
 	// Node metrics channels
 	nodeMetricsCh := make(chan *models.Message, 32)
 	nodeStallCh := make(chan *models.Message, 8)
@@ -195,6 +208,15 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					return
 				}
 			case <-discoveryTicker.C:
+				report := ag.RunDiscovery(dockerSocket)
+				discoveryMsg := ag.BuildDiscoveryMessage(report)
+				if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
+					log.Printf("send discovery: %v", err)
+					return
+				}
+				nodeMetrics.UpdateNodes(report)
+			case <-discoverNow:
+				log.Printf("triggered immediate discovery")
 				report := ag.RunDiscovery(dockerSocket)
 				discoveryMsg := ag.BuildDiscoveryMessage(report)
 				if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
@@ -243,6 +265,13 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 				select {
 				case resultCh <- resultMsg:
 				case <-ctx.Done():
+				}
+				// Trigger immediate discovery after provisioning
+				if m.Action == "node.provision" && result.Success {
+					select {
+					case discoverNow <- struct{}{}:
+					default:
+					}
 				}
 			}(msg)
 		}
