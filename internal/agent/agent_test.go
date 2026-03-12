@@ -76,7 +76,7 @@ func TestBuildAgentInfo(t *testing.T) {
 	a := New("/tmp")
 	a.config = &Config{}
 
-	info := a.BuildAgentInfo()
+	info := a.BuildAgentInfo("")
 	if info.Version != version.Version {
 		t.Errorf("version = %q, want %q", info.Version, version.Version)
 	}
@@ -89,7 +89,7 @@ func TestBuildInfoMessage(t *testing.T) {
 	a := New("/tmp")
 	a.config = &Config{}
 
-	msg := a.BuildInfoMessage()
+	msg := a.BuildInfoMessage("")
 	if msg.Action != "agent.info" {
 		t.Errorf("action = %q, want %q", msg.Action, "agent.info")
 	}

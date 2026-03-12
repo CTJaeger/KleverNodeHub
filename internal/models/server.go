@@ -6,6 +6,8 @@ type Server struct {
 	Name          string         `json:"name"`
 	Hostname      string         `json:"hostname"`
 	IPAddress     string         `json:"ip_address"`
+	PublicIP      string         `json:"public_ip,omitempty"`
+	Region        string         `json:"region,omitempty"`
 	OSInfo        string         `json:"os_info,omitempty"`
 	AgentVersion  string         `json:"agent_version,omitempty"`
 	Status        string         `json:"status"` // "online", "offline", "updating"

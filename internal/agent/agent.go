@@ -125,22 +125,23 @@ func (a *Agent) Register(dashboardURL, token string) error {
 }
 
 // BuildAgentInfo creates the agent.info payload.
-func (a *Agent) BuildAgentInfo() *models.AgentInfo {
+func (a *Agent) BuildAgentInfo(publicIP string) *models.AgentInfo {
 	hostname, _ := os.Hostname()
 	return &models.AgentInfo{
 		Version:  version.Version,
 		OS:       runtime.GOOS + "/" + runtime.GOARCH,
 		Hostname: hostname,
+		PublicIP: publicIP,
 	}
 }
 
 // BuildInfoMessage creates a complete agent.info message.
-func (a *Agent) BuildInfoMessage() *models.Message {
+func (a *Agent) BuildInfoMessage(publicIP string) *models.Message {
 	return &models.Message{
 		ID:        fmt.Sprintf("info-%d", time.Now().UnixNano()),
 		Type:      "event",
 		Action:    "agent.info",
-		Payload:   a.BuildAgentInfo(),
+		Payload:   a.BuildAgentInfo(publicIP),
 		Timestamp: time.Now().Unix(),
 	}
 }

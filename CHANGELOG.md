@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #28**: Server public IP and region detection
+  - Agent: `ipdetect.go` — detects public IP via `api.ipify.org` (with fallbacks to `ifconfig.me`, `icanhazip.com`)
+  - Agent sends public IP in `agent.info` (on connect) and `agent.heartbeat` (periodic refresh)
+  - Dashboard: `geoip.go` — resolves IP to region via `ip-api.com` with in-memory cache
+  - Migration 4: adds `public_ip` and `region` columns to `servers` table
+  - `ServerStore.UpdatePublicIP()` for targeted IP/region updates
+  - Agent handler processes IP on connect and on heartbeat (only updates on change)
+  - Overview UI shows public IP (fallback to private IP) and region on server cards
+  - Tests: IP detection (success, fallback, all-fail), GeoIP resolver (success, city-only, fail, cache, empty), server store
+
 - **Issue #26**: Settings page UI and dashboard configuration API
   - `SettingsHandler`: GET/PUT /api/settings (grouped by category), GET/PUT /api/settings/{key}, POST /api/settings/reset
   - Settings categories: general (dashboard name), metrics (intervals, retention), notifications (severity filter), agents (heartbeat timeout, discovery interval)

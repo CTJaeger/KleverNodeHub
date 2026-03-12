@@ -15,12 +15,14 @@ type AgentInfo struct {
 	OS       string `json:"os"`
 	Hostname string `json:"hostname"`
 	IP       string `json:"ip"`
+	PublicIP string `json:"public_ip,omitempty"`
 }
 
 // HeartbeatPayload is sent periodically by the agent.
 type HeartbeatPayload struct {
 	Timestamp int64          `json:"timestamp"`
 	Metrics   *SystemMetrics `json:"metrics,omitempty"`
+	PublicIP  string         `json:"public_ip,omitempty"`
 }
 
 // SystemMetrics holds system-level resource usage data collected by the agent.

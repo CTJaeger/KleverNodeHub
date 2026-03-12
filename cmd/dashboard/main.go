@@ -173,8 +173,11 @@ func main() {
 	// Agent registration (token-based, no JWT required)
 	mux.HandleFunc("POST /api/agent/register", regHandler.HandleRegisterAgent)
 
+	// GeoIP resolver for server region detection
+	geoResolver := dashboard.NewGeoIPResolver()
+
 	// WebSocket endpoint for agents (authenticated via mTLS cert, not JWT)
-	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore)
+	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore, geoResolver)
 	mux.HandleFunc("GET /ws/agent", wsHandler.HandleUpgrade)
 
 	// Protected routes (JWT required)

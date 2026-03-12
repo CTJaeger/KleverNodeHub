@@ -393,7 +393,8 @@
                         '<span class="badge ' + badgeClass + '">' + esc(server.status) + '</span>' +
                     '</div>' +
                     '<div class="info-row"><span class="info-label">Hostname</span><span class="info-value">' + esc(server.hostname) + '</span></div>' +
-                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.ip_address) + '</span></div>' +
+                    '<div class="info-row"><span class="info-label">IP</span><span class="info-value">' + esc(server.public_ip || server.ip_address) + '</span></div>' +
+                    (server.region ? '<div class="info-row"><span class="info-label">Region</span><span class="info-value">' + esc(server.region) + '</span></div>' : '') +
                     '<div class="info-row"><span class="info-label">Agent</span><span class="info-value">' + esc(server.agent_version || '-') + '</span></div>' +
                     '<div class="info-row"><span class="info-label">Nodes</span><span class="info-value">' + serverNodes.length + '</span></div>' +
                     '<div class="gauge-row">' +
