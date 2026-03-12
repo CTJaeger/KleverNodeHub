@@ -194,4 +194,40 @@ var migrations = []string{
 		collected_at INTEGER NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_system_metrics_server_time ON system_metrics(server_id, collected_at);`,
+
+	// Migration 3: Phase 4 — alert rules and alert history
+	`CREATE TABLE IF NOT EXISTS alert_rules (
+		id           TEXT PRIMARY KEY,
+		name         TEXT NOT NULL,
+		enabled      INTEGER NOT NULL DEFAULT 1,
+		metric_name  TEXT NOT NULL,
+		condition    TEXT NOT NULL,
+		threshold    REAL NOT NULL,
+		duration_sec INTEGER NOT NULL DEFAULT 0,
+		severity     TEXT NOT NULL DEFAULT 'warning',
+		node_filter  TEXT NOT NULL DEFAULT '*',
+		cooldown_min INTEGER NOT NULL DEFAULT 5,
+		builtin      INTEGER NOT NULL DEFAULT 0,
+		created_at   INTEGER NOT NULL,
+		updated_at   INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS alerts (
+		id          TEXT PRIMARY KEY,
+		rule_id     TEXT NOT NULL,
+		rule_name   TEXT NOT NULL,
+		node_id     TEXT DEFAULT '',
+		server_id   TEXT DEFAULT '',
+		severity    TEXT NOT NULL,
+		state       TEXT NOT NULL DEFAULT 'pending',
+		message     TEXT DEFAULT '',
+		fired_at    INTEGER DEFAULT 0,
+		resolved_at INTEGER DEFAULT 0,
+		notified_at INTEGER DEFAULT 0,
+		acked       INTEGER NOT NULL DEFAULT 0,
+		created_at  INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_alerts_state ON alerts(state);
+	CREATE INDEX IF NOT EXISTS idx_alerts_rule ON alerts(rule_id);
+	CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts(created_at);`,
 }

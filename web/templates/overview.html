@@ -18,6 +18,8 @@
             </div>
             <nav class="sidebar-nav">
                 <a href="/overview" class="active">Overview</a>
+                <a href="#" onclick="showAlerts()">Alerts</a>
+                <a href="#" onclick="showAlertRules()">Alert Rules</a>
                 <a href="#" onclick="showAddServer()">Add Server</a>
                 <a href="#" onclick="API.logout()">Logout</a>
             </nav>
@@ -36,6 +38,9 @@
             <div id="connection-status" class="alert alert-warning hidden">
                 Dashboard connection lost. Reconnecting...
             </div>
+
+            <!-- Active Alerts Banner -->
+            <div id="alert-banner" class="hidden mb-16"></div>
 
             <!-- Stats Summary -->
             <div class="card mb-16">
@@ -158,6 +163,95 @@
                         </div>
                         <div id="prov-steps-list"></div>
                         <div id="prov-result" class="hidden mt-16"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Alerts Panel -->
+            <div id="alerts-panel" class="hidden">
+                <div class="card mt-16">
+                    <div class="card-header">
+                        <h3>Alert History</h3>
+                        <button class="btn btn-sm btn-secondary" onclick="hideAlerts()">Close</button>
+                    </div>
+                    <div id="alerts-list"></div>
+                </div>
+            </div>
+
+            <!-- Alert Rules Panel -->
+            <div id="alert-rules-panel" class="hidden">
+                <div class="card mt-16">
+                    <div class="card-header">
+                        <h3>Alert Rules</h3>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-primary" onclick="showAddRule()">+ Add Rule</button>
+                            <button class="btn btn-sm btn-secondary" onclick="hideAlertRules()">Close</button>
+                        </div>
+                    </div>
+                    <div id="alert-rules-list"></div>
+
+                    <!-- Add/Edit Rule Form -->
+                    <div id="add-rule-form" class="hidden mt-16" style="border-top:1px solid var(--border);padding-top:16px;">
+                        <h4 id="rule-form-title">Add Alert Rule</h4>
+                        <input type="hidden" id="rule-id">
+                        <div class="form-group">
+                            <label class="form-label">Name</label>
+                            <input class="form-input" id="rule-name" placeholder="e.g. High CPU Alert">
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div class="form-group">
+                                <label class="form-label">Metric</label>
+                                <select class="form-input" id="rule-metric">
+                                    <option value="klv_nonce">klv_nonce</option>
+                                    <option value="klv_connectedPeers">klv_connectedPeers</option>
+                                    <option value="klv_isSyncing">klv_isSyncing</option>
+                                    <option value="cpu_percent">cpu_percent</option>
+                                    <option value="mem_percent">mem_percent</option>
+                                    <option value="disk_percent">disk_percent</option>
+                                    <option value="agent.heartbeat">agent.heartbeat</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Condition</label>
+                                <select class="form-input" id="rule-condition">
+                                    <option value="gt">Greater than (&gt;)</option>
+                                    <option value="lt">Less than (&lt;)</option>
+                                    <option value="eq">Equals (=)</option>
+                                    <option value="stall">Stall (no change)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                            <div class="form-group">
+                                <label class="form-label">Threshold</label>
+                                <input class="form-input" id="rule-threshold" type="number" step="any" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Duration (sec)</label>
+                                <input class="form-input" id="rule-duration" type="number" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Cooldown (min)</label>
+                                <input class="form-input" id="rule-cooldown" type="number" value="5">
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div class="form-group">
+                                <label class="form-label">Severity</label>
+                                <select class="form-input" id="rule-severity">
+                                    <option value="critical">Critical</option>
+                                    <option value="warning">Warning</option>
+                                    <option value="info">Info</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Node Filter</label>
+                                <input class="form-input" id="rule-node-filter" value="*" placeholder="* for all nodes">
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary btn-sm" onclick="saveRule()">Save Rule</button>
+                            <button class="btn btn-secondary btn-sm" onclick="cancelRule()">Cancel</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -418,7 +512,207 @@
             return div.innerHTML;
         }
 
+        // --- Alerts ---
+        let activeAlerts = [];
+
+        async function loadActiveAlerts() {
+            try {
+                const data = await API.getJSON('/api/alerts');
+                if (data && data.alerts) {
+                    activeAlerts = data.alerts;
+                    renderAlertBanner();
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderAlertBanner() {
+            const banner = document.getElementById('alert-banner');
+            if (!activeAlerts || activeAlerts.length === 0) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            const critical = activeAlerts.filter(a => a.severity === 'critical');
+            const warnings = activeAlerts.filter(a => a.severity === 'warning');
+
+            let html = '';
+            if (critical.length > 0) {
+                html += '<div class="alert alert-error mb-8" style="cursor:pointer" onclick="showAlerts()">' +
+                    critical.length + ' critical alert' + (critical.length > 1 ? 's' : '') + ': ' +
+                    esc(critical.map(a => a.rule_name).join(', ')) + '</div>';
+            }
+            if (warnings.length > 0) {
+                html += '<div class="alert alert-warning" style="cursor:pointer" onclick="showAlerts()">' +
+                    warnings.length + ' warning' + (warnings.length > 1 ? 's' : '') + ': ' +
+                    esc(warnings.map(a => a.rule_name).join(', ')) + '</div>';
+            }
+
+            banner.innerHTML = html;
+            banner.classList.remove('hidden');
+        }
+
+        function showAlerts() {
+            document.getElementById('alerts-panel').classList.remove('hidden');
+            document.getElementById('alert-rules-panel').classList.add('hidden');
+            loadAlertHistory();
+        }
+
+        function hideAlerts() {
+            document.getElementById('alerts-panel').classList.add('hidden');
+        }
+
+        async function loadAlertHistory() {
+            const data = await API.getJSON('/api/alerts/history?limit=50');
+            if (!data) return;
+
+            const alerts = data.alerts || [];
+            const container = document.getElementById('alerts-list');
+
+            if (alerts.length === 0) {
+                container.innerHTML = '<p class="text-muted" style="padding:16px;">No alerts yet.</p>';
+                return;
+            }
+
+            container.innerHTML = alerts.map(a => {
+                const stateColor = a.state === 'firing' ? 'var(--error)' : a.state === 'resolved' ? 'var(--success)' : 'var(--warning)';
+                const sevBadge = a.severity === 'critical' ? 'badge-offline' : a.severity === 'warning' ? 'badge-syncing' : 'badge-online';
+                const time = new Date((a.fired_at || a.created_at) * 1000).toLocaleString();
+                return '<div class="info-row" style="border-left:3px solid ' + stateColor + ';padding-left:12px;margin:4px 0;">' +
+                    '<div style="flex:1">' +
+                        '<span class="badge ' + sevBadge + '" style="margin-right:8px;">' + esc(a.severity) + '</span>' +
+                        '<strong>' + esc(a.rule_name) + '</strong>' +
+                        '<div class="text-sm text-muted">' + esc(a.message) + '</div>' +
+                        '<div class="text-sm text-muted">' + time + ' — ' + esc(a.state) + '</div>' +
+                    '</div>' +
+                    (a.state === 'firing' && !a.acked ? '<button class="btn btn-sm btn-secondary" onclick="ackAlert(\'' + esc(a.id) + '\')">Ack</button>' : '') +
+                '</div>';
+            }).join('');
+        }
+
+        async function ackAlert(id) {
+            await API.postJSON('/api/alerts/' + id + '/acknowledge', {});
+            loadAlertHistory();
+            loadActiveAlerts();
+        }
+
+        // --- Alert Rules ---
+        function showAlertRules() {
+            document.getElementById('alert-rules-panel').classList.remove('hidden');
+            document.getElementById('alerts-panel').classList.add('hidden');
+            loadAlertRules();
+        }
+
+        function hideAlertRules() {
+            document.getElementById('alert-rules-panel').classList.add('hidden');
+            cancelRule();
+        }
+
+        async function loadAlertRules() {
+            const data = await API.getJSON('/api/alerts/rules');
+            if (!data) return;
+
+            const rules = data.rules || [];
+            const container = document.getElementById('alert-rules-list');
+
+            if (rules.length === 0) {
+                container.innerHTML = '<p class="text-muted" style="padding:16px;">No alert rules configured.</p>';
+                return;
+            }
+
+            container.innerHTML = rules.map(r => {
+                const statusText = r.enabled ? 'enabled' : 'disabled';
+                const statusColor = r.enabled ? 'var(--success)' : 'var(--text-secondary)';
+                const condLabel = { gt: '>', lt: '<', eq: '=', stall: 'stall' }[r.condition] || r.condition;
+                return '<div class="info-row" style="margin:4px 0;">' +
+                    '<div style="flex:1">' +
+                        '<strong>' + esc(r.name) + '</strong>' + (r.builtin ? ' <span class="text-sm text-muted">(built-in)</span>' : '') +
+                        '<div class="text-sm text-muted">' + esc(r.metric_name) + ' ' + condLabel + ' ' + r.threshold +
+                        (r.duration_sec > 0 ? ' for ' + r.duration_sec + 's' : '') +
+                        ' — ' + esc(r.severity) + ', cooldown ' + r.cooldown_min + 'min</div>' +
+                    '</div>' +
+                    '<span class="text-sm" style="color:' + statusColor + ';margin-right:8px;">' + statusText + '</span>' +
+                    '<button class="btn btn-sm btn-secondary" onclick="editRule(\'' + esc(r.id) + '\')" style="margin-right:4px;">Edit</button>' +
+                    (!r.builtin ? '<button class="btn btn-sm btn-secondary" onclick="deleteRule(\'' + esc(r.id) + '\')">Del</button>' : '') +
+                '</div>';
+            }).join('');
+        }
+
+        let editingRules = [];
+        function showAddRule() {
+            document.getElementById('add-rule-form').classList.remove('hidden');
+            document.getElementById('rule-form-title').textContent = 'Add Alert Rule';
+            document.getElementById('rule-id').value = '';
+            document.getElementById('rule-name').value = '';
+            document.getElementById('rule-metric').value = 'cpu_percent';
+            document.getElementById('rule-condition').value = 'gt';
+            document.getElementById('rule-threshold').value = '90';
+            document.getElementById('rule-duration').value = '0';
+            document.getElementById('rule-cooldown').value = '5';
+            document.getElementById('rule-severity').value = 'warning';
+            document.getElementById('rule-node-filter').value = '*';
+        }
+
+        async function editRule(id) {
+            const data = await API.getJSON('/api/alerts/rules');
+            if (!data) return;
+            const rule = (data.rules || []).find(r => r.id === id);
+            if (!rule) return;
+
+            document.getElementById('add-rule-form').classList.remove('hidden');
+            document.getElementById('rule-form-title').textContent = 'Edit Alert Rule';
+            document.getElementById('rule-id').value = rule.id;
+            document.getElementById('rule-name').value = rule.name;
+            document.getElementById('rule-metric').value = rule.metric_name;
+            document.getElementById('rule-condition').value = rule.condition;
+            document.getElementById('rule-threshold').value = rule.threshold;
+            document.getElementById('rule-duration').value = rule.duration_sec;
+            document.getElementById('rule-cooldown').value = rule.cooldown_min;
+            document.getElementById('rule-severity').value = rule.severity;
+            document.getElementById('rule-node-filter').value = rule.node_filter;
+        }
+
+        function cancelRule() {
+            document.getElementById('add-rule-form').classList.add('hidden');
+        }
+
+        async function saveRule() {
+            const rule = {
+                name: document.getElementById('rule-name').value,
+                metric_name: document.getElementById('rule-metric').value,
+                condition: document.getElementById('rule-condition').value,
+                threshold: parseFloat(document.getElementById('rule-threshold').value) || 0,
+                duration_sec: parseInt(document.getElementById('rule-duration').value) || 0,
+                cooldown_min: parseInt(document.getElementById('rule-cooldown').value) || 5,
+                severity: document.getElementById('rule-severity').value,
+                node_filter: document.getElementById('rule-node-filter').value || '*',
+                enabled: true
+            };
+
+            const id = document.getElementById('rule-id').value;
+            if (id) rule.id = id;
+
+            const result = await API.postJSON('/api/alerts/rules', rule);
+            if (result && result.ok) {
+                cancelRule();
+                loadAlertRules();
+            }
+        }
+
+        async function deleteRule(id) {
+            if (!confirm('Delete this alert rule?')) return;
+            await API.request('/api/alerts/rules/' + id, { method: 'DELETE' });
+            loadAlertRules();
+        }
+
+        // Load alerts on init
+        async function initAlerts() {
+            await loadActiveAlerts();
+            // Refresh active alerts every 30s
+            setInterval(loadActiveAlerts, 30000);
+        }
+
         init();
+        initAlerts();
     </script>
 </body>
 </html>
