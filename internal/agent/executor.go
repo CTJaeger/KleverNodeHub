@@ -2,13 +2,20 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 )
+
+func base64Decode(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
+}
 
 const (
 	defaultCommandTimeout = 60 * time.Second
@@ -118,6 +125,8 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeKeyBackup(msg.Payload, result)
 	case "key.backups":
 		err = e.executeKeyBackups(msg.Payload, result)
+	case "agent.update":
+		err = e.executeAgentUpdate(msg.Payload, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -495,6 +504,47 @@ func (e *Executor) executeKeyBackups(payload any, result *models.CommandResult) 
 	}
 	jsonBytes, _ := json.Marshal(backups)
 	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeAgentUpdate(payload any, result *models.CommandResult) error {
+	m, ok := payload.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid update payload")
+	}
+
+	version := extractStringFromMap(m, "version")
+	checksum := extractStringFromMap(m, "checksum")
+	dataB64 := extractStringFromMap(m, "data")
+
+	if version == "" || checksum == "" || dataB64 == "" {
+		return fmt.Errorf("version, checksum, and data are required")
+	}
+
+	// Decode base64 binary
+	binaryData, err := base64Decode(dataB64)
+	if err != nil {
+		return fmt.Errorf("decode binary: %w", err)
+	}
+
+	// Get agent config dir from executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable: %w", err)
+	}
+	configDir := filepath.Dir(execPath)
+
+	// Verify and replace binary
+	updateResult, err := VerifyAndReplaceBinary(binaryData, checksum, configDir)
+	if err != nil {
+		return fmt.Errorf("update binary: %w", err)
+	}
+
+	updateResult.NewVersion = version
+	jsonBytes, _ := json.Marshal(updateResult)
+	result.Output = string(jsonBytes)
+
+	log.Printf("agent binary updated to %s — restart required", version)
 	return nil
 }
 

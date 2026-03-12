@@ -140,6 +140,8 @@ func main() {
 	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
+	updateStore := dashboard.NewUpdateStore(*dataDir)
+	updateHandler := handlers.NewUpdateHandler(hub, updateStore, serverStore)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -214,6 +216,11 @@ func main() {
 	mux.Handle("POST /api/alerts/rules", authMw(http.HandlerFunc(alertHandler.HandleCreateOrUpdateRule)))
 	mux.Handle("DELETE /api/alerts/rules/{id}", authMw(http.HandlerFunc(alertHandler.HandleDeleteRule)))
 	mux.Handle("POST /api/alerts/{id}/acknowledge", authMw(http.HandlerFunc(alertHandler.HandleAcknowledgeAlert)))
+	mux.Handle("POST /api/agent/upload", authMw(http.HandlerFunc(updateHandler.HandleUploadBinary)))
+	mux.Handle("GET /api/agent/binaries", authMw(http.HandlerFunc(updateHandler.HandleListBinaries)))
+	mux.Handle("GET /api/agent/version", authMw(http.HandlerFunc(updateHandler.HandleLatestVersion)))
+	mux.Handle("POST /api/agent/update/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleUpdateAgent)))
+	mux.Handle("POST /api/agent/update/all", authMw(http.HandlerFunc(updateHandler.HandleUpdateAll)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
