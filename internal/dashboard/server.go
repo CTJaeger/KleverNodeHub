@@ -66,6 +66,7 @@ func (s *Server) SetupRoutes() error {
 	s.mux.HandleFunc("GET /login", s.servePage("templates/login.html"))
 	s.mux.HandleFunc("GET /overview", s.servePage("templates/overview.html"))
 	s.mux.HandleFunc("GET /node/{id}", s.servePage("templates/node.html"))
+	s.mux.HandleFunc("GET /settings", s.servePage("templates/settings.html"))
 
 	return nil
 }

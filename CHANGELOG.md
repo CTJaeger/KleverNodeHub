@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **Issue #26**: Settings page UI and dashboard configuration API
+  - `SettingsHandler`: GET/PUT /api/settings (grouped by category), GET/PUT /api/settings/{key}, POST /api/settings/reset
+  - Settings categories: general (dashboard name), metrics (intervals, retention), notifications (severity filter), agents (heartbeat timeout, discovery interval)
+  - Default values for all settings, key validation (rejects unknown keys)
+  - Settings page (`settings.html`): tabbed interface (General, Metrics, Notifications, Agents), save per section, reset to defaults
+  - First-run setup wizard: dashboard name step, passkey registration, recovery codes, optional notification channel (Telegram/webhook)
+  - API client: added `put()` method
+  - Settings link in sidebar navigation
+  - 8 unit tests (get all, update, unknown key rejection, get/update single, reset defaults, invalid category)
+
 - **Issue #25**: Agent auto-update mechanism
   - `updater.go`: SHA-256 checksum verification, binary backup + atomic replacement (Windows fallback), rollback support
   - `UpdateStore`: Binary storage on disk with JSON index, store/get/list by OS/arch, persistence across restarts
