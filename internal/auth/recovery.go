@@ -120,4 +120,3 @@ func generateRandomCode() (string, error) {
 func normalizeCode(code string) string {
 	return strings.ToUpper(strings.ReplaceAll(code, "-", ""))
 }
-

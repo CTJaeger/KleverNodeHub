@@ -26,18 +26,18 @@ type kleverChallenge struct {
 }
 
 const (
-	challengeTTL    = 5 * time.Minute
-	challengeBytes  = 32
-	kleverHRP       = "klv"
-	kleverAddrLen   = 32 // 32-byte Ed25519 public key
+	challengeTTL   = 5 * time.Minute
+	challengeBytes = 32
+	kleverHRP      = "klv"
+	kleverAddrLen  = 32 // 32-byte Ed25519 public key
 )
 
 var (
-	ErrNoKleverAddress   = errors.New("no klever admin address configured")
-	ErrInvalidAddress    = errors.New("invalid klever address format")
-	ErrChallengeExpired  = errors.New("challenge expired or not found")
-	ErrAddressMismatch   = errors.New("address does not match registered admin")
-	ErrInvalidSignature  = errors.New("invalid signature")
+	ErrNoKleverAddress  = errors.New("no klever admin address configured")
+	ErrInvalidAddress   = errors.New("invalid klever address format")
+	ErrChallengeExpired = errors.New("challenge expired or not found")
+	ErrAddressMismatch  = errors.New("address does not match registered admin")
+	ErrInvalidSignature = errors.New("invalid signature")
 )
 
 // NewKleverAuthManager creates a new KleverAuthManager with an optional stored address.
