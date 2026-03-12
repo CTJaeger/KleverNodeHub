@@ -153,31 +153,55 @@ On first access (`https://your-server:9443`), a setup wizard will guide you thro
 
 ### Agent (on each validator server)
 
-Use the install script to set up the agent as a systemd service, or run via Docker:
+Each server that runs Klever nodes needs a lightweight agent. The agent connects back to your dashboard via encrypted mTLS.
+
+#### Step 1: Generate a registration token
+
+1. Open your dashboard in the browser (`https://your-server:9443`)
+2. Click **"Add Server"** on the overview page
+3. Click **"Generate Token"** — this creates a one-time token (valid for 1 hour)
+4. Copy the displayed install command
+
+#### Step 2: Run the install command on your node server
+
+SSH into your node server and paste the copied command. It looks like this:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh \
+  | sudo bash -s -- --token <YOUR_TOKEN> --dashboard https://<DASHBOARD_IP>:9443
+```
+
+The script will:
+1. Install Docker if not present
+2. Download the latest agent binary
+3. Register with your dashboard using the one-time token
+4. Create and start a `klever-agent` systemd service
+5. Auto-discover existing Klever nodes on the server
+
+> **Important:** The token can only be used once and expires after 1 hour. Generate a new token for each server you add.
+
+#### Alternative: Docker
 
 ```bash
 docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --name klever-agent \
   ctjaeger/klever-agent:latest \
-  --dashboard-url https://your-server:9443 --register-token YOUR_TOKEN
+  --dashboard-url https://<DASHBOARD_IP>:9443 --register-token <YOUR_TOKEN>
 ```
 
-Or use the install script for a systemd service:
+#### Alternative: Manual binary
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh \
-  | sudo bash -s -- --token YOUR_TOKEN --dashboard https://your-server:9443
+# Download from GitHub Releases
+wget https://github.com/CTJaeger/KleverNodeHub/releases/latest/download/klever-agent-linux-amd64
+
+# Make executable and register
+chmod +x klever-agent-linux-amd64
+./klever-agent-linux-amd64 --dashboard-url https://<DASHBOARD_IP>:9443 --register-token <YOUR_TOKEN>
 ```
 
-The script will:
-1. Install Docker if not present
-2. Download the latest agent binary
-3. Create a `klever-agent` systemd service
-4. Register with your dashboard
-5. Auto-discover existing Klever nodes
-
-You can generate a one-time registration token from the dashboard UI.
+After registration, the agent stores its mTLS certificate locally and reconnects automatically — no token needed for subsequent starts.
 
 ### Agent CLI Flags
 
