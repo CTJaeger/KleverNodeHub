@@ -36,6 +36,7 @@ type WebAuthnManager struct {
 	mu          sync.Mutex
 	wa          *webauthn.WebAuthn
 	credentials []PasskeyCredential
+	instanceID  string // Unique per-dashboard instance; prevents passkey collisions on same RP ID
 	// Session data for ongoing ceremonies (in-memory, short-lived)
 	sessions map[string]*webauthn.SessionData
 }
@@ -45,6 +46,7 @@ type WebAuthnConfig struct {
 	RPDisplayName string   // Relying Party display name (e.g., "Klever Node Hub")
 	RPID          string   // Relying Party ID (e.g., "localhost" or domain)
 	RPOrigins     []string // Allowed origins (e.g., "https://localhost:9443")
+	InstanceID    string   // Unique ID for this dashboard instance (prevents passkey collisions when multiple dashboards share the same RP ID)
 }
 
 // dashboardUser implements the webauthn.User interface for single-user mode.
@@ -78,9 +80,15 @@ func NewWebAuthnManager(config WebAuthnConfig, credentials []PasskeyCredential) 
 		}
 	}
 
+	instanceID := config.InstanceID
+	if instanceID == "" {
+		instanceID = "default"
+	}
+
 	return &WebAuthnManager{
 		wa:          wa,
 		credentials: credentials,
+		instanceID:  instanceID,
 		sessions:    make(map[string]*webauthn.SessionData),
 	}, nil
 }
@@ -234,7 +242,7 @@ func (wm *WebAuthnManager) CredentialCount() int {
 
 func (wm *WebAuthnManager) buildUser() *dashboardUser {
 	user := &dashboardUser{
-		id:   []byte("klever-node-hub-admin"),
+		id:   []byte("klever-node-hub-" + wm.instanceID),
 		name: "admin",
 	}
 

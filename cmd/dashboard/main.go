@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -80,11 +81,16 @@ func main() {
 	if *domain != "localhost" {
 		rpOrigins = append(rpOrigins, fmt.Sprintf("https://localhost%s", *addr))
 	}
+	instanceID, err := loadOrCreateInstanceID(settingsStore)
+	if err != nil {
+		log.Fatalf("instance ID: %v", err)
+	}
 	waCredentials := loadPasskeyCredentials(settingsStore)
 	webauthnMgr, err := auth.NewWebAuthnManager(auth.WebAuthnConfig{
 		RPDisplayName: "Klever Node Hub",
 		RPID:          *domain,
 		RPOrigins:     rpOrigins,
+		InstanceID:    instanceID,
 	}, waCredentials)
 	if err != nil {
 		// Non-fatal: WebAuthn may fail on some systems, passkey login won't work
@@ -93,6 +99,7 @@ func main() {
 			RPDisplayName: "Klever Node Hub",
 			RPID:          "localhost",
 			RPOrigins:     []string{fmt.Sprintf("https://localhost%s", *addr)},
+			InstanceID:    instanceID,
 		}, waCredentials)
 	}
 
@@ -389,6 +396,30 @@ func loadOrCreateCA(caDir string, encKey []byte) (*crypto.CA, error) {
 
 	log.Println("created new certificate authority")
 	return ca, nil
+}
+
+// loadOrCreateInstanceID loads or generates a unique instance ID for this dashboard.
+// This ID is used as part of the WebAuthn user ID so that multiple dashboard instances
+// sharing the same RP ID (e.g., "localhost") don't overwrite each other's passkeys.
+func loadOrCreateInstanceID(settings *store.SettingsStore) (string, error) {
+	id, err := settings.Get("instance_id")
+	if err != nil {
+		return "", fmt.Errorf("read instance ID: %w", err)
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate instance ID: %w", err)
+	}
+	id = hex.EncodeToString(b)
+	if err := settings.Set("instance_id", id); err != nil {
+		return "", fmt.Errorf("save instance ID: %w", err)
+	}
+	log.Printf("generated new dashboard instance ID: %s", id)
+	return id, nil
 }
 
 // saveRecoveryCodes persists recovery codes to the settings store.
