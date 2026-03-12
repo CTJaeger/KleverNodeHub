@@ -1,5 +1,9 @@
 # Klever Node Hub
 
+[![CI](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml/badge.svg)](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Self-hosted management dashboard for Klever validator nodes**
 
 ---
