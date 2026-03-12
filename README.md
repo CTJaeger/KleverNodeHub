@@ -15,7 +15,7 @@ It replaces manual SSH sessions and bash scripts with a secure, centralized web 
 ```
 Any Device (Browser)
         │
-        │ HTTPS + Passkey Auth (port 9443)
+        │ HTTPS + Password/Passkey/Klever Auth (port 9443)
         ▼
 ┌──────────────────────┐
 │  Dashboard           │  Docker container or binary on one of your servers
@@ -33,7 +33,7 @@ Any Device (Browser)
 
 - **Self-hosted** — runs on your own infrastructure, no third-party dependency
 - **Zero trust** — mTLS between Dashboard and Agents, no SSH keys stored
-- **Passwordless** — WebAuthn Passkey authentication (Face ID, Touch ID, hardware keys)
+- **Flexible auth** — Password (works via IP), WebAuthn Passkeys, Klever Extension wallet login
 - **Minimal dependencies** — Go standard library + battle-tested open-source packages only
 - **Cross-platform access** — any device with a browser (phone, tablet, laptop)
 - **Docker-native** — fits existing node operator workflows
@@ -78,7 +78,8 @@ Any Device (Browser)
 
 | Layer | Technology |
 |---|---|
-| Dashboard Login | WebAuthn Passkey (passwordless, phishing-resistant) |
+| Dashboard Login | Password (Argon2id) + WebAuthn Passkey + Klever Extension (Ed25519 challenge-response) |
+| Rate Limiting | 5 attempts per 15 min per IP, then HTTP 429 |
 | Account Recovery | Single-use recovery codes (Argon2id hashed) |
 | Config Encryption | AES-256-GCM (encrypted at rest) |
 | Agent Communication | mTLS with Ed25519 certificates |
@@ -96,7 +97,7 @@ Security follows [Kerckhoffs's principle](https://en.wikipedia.org/wiki/Kerckhof
 | Backend | Go 1.26, single binary, no runtime needed |
 | Frontend | Embedded HTML/JS/CSS (no build step, no Node.js) |
 | Agent | Go, single binary, minimal footprint |
-| Authentication | WebAuthn/Passkey via [go-webauthn](https://github.com/go-webauthn/webauthn) |
+| Authentication | Password (Argon2id), WebAuthn/Passkey ([go-webauthn](https://github.com/go-webauthn/webauthn)), Klever Extension (Ed25519) |
 | Communication | WebSocket ([coder/websocket](https://github.com/coder/websocket)) + mTLS |
 | Database | SQLite via [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) (pure Go, no CGO) |
 | Encryption at Rest | AES-256-GCM |
@@ -136,14 +137,16 @@ docker run -d \
   --domain your-server.example.com
 ```
 
-On first access (`https://your-server:9443`), a setup wizard will guide you through registering your Passkey. Recovery codes are printed to the log on first run.
+On first access (`https://your-server:9443`), a setup wizard will guide you through setting a password and optionally registering a Passkey. Recovery codes are printed to the log on first run.
+
+> **Note:** Password login works via IP address — no domain required. Passkeys require a valid domain name. Klever Extension login requires the browser extension and a linked wallet address.
 
 ### Dashboard CLI Flags
 
 | Flag | Default | Description |
 |---|---|---|
 | `--addr` | `:9443` | Listen address (host:port) |
-| `--domain` | `localhost` | Domain for WebAuthn RP ID and TLS |
+| `--domain` | `localhost` | Domain for WebAuthn RP ID and TLS (optional, only needed for Passkey login) |
 | `--data-dir` | `~/.klever-node-hub` | Data directory for DB, certs, config |
 | `--reset-recovery-codes` | — | Generate new recovery codes and exit |
 
@@ -183,7 +186,7 @@ KleverNodeHub/
 │   ├── agent/                     # Agent entry point
 │   └── seed/                      # Test data seeder
 ├── internal/
-│   ├── auth/                      # WebAuthn, recovery codes, JWT, middleware
+│   ├── auth/                      # Password, WebAuthn, Klever Extension, recovery codes, JWT, rate limiter
 │   ├── crypto/                    # AES-256-GCM, Ed25519, mTLS, CA
 │   ├── dashboard/                 # HTTP server, tag cache, GeoIP, token manager
 │   │   ├── alerting/              # Alert evaluator, default rules
@@ -197,7 +200,7 @@ KleverNodeHub/
 │   └── version/                   # Build version info
 ├── web/
 │   ├── templates/                 # HTML templates (overview, server, node, alerts, settings, login)
-│   └── static/                    # JS (api, app, charts, datatable, login, passkey, ws) + CSS
+│   └── static/                    # JS (api, app, charts, datatable, login, passkey, klever, ws) + CSS
 ├── scripts/                       # Agent install script
 ├── docs/                          # PRD and documentation
 ├── .github/workflows/             # CI + Release pipelines
