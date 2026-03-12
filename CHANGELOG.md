@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### 2026-03-12
+- **README overhaul**: Complete rewrite with accurate tech stack, CLI flags, installation guide, deploy instructions
+- **Dockerfile fix**: Updated Go version from 1.22 to 1.26 in both `Dockerfile` and `Dockerfile.agent`
+
 - **Issue #30**: Pagination and filtering for data tables
   - `web/static/js/datatable.js` — reusable DataTable class (no dependencies)
   - Client-side pagination (10/25/50/100 per page), global text search with debounce, column dropdown filters

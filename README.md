@@ -15,13 +15,13 @@ It replaces manual SSH sessions and bash scripts with a secure, centralized web 
 ```
 Any Device (Browser)
         │
-        │ HTTPS + Passkey Auth
+        │ HTTPS + Passkey Auth (port 9443)
         ▼
 ┌──────────────────────┐
 │  Dashboard           │  Docker container or binary on one of your servers
 │  (Klever Node Hub)   │
 └──────────┬───────────┘
-           │ mTLS (mutual certificate auth)
+           │ WebSocket + mTLS (mutual certificate auth)
       ┌────┼────┐
       ▼    ▼    ▼
     Agent Agent Agent    Lightweight agents on each server
@@ -34,9 +34,9 @@ Any Device (Browser)
 - **Self-hosted** — runs on your own infrastructure, no third-party dependency
 - **Zero trust** — mTLS between Dashboard and Agents, no SSH keys stored
 - **Passwordless** — WebAuthn Passkey authentication (Face ID, Touch ID, hardware keys)
-- **Minimal attack surface** — Go standard library + golang.org/x/crypto only
+- **Minimal dependencies** — Go standard library + battle-tested open-source packages only
 - **Cross-platform access** — any device with a browser (phone, tablet, laptop)
-- **Docker-native** — one-liner installation, fits existing node operator workflows
+- **Docker-native** — fits existing node operator workflows
 
 ## Features
 
@@ -53,11 +53,13 @@ Any Device (Browser)
 - **Validator key management** — Generate, import, export BLS validator keys
 - **Auto-backup** — Config files backed up before every change
 
-### Monitoring
+### Monitoring & Alerting
 - **Real-time metrics** — CPU, memory, disk, network per server
 - **Klever node metrics** — Nonce, sync status, epoch, peers, consensus state (76 metrics from `/node/status`)
 - **Historical data** — 7-day high-resolution + long-term averaged archives
 - **Nonce stall detection** — Alerts when a node stops producing blocks
+- **Alert rules** — Configurable alert rules with acknowledgement
+- **GeoIP detection** — Automatic server region detection
 
 ### Notifications
 - **Telegram bot** — Alerts + interactive commands (`/nodes`, `/status <name>`)
@@ -67,9 +69,10 @@ Any Device (Browser)
 
 ### Dashboard
 - **Mobile-first** — Responsive UI that works on phone, tablet, and desktop
-- **Overview grid** — All servers and nodes at a glance
+- **Overview grid** — All servers and nodes at a glance with live status
 - **Live log streaming** — Docker container logs in the browser
 - **Agent auto-update** — Push agent updates from the dashboard
+- **Data tables** — Pagination, search, and column filtering
 
 ## Security
 
@@ -81,7 +84,6 @@ Any Device (Browser)
 | Agent Communication | mTLS with Ed25519 certificates |
 | Agent Command Whitelist | Only known commands accepted (no shell access) |
 | Sessions | JWT with short expiry + refresh rotation |
-| Dependencies | Go stdlib + golang.org/x/crypto only |
 
 ### Why open source is safe
 
@@ -89,58 +91,119 @@ Security follows [Kerckhoffs's principle](https://en.wikipedia.org/wiki/Kerckhof
 
 ## Tech Stack
 
-| Component | Technology | Reason |
-|---|---|---|
-| Dashboard Backend | Go 1.26 | Single binary, no runtime needed |
-| Dashboard Frontend | Embedded Web UI | No separate frontend deployment |
-| Agent | Go | Single binary, minimal footprint |
-| Authentication | WebAuthn/Passkey | Passwordless, phishing-resistant |
-| Communication | WebSocket + mTLS | Encrypted, authenticated, persistent |
-| Database | SQLite (encrypted) | No external DB server needed |
-| Encryption at Rest | AES-256-GCM | Industry standard |
-| Certificates | Ed25519 | Fast, secure, small keys |
+| Component | Technology |
+|---|---|
+| Backend | Go 1.26, single binary, no runtime needed |
+| Frontend | Embedded HTML/JS/CSS (no build step, no Node.js) |
+| Agent | Go, single binary, minimal footprint |
+| Authentication | WebAuthn/Passkey via [go-webauthn](https://github.com/go-webauthn/webauthn) |
+| Communication | WebSocket ([coder/websocket](https://github.com/coder/websocket)) + mTLS |
+| Database | SQLite via [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) (pure Go, no CGO) |
+| Encryption at Rest | AES-256-GCM |
+| Certificates | Ed25519 |
 
 ## Installation
 
-### Dashboard (on one of your servers)
+### Quick Start (Dashboard)
+
+Build from source and run on one of your servers:
 
 ```bash
-docker run -d -p 9443:9443 --name klever-node-hub klever-node-hub
+# Clone and build
+git clone https://github.com/CTJaeger/KleverNodeHub.git
+cd KleverNodeHub
+make build-linux
+
+# Copy to server
+scp bin/klever-node-hub-linux user@your-server:/opt/klever/klever-node-hub
+
+# Run on server
+./klever-node-hub --domain your-server.example.com
 ```
 
-On first access, a setup wizard will guide you through registering your Passkey and generating recovery codes.
+Or use Docker:
+
+```bash
+# Build the image
+docker build -t klever-node-hub .
+
+# Run
+docker run -d \
+  -p 9443:9443 \
+  -v klever-data:/root/.klever-node-hub \
+  --name klever-node-hub \
+  klever-node-hub \
+  --domain your-server.example.com
+```
+
+On first access (`https://your-server:9443`), a setup wizard will guide you through registering your Passkey. Recovery codes are printed to the log on first run.
+
+### Dashboard CLI Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--addr` | `:9443` | Listen address (host:port) |
+| `--domain` | `localhost` | Domain for WebAuthn RP ID and TLS |
+| `--data-dir` | `~/.klever-node-hub` | Data directory for DB, certs, config |
+| `--reset-recovery-codes` | — | Generate new recovery codes and exit |
 
 ### Agent (on each validator server)
 
+Use the install script to set up the agent as a systemd service:
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh | bash
-klever-agent register --token <one-time-token> --dashboard https://<your-server>:9443
+curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh \
+  | sudo bash -s -- --token YOUR_TOKEN --dashboard https://your-server:9443
 ```
 
-The agent will auto-discover any existing Klever nodes running on the server.
+The script will:
+1. Install Docker if not present
+2. Download the latest agent binary
+3. Create a `klever-agent` systemd service
+4. Register with your dashboard
+5. Auto-discover existing Klever nodes
+
+You can generate a one-time registration token from the dashboard UI.
+
+### Agent CLI Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--config-dir` | `~/.klever-agent` | Config directory |
+| `--dashboard-url` | — | Dashboard URL for registration |
+| `--register-token` | — | One-time registration token |
+| `--docker-socket` | `/var/run/docker.sock` | Docker socket path |
 
 ## Project Structure
 
 ```
 KleverNodeHub/
 ├── cmd/
-│   ├── dashboard/              # Dashboard binary entry point
-│   └── agent/                  # Agent binary entry point
+│   ├── dashboard/                 # Dashboard entry point
+│   ├── agent/                     # Agent entry point
+│   └── seed/                      # Test data seeder
 ├── internal/
-│   ├── auth/                   # WebAuthn, recovery codes, JWT, middleware
-│   ├── crypto/                 # AES-256-GCM, Ed25519, mTLS, CA
-│   ├── dashboard/              # HTTP server, handlers, WebSocket hub, scheduler
-│   ├── agent/                  # Agent logic, Docker ops, executor, whitelist
-│   ├── models/                 # Shared data structures
-│   ├── store/                  # SQLite database layer
-│   └── notify/                 # Telegram, Pushover, webhook dispatchers
-├── web/                        # Embedded frontend (HTML/JS/CSS)
-├── scripts/                    # Agent install script
-├── docs/                       # PRD and documentation
-├── .github/workflows/          # CI/CD
-├── Dockerfile                  # Dashboard container
-├── Dockerfile.agent            # Agent container
-├── Makefile
+│   ├── auth/                      # WebAuthn, recovery codes, JWT, middleware
+│   ├── crypto/                    # AES-256-GCM, Ed25519, mTLS, CA
+│   ├── dashboard/                 # HTTP server, tag cache, GeoIP, token manager
+│   │   ├── alerting/              # Alert evaluator, default rules
+│   │   ├── handlers/              # HTTP handlers (nodes, servers, docker, config, keys, alerts, ...)
+│   │   ├── scheduler/             # Metrics retention scheduler
+│   │   └── ws/                    # WebSocket hub, agent handler, browser handler
+│   ├── agent/                     # Agent logic, Docker ops, executor, metrics collector
+│   ├── models/                    # Shared data structures and message types
+│   ├── store/                     # SQLite database layer (servers, nodes, metrics, alerts, settings)
+│   ├── notify/                    # Telegram, Pushover, webhook dispatchers
+│   └── version/                   # Build version info
+├── web/
+│   ├── templates/                 # HTML templates (overview, server, node, alerts, settings, login)
+│   └── static/                    # JS (api, app, charts, datatable, login, passkey, ws) + CSS
+├── scripts/                       # Agent install script
+├── docs/                          # PRD and documentation
+├── .github/workflows/             # CI + Release pipelines
+├── Dockerfile                     # Dashboard container
+├── Dockerfile.agent               # Agent container
+├── Makefile                       # Build, test, deploy targets
 ├── go.mod
 └── README.md
 ```
@@ -155,19 +218,48 @@ KleverNodeHub/
 ### Build
 
 ```bash
-# Using Make (outputs to bin/)
+# Build both (outputs to bin/)
+make build
+
+# Cross-compile for Linux
+make build-linux
+
+# Build individually
 make build-dashboard
 make build-agent
+```
 
-# Or directly
-go build -o bin/klever-node-hub ./cmd/dashboard
-go build -o bin/klever-agent ./cmd/agent
+### Run locally
+
+```bash
+# Direct
+make run
+
+# With hot-reload (requires air)
+make run-live
 ```
 
 ### Test
 
 ```bash
-go test ./... -v -race
+make test          # go test ./... -v -race
+make lint          # golangci-lint + go vet
+make security      # govulncheck
+make coverage      # coverage report
+```
+
+### Deploy to remote server
+
+```bash
+# Deploy both dashboard + agent
+make deploy REMOTE_HOST=your-server
+
+# Deploy individually
+make deploy-dashboard REMOTE_HOST=your-server
+make deploy-agent REMOTE_HOST=your-server
+
+# Custom SSH key and remote path
+make deploy REMOTE_HOST=your-server SSH_KEY=~/.ssh/id_ed25519 REMOTE_PATH=/opt/klever
 ```
 
 ## CI/CD
@@ -175,9 +267,20 @@ go test ./... -v -race
 Automated checks on every push and pull request:
 
 - **Unit Tests** — `go test ./... -race`
-- **Static Analysis** — `go vet ./...`
+- **Lint & Format** — `golangci-lint` + `goimports` + `go vet`
 - **Security Scan** — `govulncheck` (known vulnerability detection)
 - **Build Verification** — Cross-platform build (Linux, macOS, Windows × amd64, arm64)
+
+### Releases
+
+Tag a version to trigger automatic release builds:
+
+```bash
+git tag v0.1.0
+git push --tags
+```
+
+This creates a GitHub Release with pre-built binaries for all platforms and SHA256 checksums.
 
 ## Documentation
 
