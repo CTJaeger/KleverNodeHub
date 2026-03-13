@@ -1572,9 +1572,6 @@
             else showToast('All selected agents updated to ' + version + '.', 'success');
             await loadData();
             loadAgentVersions();
-            } catch (e) {
-                status.textContent = 'Error: ' + e.message;
-            }
         }
 
         // --- Version Check & Self-Update ---
