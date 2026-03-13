@@ -59,6 +59,8 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	conn.SetReadLimit(1 << 20) // 1 MB — log responses can be large
+
 	log.Printf("agent WebSocket connected: %s", serverID)
 
 	// Register in hub
