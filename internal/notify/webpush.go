@@ -22,7 +22,7 @@ import (
 
 // PushSubscription represents a Web Push subscription from the browser.
 type PushSubscription struct {
-	Endpoint string            `json:"endpoint"`
+	Endpoint string               `json:"endpoint"`
 	Keys     PushSubscriptionKeys `json:"keys"`
 }
 
