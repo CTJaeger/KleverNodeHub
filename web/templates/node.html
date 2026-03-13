@@ -828,7 +828,10 @@
                 if (showTimestamps && line.timestamp) {
                     lineHtml += '<span style="color:#6b7280;">' + esc(line.timestamp) + '</span> ';
                 }
-                if (line.stream === 'stderr') {
+                const hasAnsi = msg.indexOf('\x1b[') !== -1;
+                if (hasAnsi) {
+                    lineHtml += ansiToHtml(msg);
+                } else if (line.stream === 'stderr') {
                     lineHtml += '<span style="color:#f87171;">' + highlightLogLevel(esc(msg)) + '</span>';
                 } else {
                     lineHtml += highlightLogLevel(esc(msg));
@@ -910,6 +913,47 @@
 
             search.placeholder = activeNodeTab === 'logs' ? 'Filter logs...' : 'Type to jump into logs';
             search.value = logFilter.value || '';
+        }
+
+        const ansiColors = {
+            '30': '#4b5563', '31': '#f87171', '32': '#34d399', '33': '#fbbf24',
+            '34': '#60a5fa', '35': '#c084fc', '36': '#22d3ee', '37': '#e5e7eb',
+            '90': '#6b7280', '91': '#fca5a5', '92': '#6ee7b7', '93': '#fde68a',
+            '94': '#93c5fd', '95': '#d8b4fe', '96': '#67e8f9', '97': '#f3f4f6',
+        };
+
+        function ansiToHtml(raw) {
+            let result = '';
+            let open = false;
+            let i = 0;
+            while (i < raw.length) {
+                if (raw.charCodeAt(i) === 0x1b && raw[i + 1] === '[') {
+                    const end = raw.indexOf('m', i + 2);
+                    if (end !== -1) {
+                        const codes = raw.substring(i + 2, end).split(';');
+                        if (open) { result += '</span>'; open = false; }
+                        for (const code of codes) {
+                            if (ansiColors[code]) {
+                                result += '<span style="color:' + ansiColors[code] + ';">';
+                                open = true;
+                            } else if (code === '1') {
+                                result += '<span style="font-weight:bold;">';
+                                open = true;
+                            }
+                        }
+                        i = end + 1;
+                        continue;
+                    }
+                }
+                const ch = raw[i];
+                if (ch === '<') result += '&lt;';
+                else if (ch === '>') result += '&gt;';
+                else if (ch === '&') result += '&amp;';
+                else result += ch;
+                i++;
+            }
+            if (open) result += '</span>';
+            return result;
         }
 
         function highlightLogLevel(text) {
