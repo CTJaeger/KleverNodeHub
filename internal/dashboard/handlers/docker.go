@@ -190,3 +190,132 @@ func (h *DockerHandler) HandleBatchUpgrade(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
+
+// HandleConfigUpgrade handles POST /api/nodes/{id}/config/upgrade
+// Downloads and applies new Klever configs during a node upgrade.
+func (h *DockerHandler) HandleConfigUpgrade(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	var req struct {
+		VersionLabel string `json:"version_label"`
+		Network      string `json:"network"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if req.VersionLabel == "" {
+		req.VersionLabel = node.DockerImageTag
+	}
+	if req.Network == "" {
+		req.Network = "mainnet"
+	}
+
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-config-upgrade-%d", time.Now().UnixNano()),
+		Type:   "command",
+		Action: "config.upgrade",
+		Payload: map[string]string{
+			"data_dir":      node.DataDirectory,
+			"network":       req.Network,
+			"version_label": req.VersionLabel,
+		},
+		Timestamp: time.Now().Unix(),
+	}
+
+	result, err := h.hub.SendCommand(node.ServerID, msg, 3*time.Minute)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleConfigVersionBackups handles GET /api/nodes/{id}/config/backups
+// Lists version-labeled config backups for a node.
+func (h *DockerHandler) HandleConfigVersionBackups(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-config-vbackups-%d", time.Now().UnixNano()),
+		Type:   "command",
+		Action: "config.version-backups",
+		Payload: map[string]string{
+			"data_dir": node.DataDirectory,
+		},
+		Timestamp: time.Now().Unix(),
+	}
+
+	result, err := h.hub.SendCommand(node.ServerID, msg, 30*time.Second)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleConfigVersionRestore handles POST /api/nodes/{id}/config/restore
+// Restores config from a version backup.
+func (h *DockerHandler) HandleConfigVersionRestore(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	var req struct {
+		BackupName string `json:"backup_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.BackupName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "backup_name required"})
+		return
+	}
+
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-config-vrestore-%d", time.Now().UnixNano()),
+		Type:   "command",
+		Action: "config.version-restore",
+		Payload: map[string]string{
+			"data_dir":    node.DataDirectory,
+			"backup_name": req.BackupName,
+		},
+		Timestamp: time.Now().Unix(),
+	}
+
+	result, err := h.hub.SendCommand(node.ServerID, msg, 30*time.Second)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

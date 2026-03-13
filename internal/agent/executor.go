@@ -111,6 +111,12 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeConfigBackups(msg.Payload, result)
 	case "config.restore":
 		err = e.executeConfigRestore(msg.Payload, result)
+	case "config.upgrade":
+		err = e.executeConfigUpgrade(ctx, msg.Payload, result)
+	case "config.version-backups":
+		err = e.executeConfigVersionBackups(msg.Payload, result)
+	case "config.version-restore":
+		err = e.executeConfigVersionRestore(msg.Payload, result)
 	case "node.logs":
 		err = e.executeFetchLogs(ctx, msg.Payload, result)
 	case "key.info":
@@ -545,6 +551,61 @@ func (e *Executor) executeAgentUpdate(payload any, result *models.CommandResult)
 	result.Output = string(jsonBytes)
 
 	log.Printf("agent binary updated to %s — restart required", version)
+	return nil
+}
+
+func (e *Executor) executeConfigUpgrade(ctx context.Context, payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	network := extractStringField(payload, "network")
+	versionLabel := extractStringField(payload, "version_label")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	if network == "" {
+		network = "mainnet"
+	}
+	if versionLabel == "" {
+		versionLabel = "unknown"
+	}
+
+	upgradeResult, err := UpgradeConfigs(ctx, dataDir, network, versionLabel)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(upgradeResult)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeConfigVersionBackups(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+
+	backups, err := ListConfigVersionBackups(dataDir)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(backups)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeConfigVersionRestore(payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	backupName := extractStringField(payload, "backup_name")
+	if dataDir == "" || backupName == "" {
+		return fmt.Errorf("data_dir and backup_name are required")
+	}
+
+	if err := RestoreConfigVersion(dataDir, backupName); err != nil {
+		return err
+	}
+
+	result.Output = "restored config from version backup: " + backupName
 	return nil
 }
 

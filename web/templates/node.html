@@ -158,6 +158,19 @@
                             <button class="btn btn-sm btn-primary" onclick="doUpgrade()" id="btn-upgrade">Upgrade</button>
                             <button class="btn btn-sm btn-secondary" onclick="doUpgrade()" id="btn-downgrade">Downgrade</button>
                         </div>
+                        <div class="mt-8">
+                            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                                <input type="checkbox" id="upgrade-update-configs" checked>
+                                Update Klever config files (backup current configs first)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="node-action-panel" id="config-backups-section">
+                        <div class="node-action-panel-head">
+                            <span class="node-action-kicker">Config Backups</span>
+                            <span class="node-action-hint">Restore previous configs</span>
+                        </div>
+                        <div id="config-backups-list" class="text-sm text-muted">Loading...</div>
                     </div>
                 </div>
                 <div id="upgrade-progress" class="hidden mt-8">
@@ -385,6 +398,7 @@
             switchNodeTab(getNodeTabFromHash(), false);
             await loadNode();
             await loadMetrics();
+            loadConfigBackups();
 
             setInterval(async () => {
                 await loadNode();
@@ -1074,8 +1088,31 @@
             clearInterval(animInterval);
 
             if (result && result.ok && result.data && result.data.success) {
+                barEl.style.width = '80%';
+                statusEl.textContent = action.charAt(0).toUpperCase() + action.slice(1) + ' successful.';
+
+                // Update configs if checkbox is checked
+                const updateConfigs = document.getElementById('upgrade-update-configs').checked;
+                if (updateConfigs) {
+                    statusEl.textContent = 'Updating config files...';
+                    const cfgResult = await API.postJSON('/api/nodes/' + nodeId + '/config/upgrade', {
+                        version_label: tag,
+                        network: 'mainnet'
+                    });
+                    if (cfgResult && cfgResult.ok && cfgResult.data && cfgResult.data.success) {
+                        try {
+                            const detail = JSON.parse(cfgResult.data.output);
+                            statusEl.textContent = 'Configs updated: ' + (detail.replaced_files || []).length + ' replaced, ' + (detail.merged_files || []).length + ' merged (source: ' + (detail.download_source || '?') + ')';
+                        } catch(e) {
+                            statusEl.textContent = 'Config update completed.';
+                        }
+                    } else {
+                        statusEl.textContent = 'Image upgraded but config update failed: ' + (cfgResult?.data?.error || 'unknown error');
+                    }
+                    loadConfigBackups();
+                }
+
                 barEl.style.width = '100%';
-                statusEl.textContent = action.charAt(0).toUpperCase() + action.slice(1) + ' successful: ' + (result.data.output || 'ok');
                 showResult(action.charAt(0).toUpperCase() + action.slice(1) + ' to ' + tag + ' successful!', false);
             } else {
                 barEl.style.width = '100%';
@@ -1097,6 +1134,42 @@
             }, 8000);
 
             setTimeout(loadNode, 1000);
+        }
+
+        async function loadConfigBackups() {
+            const el = document.getElementById('config-backups-list');
+            const result = await API.getJSON('/api/nodes/' + nodeId + '/config/version-backups');
+            if (!result || !result.ok || !result.data || !result.data.success) {
+                el.textContent = 'No backups available';
+                return;
+            }
+            try {
+                const backups = JSON.parse(result.data.output);
+                if (!backups || backups.length === 0) {
+                    el.textContent = 'No config backups yet';
+                    return;
+                }
+                el.innerHTML = backups.map(function(b) {
+                    const date = new Date(b.created_at * 1000).toLocaleString();
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">' +
+                        '<span>' + esc(b.name) + ' <span class="text-muted">(' + b.file_count + ' files, ' + date + ')</span></span>' +
+                        '<button class="btn btn-sm btn-secondary" onclick="restoreConfigBackup(\'' + esc(b.name) + '\')">Restore</button>' +
+                        '</div>';
+                }).join('');
+            } catch(e) {
+                el.textContent = 'No backups available';
+            }
+        }
+
+        async function restoreConfigBackup(backupName) {
+            if (!confirm('Restore config from backup "' + backupName + '"? Current configs will be backed up first.')) return;
+            const result = await API.postJSON('/api/nodes/' + nodeId + '/config/version-restore', { backup_name: backupName });
+            if (result && result.ok && result.data && result.data.success) {
+                showResult('Config restored from ' + backupName, false);
+                loadConfigBackups();
+            } else {
+                showResult('Restore failed: ' + (result?.data?.error || 'unknown error'), true);
+            }
         }
 
         function showResult(msg, isError) {
