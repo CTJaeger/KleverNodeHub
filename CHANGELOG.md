@@ -21,6 +21,18 @@
 - **Fix: ANSI escape codes rendered raw in logs** — Added `ansiToHtml()` parser converting ANSI color codes to HTML spans
 - **Fix: Duplicate timestamps in log viewer** — Docker timestamps checkbox defaults to OFF
 - **Fix: Batch upgrade tag dropdown showing `[object Object]`** — Extract `tag.name` from DockerTag objects in overview.html
+- **Fix: DataTable search input focus loss** — Preserve focus and cursor position across re-renders in datatable.js
+- **Fix: Dashboard version display** — Show current version (e.g. v0.3.2) in header next to page title
+- **Fix: Duplicate alerts on restart** — Hydrate in-memory alert state from DB on startup + dedup check in fireAlert()
+- **Notification "Send Test" button** — Test channel credentials inline without saving (POST /api/notifications/test-inline)
+- **PWA support** — manifest.json, Service Worker (sw.js), icons, meta tags across all templates → installable on desktop/mobile
+- **Web Push Notifications** — Real-time push alerts even when tab is closed
+  - `internal/notify/vapid.go` — VAPID key generation/loading (P-256 ECDSA)
+  - `internal/notify/webpush.go` — Full RFC 8291 encryption (ECDH + HKDF + AES-128-GCM) + VAPID auth (RFC 8292)
+  - `internal/dashboard/handlers/push.go` — API: subscribe, unsubscribe, test, status, VAPID public key
+  - `web/static/sw.js` — Push event handler + notification click (focus/open app)
+  - `web/templates/settings.html` — Push notification toggle + test button in Notifications tab
+  - `cmd/dashboard/main.go` — VAPID key persistence, WebPushChannel wiring, push routes
 
 ### 2026-03-12
 - **Docker Hub**: Automated multi-arch Docker image builds (linux/amd64, linux/arm64) in release workflow

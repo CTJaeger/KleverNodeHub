@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Klever Node Hub - Settings</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <!-- Settings styles now in style.css -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/img/icon-192.png">
 </head>
 <body>
     <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -182,7 +185,22 @@
                         </div>
                         <div class="section-actions">
                             <button class="btn btn-primary btn-sm" onclick="saveChannel()">Save Channel</button>
+                            <button class="btn btn-secondary btn-sm" id="ch-test-btn" onclick="testInlineChannel()">Send Test</button>
                             <button class="btn btn-secondary btn-sm" onclick="hideChannelForm()">Cancel</button>
+                            <span id="ch-test-status" style="font-size:12px;margin-left:8px;"></span>
+                        </div>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
+                        <h4>Push Notifications</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">
+                            Receive browser push notifications for alerts — even when the dashboard tab is closed.
+                            Requires HTTPS and notification permission.
+                        </p>
+                        <div id="push-status" style="margin-bottom:12px;"></div>
+                        <div class="section-actions">
+                            <button class="btn btn-primary btn-sm" id="push-toggle-btn" onclick="togglePush()" disabled>Loading...</button>
+                            <button class="btn btn-secondary btn-sm" id="push-test-btn" onclick="testPush()" style="display:none;">Send Test</button>
+                            <span id="push-feedback" style="font-size:12px;margin-left:8px;"></span>
                         </div>
                     </div>
                 </div>
@@ -415,6 +433,37 @@
         function hideChannelForm() {
             document.getElementById('channel-form').style.display = 'none';
             editingChannel = null;
+        }
+
+        async function testInlineChannel() {
+            const type = document.getElementById('ch-type').value;
+            const config = {};
+            document.querySelectorAll('.ch-config').forEach(el => {
+                if (el.value.trim()) config[el.dataset.key] = el.value.trim();
+            });
+
+            const btn = document.getElementById('ch-test-btn');
+            const status = document.getElementById('ch-test-status');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            status.textContent = '';
+
+            try {
+                const resp = await API.post('/api/notifications/test-inline', { type: type, config: config });
+                if (resp && resp.ok) {
+                    status.style.color = 'var(--success)';
+                    status.textContent = 'Test sent successfully!';
+                } else {
+                    const data = resp ? await resp.json() : {};
+                    status.style.color = 'var(--danger)';
+                    status.textContent = data.error || 'Test failed';
+                }
+            } catch (e) {
+                status.style.color = 'var(--danger)';
+                status.textContent = e.message || 'Test failed';
+            }
+            btn.disabled = false;
+            btn.textContent = 'Send Test';
         }
 
         async function saveChannel() {
@@ -678,11 +727,157 @@
             }
         }
 
+        // --- Push Notifications ---
+        let pushSubscription = null;
+        let vapidPublicKey = null;
+
+        async function initPush() {
+            const statusEl = document.getElementById('push-status');
+            const toggleBtn = document.getElementById('push-toggle-btn');
+            const testBtn = document.getElementById('push-test-btn');
+
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                statusEl.innerHTML = '<span style="color:var(--text-muted);">Push notifications are not supported in this browser.</span>';
+                toggleBtn.style.display = 'none';
+                return;
+            }
+
+            // Get VAPID key from server
+            try {
+                const data = await API.getJSON('/api/push/vapid-key');
+                if (!data || !data.public_key) {
+                    statusEl.innerHTML = '<span style="color:var(--text-muted);">Push not configured on server.</span>';
+                    toggleBtn.style.display = 'none';
+                    return;
+                }
+                vapidPublicKey = data.public_key;
+            } catch {
+                statusEl.innerHTML = '<span style="color:var(--danger);">Failed to load push config.</span>';
+                toggleBtn.style.display = 'none';
+                return;
+            }
+
+            // Check current subscription
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                pushSubscription = await reg.pushManager.getSubscription();
+            } catch { /* ignore */ }
+
+            updatePushUI();
+        }
+
+        function updatePushUI() {
+            const statusEl = document.getElementById('push-status');
+            const toggleBtn = document.getElementById('push-toggle-btn');
+            const testBtn = document.getElementById('push-test-btn');
+
+            toggleBtn.disabled = false;
+
+            if (pushSubscription) {
+                statusEl.innerHTML = '<span style="color:var(--success);">Push notifications are enabled for this browser.</span>';
+                toggleBtn.textContent = 'Disable Push';
+                toggleBtn.className = 'btn btn-secondary btn-sm';
+                testBtn.style.display = '';
+            } else {
+                statusEl.innerHTML = '<span style="color:var(--text-muted);">Push notifications are not enabled.</span>';
+                toggleBtn.textContent = 'Enable Push';
+                toggleBtn.className = 'btn btn-primary btn-sm';
+                testBtn.style.display = 'none';
+            }
+        }
+
+        async function togglePush() {
+            const feedback = document.getElementById('push-feedback');
+            feedback.textContent = '';
+
+            if (pushSubscription) {
+                // Unsubscribe
+                try {
+                    const endpoint = pushSubscription.endpoint;
+                    await pushSubscription.unsubscribe();
+                    pushSubscription = null;
+                    await API.post('/api/push/unsubscribe', { endpoint: endpoint });
+                    feedback.style.color = 'var(--text-muted)';
+                    feedback.textContent = 'Unsubscribed.';
+                } catch (e) {
+                    feedback.style.color = 'var(--danger)';
+                    feedback.textContent = 'Failed: ' + e.message;
+                }
+            } else {
+                // Subscribe
+                try {
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        feedback.style.color = 'var(--danger)';
+                        feedback.textContent = 'Notification permission denied.';
+                        return;
+                    }
+
+                    const reg = await navigator.serviceWorker.ready;
+                    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+                    pushSubscription = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey,
+                    });
+
+                    // Send subscription to server
+                    const sub = pushSubscription.toJSON();
+                    const resp = await API.post('/api/push/subscribe', {
+                        endpoint: sub.endpoint,
+                        keys: sub.keys,
+                    });
+                    if (resp && resp.ok) {
+                        feedback.style.color = 'var(--success)';
+                        feedback.textContent = 'Subscribed!';
+                    } else {
+                        feedback.style.color = 'var(--danger)';
+                        feedback.textContent = 'Server rejected subscription.';
+                    }
+                } catch (e) {
+                    feedback.style.color = 'var(--danger)';
+                    feedback.textContent = 'Failed: ' + e.message;
+                }
+            }
+            updatePushUI();
+        }
+
+        async function testPush() {
+            const feedback = document.getElementById('push-feedback');
+            feedback.textContent = 'Sending...';
+            feedback.style.color = 'var(--text-muted)';
+            try {
+                const resp = await API.post('/api/push/test');
+                if (resp && resp.ok) {
+                    feedback.style.color = 'var(--success)';
+                    feedback.textContent = 'Test sent!';
+                } else {
+                    const data = resp ? await resp.json() : {};
+                    feedback.style.color = 'var(--danger)';
+                    feedback.textContent = data.error || 'Test failed';
+                }
+            } catch (e) {
+                feedback.style.color = 'var(--danger)';
+                feedback.textContent = e.message;
+            }
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
         // Init
         loadSettings();
         loadChannels();
         loadPasskeys();
         loadKleverStatus();
+        initPush();
     </script>
 </body>
 </html>

@@ -166,14 +166,22 @@ func main() {
 	notifyManager := notify.NewManager()
 	handlers.LoadSavedChannels(settingsStore, notifyManager)
 	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
+
+	// --- Web Push (VAPID + subscriptions) ---
+	vapidKeys, err := loadOrCreateVAPIDKeys(settingsStore)
+	if err != nil {
+		log.Fatalf("VAPID keys: %v", err)
+	}
+	webpushChannel := notify.NewWebPushChannel(vapidKeys, "mailto:admin@klever-node-hub.local")
+	handlers.LoadSavedSubscriptions(settingsStore, webpushChannel)
+	notifyManager.AddChannel(webpushChannel)
+	pushHandler := handlers.NewPushHandler(webpushChannel, settingsStore)
+	log.Printf("Web Push ready (%d saved subscriptions)", webpushChannel.SubscriptionCount())
 	alertStore := store.NewAlertStore(db)
 	alertHandler := handlers.NewAlertHandler(alertStore)
-	// Resolve stale alerts from previous run
-	if resolved, err := alertStore.ResolveAllFiring(); err != nil {
-		log.Printf("resolve stale alerts: %v", err)
-	} else if resolved > 0 {
-		log.Printf("resolved %d stale alerts from previous run", resolved)
-	}
+	// Note: we do NOT resolve all firing alerts on startup.
+	// The evaluator will naturally resolve them if conditions clear,
+	// and dedup prevents duplicate alerts from being created.
 	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
@@ -288,7 +296,13 @@ func main() {
 	mux.Handle("PUT /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleUpdateChannel)))
 	mux.Handle("DELETE /api/notifications/channels/{name}", authMw(http.HandlerFunc(notifyHandler.HandleRemoveChannel)))
 	mux.Handle("POST /api/notifications/channels/{name}/test", authMw(http.HandlerFunc(notifyHandler.HandleTestChannel)))
+	mux.Handle("POST /api/notifications/test-inline", authMw(http.HandlerFunc(notifyHandler.HandleTestInline)))
 	mux.Handle("GET /api/notifications/history", authMw(http.HandlerFunc(notifyHandler.HandleHistory)))
+	mux.Handle("GET /api/push/vapid-key", authMw(http.HandlerFunc(pushHandler.HandleGetVAPIDKey)))
+	mux.Handle("POST /api/push/subscribe", authMw(http.HandlerFunc(pushHandler.HandleSubscribe)))
+	mux.Handle("POST /api/push/unsubscribe", authMw(http.HandlerFunc(pushHandler.HandleUnsubscribe)))
+	mux.Handle("POST /api/push/test", authMw(http.HandlerFunc(pushHandler.HandleTestPush)))
+	mux.Handle("GET /api/push/status", authMw(http.HandlerFunc(pushHandler.HandleStatus)))
 	mux.Handle("GET /api/alerts", authMw(http.HandlerFunc(alertHandler.HandleListActiveAlerts)))
 	mux.Handle("GET /api/alerts/history", authMw(http.HandlerFunc(alertHandler.HandleAlertHistory)))
 	mux.Handle("GET /api/alerts/rules", authMw(http.HandlerFunc(alertHandler.HandleListRules)))
@@ -472,6 +486,34 @@ func loadOrCreateInstanceID(settings *store.SettingsStore) (string, error) {
 	}
 	log.Printf("generated new dashboard instance ID: %s", id)
 	return id, nil
+}
+
+// loadOrCreateVAPIDKeys loads VAPID keys from the settings store, or generates new ones.
+func loadOrCreateVAPIDKeys(settings *store.SettingsStore) (*notify.VAPIDKeys, error) {
+	pubB64, _ := settings.Get("vapid_public_key")
+	privB64, _ := settings.Get("vapid_private_key")
+
+	if pubB64 != "" && privB64 != "" {
+		keys, err := notify.LoadVAPIDKeys(pubB64, privB64)
+		if err != nil {
+			return nil, fmt.Errorf("load VAPID keys: %w", err)
+		}
+		return keys, nil
+	}
+
+	// Generate new VAPID key pair
+	keys, err := notify.GenerateVAPIDKeys()
+	if err != nil {
+		return nil, err
+	}
+	if err := settings.Set("vapid_public_key", keys.PublicKey); err != nil {
+		return nil, fmt.Errorf("save VAPID public key: %w", err)
+	}
+	if err := settings.Set("vapid_private_key", keys.PrivateB64); err != nil {
+		return nil, fmt.Errorf("save VAPID private key: %w", err)
+	}
+	log.Println("generated new VAPID key pair for Web Push")
+	return keys, nil
 }
 
 // resetRecoveryCodesAndExit opens the DB, generates new recovery codes, saves them, and exits.

@@ -68,11 +68,51 @@ func NewEvaluator(
 
 // Start launches the evaluation loop.
 func (e *Evaluator) Start() {
+	e.hydrateFromDB()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
 
 	go e.run(ctx)
 	log.Printf("alert evaluator started (interval=%s)", e.interval)
+}
+
+// hydrateFromDB loads active alerts from the database into in-memory state
+// so the evaluator can track and resolve them without creating duplicates.
+func (e *Evaluator) hydrateFromDB() {
+	alerts, err := e.alertStore.ListActiveAlerts()
+	if err != nil {
+		log.Printf("alert evaluator: hydrate from DB: %v", err)
+		return
+	}
+
+	for i := range alerts {
+		a := &alerts[i]
+		var stateKey string
+		if a.NodeID != "" {
+			stateKey = fmt.Sprintf("%s:%s", a.RuleID, a.NodeID)
+		} else if a.ServerID != "" {
+			stateKey = fmt.Sprintf("%s:server:%s", a.RuleID, a.ServerID)
+		} else {
+			continue
+		}
+
+		record := *a // copy
+		e.states[stateKey] = &AlertState{
+			RuleID:      a.RuleID,
+			NodeID:      a.NodeID,
+			ServerID:    a.ServerID,
+			FirstSeen:   time.Unix(a.FiredAt, 0),
+			LastSeen:    time.Unix(a.CreatedAt, 0),
+			State:       "firing",
+			NotifiedAt:  time.Unix(a.NotifiedAt, 0),
+			AlertRecord: &record,
+		}
+	}
+
+	if len(alerts) > 0 {
+		log.Printf("alert evaluator: hydrated %d active alerts from DB", len(alerts))
+	}
 }
 
 // Stop halts the evaluation loop.
@@ -392,6 +432,20 @@ func (e *Evaluator) processResult(rule *store.AlertRule, stateKey, nodeID, serve
 }
 
 func (e *Evaluator) fireAlert(rule *store.AlertRule, state *AlertState, source string, value float64, now time.Time) {
+	// Dedup: check if an active alert already exists for this rule+node/server
+	var existing *store.AlertRecord
+	if state.NodeID != "" {
+		existing, _ = e.alertStore.GetActiveAlertByRuleAndNode(rule.ID, state.NodeID)
+	} else if state.ServerID != "" {
+		existing, _ = e.alertStore.GetActiveAlertByRuleAndServer(rule.ID, state.ServerID)
+	}
+	if existing != nil {
+		// Reattach existing alert instead of creating a duplicate
+		state.AlertRecord = existing
+		state.NotifiedAt = time.Unix(existing.NotifiedAt, 0)
+		return
+	}
+
 	alertID := fmt.Sprintf("alert-%d-%d", now.UnixNano(), e.idCounter)
 	e.idCounter++
 
