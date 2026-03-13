@@ -384,6 +384,13 @@ h1, h2, h3, h4, h5, h6 {
     margin-left: 4px;
 }
 
+.page-header-version {
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    margin-left: 8px;
+}
+
 .page-header-center {
     flex: 1 1 460px;
     display: flex;
