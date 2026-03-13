@@ -1494,18 +1494,7 @@
             btn.disabled = true;
             btn.textContent = 'Downloading...';
             try {
-                var resp = await fetch('/api/agent/download-release-auto', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tag: tag })
-                });
-                var data = await resp.json();
-                if (!resp.ok) {
-                    showToast('Download failed: ' + (data.error || resp.statusText), 'error');
-                    btn.disabled = false;
-                    btn.textContent = 'Download';
-                    return;
-                }
+                var data = await API.postJSON('/api/agent/download-release-auto', { tag: tag });
                 var ok = (data.results || []).filter(function(r) { return r.success; }).length;
                 var fail = (data.results || []).filter(function(r) { return !r.success; }).length;
                 if (fail > 0) {
@@ -1557,13 +1546,8 @@
             var failCount = 0;
             for (var i = 0; i < selectedIDs.length; i++) {
                 try {
-                    var resp = await fetch('/api/agent/update/' + selectedIDs[i], {
-                        method: 'POST',
-                        headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ version: version })
-                    });
-                    var data = await resp.json();
-                    if (resp.ok && data.success) okCount++;
+                    var data = await API.postJSON('/api/agent/update/' + selectedIDs[i], { version: version });
+                    if (data && data.success) okCount++;
                     else failCount++;
                 } catch (e) { failCount++; }
             }
