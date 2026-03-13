@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -202,28 +201,4 @@ func verifyChecksum(client *http.Client, checksumURL, binaryURL, actualHash stri
 	}
 
 	return fmt.Errorf("binary %s not found in checksum file", binaryName)
-}
-
-func restartProcess(execPath string) {
-	args := os.Args
-	log.Printf("self-update: restarting with exec %s %v", execPath, args[1:])
-
-	cmd := exec.Command(execPath, args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	if err := cmd.Start(); err != nil {
-		log.Printf("self-update: restart failed: %v", err)
-		return
-	}
-
-	// Exit current process
-	os.Exit(0)
-}
-
-// isRunningInDocker checks if the process is running inside a Docker container.
-func isRunningInDocker() bool {
-	_, err := os.Stat("/.dockerenv")
-	return err == nil
 }

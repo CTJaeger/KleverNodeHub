@@ -1,0 +1,15 @@
+[Unit]
+Description=Klever Node Hub Agent
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/klever-agent --dashboard-url wss://DASHBOARD_HOST:9443
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

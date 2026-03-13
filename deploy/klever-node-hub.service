@@ -1,0 +1,21 @@
+[Unit]
+Description=Klever Node Hub Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=klever
+ExecStart=/usr/local/bin/klever-node-hub --addr :9443 --domain localhost
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
