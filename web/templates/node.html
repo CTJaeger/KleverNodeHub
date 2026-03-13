@@ -793,7 +793,7 @@
             const tail = document.getElementById('log-lines').value || 100;
             const viewer = document.getElementById('log-viewer');
             try {
-                const resp = await API.fetch('/api/nodes/' + nodeId + '/logs?tail=' + tail);
+                const resp = await API.get('/api/nodes/' + nodeId + '/logs?tail=' + tail);
                 if (!resp || !resp.ok) {
                     const err = resp ? await resp.json().catch(() => ({})) : {};
                     viewer.innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(err.error || 'HTTP ' + (resp ? resp.status : 'no response')) + '</div>';

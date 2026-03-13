@@ -1355,8 +1355,8 @@
         // --- Version Check & Self-Update ---
         async function checkForUpdates() {
             try {
-                const resp = await API.fetch('/api/system/version');
-                if (!resp.ok) return;
+                const resp = await API.get('/api/system/version');
+                if (!resp || !resp.ok) return;
                 const data = await resp.json();
                 if (data.has_update && data.latest_version) {
                     const banner = document.getElementById('update-banner');
@@ -1392,7 +1392,7 @@
             btn.disabled = true;
             btn.textContent = 'Updating...';
             try {
-                const resp = await API.fetch('/api/system/update', { method: 'POST' });
+                const resp = await API.post('/api/system/update');
                 const data = await resp.json();
                 if (data.success) {
                     btn.textContent = 'Restarting...';
