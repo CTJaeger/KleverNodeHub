@@ -90,8 +90,9 @@ func (h *UpdateHandler) HandleListBinaries(w http.ResponseWriter, _ *http.Reques
 		binaries = []*dashboard.AgentBinaryInfo{}
 	}
 	resp := map[string]any{
-		"binaries":       binaries,
-		"latest_version": h.updateStore.LatestVersion(),
+		"binaries":             binaries,
+		"latest_version":       h.updateStore.LatestVersion(),
+		"downloaded_versions":  h.updateStore.DownloadedVersions(),
 	}
 	if latest := h.versionChecker.Latest(); latest != nil {
 		resp["latest_release_version"] = latest.TagName
@@ -101,6 +102,7 @@ func (h *UpdateHandler) HandleListBinaries(w http.ResponseWriter, _ *http.Reques
 
 // HandleUpdateAgent handles POST /api/agent/update/{server_id}
 // Sends the binary to the agent over WebSocket.
+// Optional body: { "version": "v0.3.4" } to send a specific version.
 func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	serverID := r.PathValue("server_id")
 	if serverID == "" {
@@ -113,6 +115,12 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Parse optional version from body
+	var reqBody struct {
+		Version string `json:"version"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
 	// Get server to determine OS/arch
 	srv, err := h.serverStore.GetByID(serverID)
 	if err != nil {
@@ -121,7 +129,13 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 	}
 
 	osName, arch := parseOSArch(srv.OSInfo)
-	binaryData, info, err := h.updateStore.GetBinary(osName, arch)
+	var binaryData []byte
+	var info *dashboard.AgentBinaryInfo
+	if reqBody.Version != "" {
+		binaryData, info, err = h.updateStore.GetBinaryVersion(reqBody.Version, osName, arch)
+	} else {
+		binaryData, info, err = h.updateStore.GetBinary(osName, arch)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("no binary for %s/%s: %v", osName, arch, err)})
 		return
@@ -163,7 +177,13 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 
 // HandleUpdateAll handles POST /api/agent/update/all
 // Sequentially updates all connected agents.
-func (h *UpdateHandler) HandleUpdateAll(w http.ResponseWriter, _ *http.Request) {
+// Optional body: { "version": "v0.3.4" } to send a specific version.
+func (h *UpdateHandler) HandleUpdateAll(w http.ResponseWriter, r *http.Request) {
+	var reqBody struct {
+		Version string `json:"version"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
 	servers, err := h.serverStore.List()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -190,7 +210,13 @@ func (h *UpdateHandler) HandleUpdateAll(w http.ResponseWriter, _ *http.Request) 
 		}
 
 		osName, arch := parseOSArch(srv.OSInfo)
-		binaryData, info, err := h.updateStore.GetBinary(osName, arch)
+		var binaryData []byte
+		var info *dashboard.AgentBinaryInfo
+		if reqBody.Version != "" {
+			binaryData, info, err = h.updateStore.GetBinaryVersion(reqBody.Version, osName, arch)
+		} else {
+			binaryData, info, err = h.updateStore.GetBinary(osName, arch)
+		}
 		if err != nil {
 			results = append(results, updateResult{
 				ServerID: srv.ID, Name: srv.Name,
@@ -394,6 +420,111 @@ func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http
 		"os":       info.OS,
 		"arch":     info.Arch,
 	})
+}
+
+// HandleDownloadReleaseAuto handles POST /api/agent/download-release-auto
+// Automatically downloads the right agent binaries for all registered server architectures.
+func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Tag string `json:"tag"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Tag == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tag is required"})
+		return
+	}
+
+	// Determine which OS/arch combos are needed from registered servers
+	servers, err := h.serverStore.List()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	needed := map[string]bool{}
+	for _, srv := range servers {
+		osName, arch := parseOSArch(srv.OSInfo)
+		needed[osName+"/"+arch] = true
+	}
+	if len(needed) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no servers registered"})
+		return
+	}
+
+	// Fetch releases to find the matching tag
+	releases, err := h.versionChecker.FetchReleases(20)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("fetch releases: %v", err)})
+		return
+	}
+
+	var targetRelease *dashboard.ReleaseInfo
+	for i := range releases {
+		if releases[i].TagName == req.Tag {
+			targetRelease = &releases[i]
+			break
+		}
+	}
+	if targetRelease == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("release %s not found", req.Tag)})
+		return
+	}
+
+	// Download each needed binary
+	const allowedPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
+	client := &http.Client{Timeout: 5 * time.Minute}
+
+	type dlResult struct {
+		OS      string `json:"os"`
+		Arch    string `json:"arch"`
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+	var results []dlResult
+
+	for _, asset := range targetRelease.Assets {
+		if !strings.HasPrefix(asset.Name, "klever-agent-") {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(asset.Name, "klever-agent-"), "-")
+		if len(parts) < 2 {
+			continue
+		}
+		osName, arch := parts[0], parts[1]
+		// Strip .exe suffix from arch
+		arch = strings.TrimSuffix(arch, ".exe")
+
+		if !needed[osName+"/"+arch] {
+			continue
+		}
+
+		// SSRF protection
+		if !strings.HasPrefix(asset.BrowserDownloadURL, allowedPrefix) {
+			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: "invalid URL"})
+			continue
+		}
+
+		resp, err := client.Get(asset.BrowserDownloadURL)
+		if err != nil {
+			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: err.Error()})
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20))
+		_ = resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK {
+			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: fmt.Sprintf("download failed (%d)", resp.StatusCode)})
+			continue
+		}
+
+		_, err = h.updateStore.Store(req.Tag, osName, arch, data)
+		if err != nil {
+			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: err.Error()})
+			continue
+		}
+
+		results = append(results, dlResult{OS: osName, Arch: arch, Success: true})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 func sha256hex(data []byte) string {
