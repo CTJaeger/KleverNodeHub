@@ -153,7 +153,22 @@ class DataTable {
             html += '<div class="data-table-count">Showing ' + total + ' entries</div>';
         }
 
+        // Preserve focus state before replacing DOM
+        const activeEl = document.activeElement;
+        const hadSearchFocus = activeEl && activeEl.classList.contains('data-table-search') &&
+            activeEl.closest('#' + this.containerId);
+        const cursorPos = hadSearchFocus ? activeEl.selectionStart : 0;
+
         container.innerHTML = html;
+
+        // Restore focus to search input if it was focused before render
+        if (hadSearchFocus) {
+            const newInput = container.querySelector('.data-table-search');
+            if (newInput) {
+                newInput.focus();
+                newInput.setSelectionRange(cursorPos, cursorPos);
+            }
+        }
 
         if (this.onRender) {
             this.onRender(pageData);

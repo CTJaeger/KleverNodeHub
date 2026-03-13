@@ -100,6 +100,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                     <span class="page-header-title">Dashboard</span>
                     <span class="page-header-sub">Operations overview</span>
+                    <span id="dashboard-version" class="page-header-version"></span>
                 </div>
                 <div class="page-header-center">
                     <label class="page-search">
@@ -1359,6 +1360,9 @@
                 const resp = await API.get('/api/system/version');
                 if (!resp || !resp.ok) return;
                 const data = await resp.json();
+                if (data.version) {
+                    document.getElementById('dashboard-version').textContent = data.version;
+                }
                 if (data.has_update && data.latest_version) {
                     const banner = document.getElementById('update-banner');
                     document.getElementById('update-version').textContent = data.latest_version;
