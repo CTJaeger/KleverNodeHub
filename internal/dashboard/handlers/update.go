@@ -90,9 +90,9 @@ func (h *UpdateHandler) HandleListBinaries(w http.ResponseWriter, _ *http.Reques
 		binaries = []*dashboard.AgentBinaryInfo{}
 	}
 	resp := map[string]any{
-		"binaries":             binaries,
-		"latest_version":       h.updateStore.LatestVersion(),
-		"downloaded_versions":  h.updateStore.DownloadedVersions(),
+		"binaries":            binaries,
+		"latest_version":      h.updateStore.LatestVersion(),
+		"downloaded_versions": h.updateStore.DownloadedVersions(),
 	}
 	if latest := h.versionChecker.Latest(); latest != nil {
 		resp["latest_release_version"] = latest.TagName
