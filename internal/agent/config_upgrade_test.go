@@ -7,14 +7,27 @@ import (
 	"testing"
 )
 
+func mustMkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustWriteFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBackupConfigsWithVersion(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.MkdirAll(configDir, 0755)
+	mustMkdirAll(t, configDir)
 
-	// Create some config files
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte("NodeDisplayName = \"MyNode\""), 0644)
-	os.WriteFile(filepath.Join(configDir, "genesis.json"), []byte("{}"), 0644)
+	mustWriteFile(t, filepath.Join(configDir, "config.toml"), []byte("NodeDisplayName = \"MyNode\""))
+	mustWriteFile(t, filepath.Join(configDir, "genesis.json"), []byte("{}"))
 
 	backupDir, err := backupConfigsWithVersion(configDir, "v1.2.3")
 	if err != nil {
@@ -77,12 +90,12 @@ func TestExtractTOMLValue(t *testing.T) {
 func TestReadUserValues(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
-	os.MkdirAll(configDir, 0755)
+	mustMkdirAll(t, configDir)
 
 	content := `[Node]
   NodeDisplayName = "Validator-1"
 `
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(content), 0644)
+	mustWriteFile(t, filepath.Join(configDir, "config.toml"), []byte(content))
 
 	values := readUserValues(configDir)
 	if values["NodeDisplayName"] != "Validator-1" {
@@ -95,16 +108,15 @@ func TestListConfigVersionBackups(t *testing.T) {
 	configDir := filepath.Join(dir, "config")
 	backupDir := filepath.Join(configDir, "backups")
 
-	// Create version backup dirs
-	os.MkdirAll(filepath.Join(backupDir, "v1.0.0-20260313-100000"), 0755)
-	os.WriteFile(filepath.Join(backupDir, "v1.0.0-20260313-100000", "config.toml"), []byte("test"), 0644)
+	mustMkdirAll(t, filepath.Join(backupDir, "v1.0.0-20260313-100000"))
+	mustWriteFile(t, filepath.Join(backupDir, "v1.0.0-20260313-100000", "config.toml"), []byte("test"))
 
-	os.MkdirAll(filepath.Join(backupDir, "v1.1.0-20260313-120000"), 0755)
-	os.WriteFile(filepath.Join(backupDir, "v1.1.0-20260313-120000", "config.toml"), []byte("test"), 0644)
-	os.WriteFile(filepath.Join(backupDir, "v1.1.0-20260313-120000", "genesis.json"), []byte("{}"), 0644)
+	mustMkdirAll(t, filepath.Join(backupDir, "v1.1.0-20260313-120000"))
+	mustWriteFile(t, filepath.Join(backupDir, "v1.1.0-20260313-120000", "config.toml"), []byte("test"))
+	mustWriteFile(t, filepath.Join(backupDir, "v1.1.0-20260313-120000", "genesis.json"), []byte("{}"))
 
 	// Also have a regular .bak file — should be ignored (not a dir)
-	os.WriteFile(filepath.Join(backupDir, "config.toml.20260312-090000.bak"), []byte("old"), 0644)
+	mustWriteFile(t, filepath.Join(backupDir, "config.toml.20260312-090000.bak"), []byte("old"))
 
 	backups, err := ListConfigVersionBackups(dir)
 	if err != nil {
@@ -130,19 +142,15 @@ func TestRestoreConfigVersion(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")
 	backupDir := filepath.Join(configDir, "backups", "v1.0.0-20260313-100000")
-	os.MkdirAll(backupDir, 0755)
+	mustMkdirAll(t, backupDir)
 
-	// Write current config
-	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte("current"), 0644)
-
-	// Write backup
-	os.WriteFile(filepath.Join(backupDir, "config.toml"), []byte("old-version"), 0644)
+	mustWriteFile(t, filepath.Join(configDir, "config.toml"), []byte("current"))
+	mustWriteFile(t, filepath.Join(backupDir, "config.toml"), []byte("old-version"))
 
 	if err := RestoreConfigVersion(dir, "v1.0.0-20260313-100000"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Check restored
 	data, _ := os.ReadFile(filepath.Join(configDir, "config.toml"))
 	if string(data) != "old-version" {
 		t.Errorf("expected restored content 'old-version', got %q", string(data))
