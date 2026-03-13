@@ -971,7 +971,8 @@
                 sel.innerHTML = '';
                 if (data && data.tags) {
                     data.tags.forEach(function(tag) {
-                        sel.innerHTML += '<option value="' + esc(tag) + '">' + esc(tag) + '</option>';
+                        var name = (typeof tag === 'string') ? tag : tag.name;
+                        sel.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
                     });
                 }
             } catch (e) { /* ignore */ }
