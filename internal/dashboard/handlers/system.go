@@ -39,6 +39,7 @@ func (h *SystemHandler) HandleVersionInfo(w http.ResponseWriter, _ *http.Request
 		"os":         info.OS,
 		"arch":       info.Arch,
 		"uptime":     version.Uptime().String(),
+		"is_docker":  isRunningInDocker(),
 	}
 
 	latest := h.versionChecker.Latest()
@@ -55,6 +56,14 @@ func (h *SystemHandler) HandleVersionInfo(w http.ResponseWriter, _ *http.Request
 // HandleSelfUpdate downloads and applies a self-update.
 // POST /api/system/update
 func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request) {
+	if isRunningInDocker() {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"success": false,
+			"message": "self-update is not available in Docker — pull the new image instead",
+		})
+		return
+	}
+
 	latest := h.versionChecker.Latest()
 	if latest == nil || !latest.HasUpdate {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -211,4 +220,10 @@ func restartProcess(execPath string) {
 
 	// Exit current process
 	os.Exit(0)
+}
+
+// isRunningInDocker checks if the process is running inside a Docker container.
+func isRunningInDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
 }

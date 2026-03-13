@@ -887,6 +887,17 @@ h1, h2, h3, h4, h5, h6 {
     cursor: not-allowed;
 }
 
+.update-docker-hint {
+    font-family: monospace;
+    font-size: 12px;
+    background: var(--bg-main);
+    padding: 3px 8px;
+    border-radius: 3px;
+    color: var(--text-secondary);
+    margin-left: auto;
+    user-select: all;
+}
+
 .update-banner-dismiss {
     background: none;
     border: none;
