@@ -156,6 +156,39 @@ func (h *NotificationHandler) HandleTestChannel(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+// HandleTestInline handles POST /api/notifications/test-inline
+// Tests notification credentials without saving them.
+func (h *NotificationHandler) HandleTestInline(w http.ResponseWriter, r *http.Request) {
+	var req channelConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	ch, err := h.createNamedChannel("_test", req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := ch.Validate(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	testAlert := &notify.Alert{
+		Title:    "Test Notification",
+		Message:  "This is a test from Klever Node Hub. If you see this, your notification channel is configured correctly!",
+		Severity: notify.SeverityInfo,
+		Source:   "settings/test",
+	}
+	if err := ch.Send(testAlert); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
 // HandleHistory handles GET /api/notifications/history
 func (h *NotificationHandler) HandleHistory(w http.ResponseWriter, _ *http.Request) {
 	history := h.manager.History(100)

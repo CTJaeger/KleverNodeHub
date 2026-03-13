@@ -51,6 +51,27 @@ func (s *Server) SetupRoutes() error {
 	}
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
+	// PWA: serve manifest and service worker from root scope
+	s.mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+		data, err := web.StaticFS.ReadFile("static/manifest.json")
+		if err != nil {
+			http.NotFound(w, nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/manifest+json")
+		_, _ = w.Write(data)
+	})
+	s.mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, _ *http.Request) {
+		data, err := web.StaticFS.ReadFile("static/sw.js")
+		if err != nil {
+			http.NotFound(w, nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		_, _ = w.Write(data)
+	})
+
 	// Health endpoint (unauthenticated)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 
