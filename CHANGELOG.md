@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-03-13
+- **Issue #35 — Self-Update for Dashboard**: Automatic version checking via GitHub Releases API + binary self-update
+  - `internal/dashboard/version_checker.go` — Periodic GitHub release checker (30 min interval), semver comparison, asset finder
+  - `internal/dashboard/version_checker_test.go` — Tests for isNewer, compareVersions, FindAsset
+  - `internal/dashboard/handlers/system.go` — SystemHandler: GET /api/system/version (version info + update check), POST /api/system/update (download + SHA256 verify + replace + restart)
+  - `cmd/dashboard/main.go` — VersionChecker + SystemHandler wiring, new routes
+  - `web/templates/overview.html` — Update banner with version info, release notes link, "Update Now" button, dismiss per version
+  - `web/static/css/style.css` — Update banner styles
+
 ### 2026-03-12
 - **Docker Hub**: Automated multi-arch Docker image builds (linux/amd64, linux/arm64) in release workflow
   - Dashboard: `ctjaeger/klever-node-hub`

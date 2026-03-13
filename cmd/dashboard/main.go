@@ -180,6 +180,9 @@ func main() {
 	updateStore := dashboard.NewUpdateStore(*dataDir)
 	updateHandler := handlers.NewUpdateHandler(hub, updateStore, serverStore)
 	settingsHandler := handlers.NewSettingsHandler(settingsStore)
+	versionChecker := dashboard.NewVersionChecker("CTJaeger", "KleverNodeHub")
+	versionChecker.Start()
+	systemHandler := handlers.NewSystemHandler(versionChecker)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
@@ -302,6 +305,8 @@ func main() {
 	mux.Handle("GET /api/settings/{key}", authMw(http.HandlerFunc(settingsHandler.HandleGetSingle)))
 	mux.Handle("PUT /api/settings/{key}", authMw(http.HandlerFunc(settingsHandler.HandleUpdateSingle)))
 	mux.Handle("POST /api/settings/reset", authMw(http.HandlerFunc(settingsHandler.HandleResetDefaults)))
+	mux.Handle("GET /api/system/version", authMw(http.HandlerFunc(systemHandler.HandleVersionInfo)))
+	mux.Handle("POST /api/system/update", authMw(http.HandlerFunc(systemHandler.HandleSelfUpdate)))
 
 	// --- Graceful shutdown ---
 	sigCh := make(chan os.Signal, 1)
