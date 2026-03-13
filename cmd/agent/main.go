@@ -274,6 +274,11 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					default:
 					}
 				}
+				// Self-restart after successful agent update
+				if m.Action == "agent.update" && result.Success {
+					time.Sleep(500 * time.Millisecond) // let response be sent
+					restartAgent()
+				}
 			}(msg)
 		}
 	}
