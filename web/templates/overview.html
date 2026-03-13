@@ -395,6 +395,12 @@
                     <!-- Server Agents -->
                     <h4 style="margin-bottom:8px;">Server Agents</h4>
                     <div id="agent-version-list"></div>
+                    <div id="agent-action-bar" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-primary);border-radius:0 0 6px 6px;">
+                        <input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)">
+                        <span style="font-size:0.8rem;color:var(--text-secondary);">Select All</span>
+                        <select id="update-all-version" class="form-input node-inline-select" style="width:auto;font-size:0.8rem;padding:3px 6px;margin-left:auto;"></select>
+                        <button class="btn btn-primary btn-sm" id="btn-update-selected" onclick="updateSelectedAgents()" disabled>Update</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1393,13 +1399,7 @@
                     '</tr>';
             },
             renderFooter: function() {
-                return '</tbody>' +
-                    '<tfoot><tr style="background:var(--bg-primary);">' +
-                    '<td style="padding:8px 10px;border-radius:0 0 0 6px;"><input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)"></td>' +
-                    '<td style="padding:8px 10px;font-size:0.8rem;color:var(--text-secondary);">Select All</td>' +
-                    '<td colspan="2" style="padding:8px 10px;"><select id="update-all-version" class="form-input node-inline-select" style="width:auto;font-size:0.8rem;padding:3px 6px;"></select></td>' +
-                    '<td style="padding:8px 10px;text-align:right;border-radius:0 0 6px 0;"><button class="btn btn-primary btn-sm" id="btn-update-selected" onclick="updateSelectedAgents()" disabled>Update</button></td>' +
-                    '</tr></tfoot></table>';
+                return '</tbody></table>';
             },
             onRender: function() {
                 syncAgentSelectAll();
