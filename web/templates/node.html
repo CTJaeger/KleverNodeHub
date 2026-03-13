@@ -359,9 +359,12 @@
                             </select>
                             <button class="btn btn-sm btn-secondary" onclick="loadLogs()">Refresh</button>
                             <button class="btn btn-sm btn-secondary" onclick="downloadLogs()">Download</button>
-                            <label class="node-log-toggle">
-                                <input type="checkbox" id="log-timestamps" onchange="renderLogView()"> Docker Timestamps
-                            </label>
+                            <select id="log-autorefresh" onchange="setLogAutoRefresh()" class="form-input node-inline-select">
+                                <option value="0">Auto-Refresh: Off</option>
+                                <option value="5">Every 5s</option>
+                                <option value="10" selected>Every 10s</option>
+                                <option value="30">Every 30s</option>
+                            </select>
                             <label class="node-log-toggle">
                                 <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
                             </label>
@@ -816,9 +819,18 @@
             }
         }
 
+        var logRefreshInterval = null;
+
+        function setLogAutoRefresh() {
+            if (logRefreshInterval) { clearInterval(logRefreshInterval); logRefreshInterval = null; }
+            var secs = parseInt(document.getElementById('log-autorefresh').value) || 0;
+            if (secs > 0) {
+                logRefreshInterval = setInterval(function() { loadLogs(); }, secs * 1000);
+            }
+        }
+
         function renderLogView() {
             const viewer = document.getElementById('log-viewer');
-            const showTimestamps = document.getElementById('log-timestamps').checked;
             const filter = (document.getElementById('log-filter').value || '').toLowerCase();
 
             let html = '';
@@ -829,9 +841,6 @@
 
                 count++;
                 let lineHtml = '';
-                if (showTimestamps && line.timestamp) {
-                    lineHtml += '<span style="color:#6b7280;">' + esc(line.timestamp) + '</span> ';
-                }
                 const hasAnsi = msg.indexOf('\x1b[') !== -1;
                 if (hasAnsi) {
                     lineHtml += ansiToHtml(msg);
@@ -907,6 +916,7 @@
             if (name === 'logs' && !nodePanelLoaded.logs) {
                 nodePanelLoaded.logs = true;
                 await loadLogs();
+                setLogAutoRefresh();
             }
         }
 

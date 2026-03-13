@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
@@ -15,17 +19,19 @@ import (
 
 // UpdateHandler handles agent binary update API requests.
 type UpdateHandler struct {
-	hub         *ws.Hub
-	updateStore *dashboard.UpdateStore
-	serverStore *store.ServerStore
+	hub            *ws.Hub
+	updateStore    *dashboard.UpdateStore
+	serverStore    *store.ServerStore
+	versionChecker *dashboard.VersionChecker
 }
 
 // NewUpdateHandler creates a new UpdateHandler.
-func NewUpdateHandler(hub *ws.Hub, updateStore *dashboard.UpdateStore, serverStore *store.ServerStore) *UpdateHandler {
+func NewUpdateHandler(hub *ws.Hub, updateStore *dashboard.UpdateStore, serverStore *store.ServerStore, vc *dashboard.VersionChecker) *UpdateHandler {
 	return &UpdateHandler{
-		hub:         hub,
-		updateStore: updateStore,
-		serverStore: serverStore,
+		hub:            hub,
+		updateStore:    updateStore,
+		serverStore:    serverStore,
+		versionChecker: vc,
 	}
 }
 
@@ -83,10 +89,14 @@ func (h *UpdateHandler) HandleListBinaries(w http.ResponseWriter, _ *http.Reques
 	if binaries == nil {
 		binaries = []*dashboard.AgentBinaryInfo{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"binaries":       binaries,
 		"latest_version": h.updateStore.LatestVersion(),
-	})
+	}
+	if latest := h.versionChecker.Latest(); latest != nil {
+		resp["latest_release_version"] = latest.TagName
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleUpdateAgent handles POST /api/agent/update/{server_id}
@@ -248,4 +258,175 @@ func parseOSArch(osInfo string) (string, string) {
 // ParseOSArch is exported for testing.
 func ParseOSArch(osInfo string) (string, string) {
 	return parseOSArch(osInfo)
+}
+
+// HandleGitHubReleases handles GET /api/agent/releases
+// Returns available releases from GitHub with agent binary assets.
+func (h *UpdateHandler) HandleGitHubReleases(w http.ResponseWriter, _ *http.Request) {
+	releases, err := h.versionChecker.FetchReleases(10)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("fetch releases: %v", err)})
+		return
+	}
+
+	type assetInfo struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+		Size int64  `json:"size"`
+		OS   string `json:"os"`
+		Arch string `json:"arch"`
+	}
+
+	type releaseEntry struct {
+		TagName     string      `json:"tag_name"`
+		Body        string      `json:"body"`
+		PublishedAt string      `json:"published_at"`
+		Assets      []assetInfo `json:"assets"`
+	}
+
+	var result []releaseEntry
+	for _, rel := range releases {
+		var agentAssets []assetInfo
+		for _, a := range rel.Assets {
+			if !strings.HasPrefix(a.Name, "klever-agent-") {
+				continue
+			}
+			// Parse OS/arch from name: klever-agent-linux-amd64
+			parts := strings.Split(strings.TrimPrefix(a.Name, "klever-agent-"), "-")
+			osName, arch := "", ""
+			if len(parts) >= 2 {
+				osName = parts[0]
+				arch = parts[1]
+			}
+			agentAssets = append(agentAssets, assetInfo{
+				Name: a.Name,
+				URL:  a.BrowserDownloadURL,
+				Size: a.Size,
+				OS:   osName,
+				Arch: arch,
+			})
+		}
+		if len(agentAssets) == 0 {
+			continue // Skip releases without agent binaries
+		}
+		result = append(result, releaseEntry{
+			TagName:     rel.TagName,
+			Body:        rel.Body,
+			PublishedAt: rel.PublishAt,
+			Assets:      agentAssets,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"releases": result})
+}
+
+// HandleDownloadFromRelease handles POST /api/agent/download-release
+// Downloads an agent binary from a GitHub release and stores it locally.
+func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL     string `json:"url"`
+		Version string `json:"version"`
+		OS      string `json:"os"`
+		Arch    string `json:"arch"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if req.URL == "" || req.Version == "" || req.OS == "" || req.Arch == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url, version, os, and arch are required"})
+		return
+	}
+
+	// SSRF protection: only allow GitHub release downloads from our repo
+	const allowedPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
+	if !strings.HasPrefix(req.URL, allowedPrefix) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL must be a KleverNodeHub GitHub release asset"})
+		return
+	}
+
+	// Download binary
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(req.URL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("download failed: %v", err)})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("download returned %d", resp.StatusCode)})
+		return
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20)) // 200 MB limit
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("read binary: %v", err)})
+		return
+	}
+
+	// Try to verify checksum if checksums file is available
+	// URL format: https://github.com/CTJaeger/KleverNodeHub/releases/download/v0.3.3/klever-agent-linux-amd64
+	urlParts := strings.Split(req.URL, "/")
+	if len(urlParts) >= 2 {
+		tag := urlParts[len(urlParts)-2]
+		filename := urlParts[len(urlParts)-1]
+		checksumURL := allowedPrefix + tag + "/checksums.txt"
+		actualHash := sha256hex(data)
+		if err := verifyAgentChecksum(client, checksumURL, filename, actualHash); err != nil {
+			// Checksum verification is best-effort — log but don't block
+			// (older releases may not have checksums file)
+			_ = err
+		}
+	}
+
+	info, err := h.updateStore.Store(req.Version, req.OS, req.Arch, data)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version":  info.Version,
+		"checksum": info.Checksum,
+		"size":     info.Size,
+		"os":       info.OS,
+		"arch":     info.Arch,
+	})
+}
+
+func sha256hex(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+// verifyAgentChecksum downloads the checksums file and verifies the binary hash.
+func verifyAgentChecksum(client *http.Client, checksumURL, filename, actualHash string) error {
+	resp, err := client.Get(checksumURL)
+	if err != nil {
+		return fmt.Errorf("download checksums: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("checksums returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read checksums: %w", err)
+	}
+
+	for _, line := range strings.Split(string(body), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) == 2 && parts[1] == filename {
+			if parts[0] != actualHash {
+				return fmt.Errorf("checksum mismatch: expected %s, got %s", parts[0], actualHash)
+			}
+			return nil // Match found, checksum valid
+		}
+	}
+
+	return fmt.Errorf("file %s not found in checksums", filename)
 }

@@ -11,6 +11,7 @@
     <link rel="apple-touch-icon" href="/static/img/icon-192.png">
 </head>
 <body>
+    <div class="toast-container" id="toast-container"></div>
     <div class="app-top-strip">
         <span>Operations View</span>
         <span id="top-shell-status">Live infrastructure dashboard</span>
@@ -408,7 +409,16 @@
                         <span id="upload-status" class="text-sm text-muted" style="margin-left:8px;"></span>
                     </div>
 
-                    <!-- Available Binaries -->
+                    <!-- GitHub Releases -->
+                    <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <h4 style="margin:0;">GitHub Releases</h4>
+                            <button class="btn btn-sm btn-outline" onclick="loadGitHubReleases()">Refresh</button>
+                        </div>
+                        <div id="github-releases" class="text-muted">Loading...</div>
+                    </div>
+
+                    <!-- Available Binaries (downloaded/uploaded) -->
                     <h4>Available Binaries</h4>
                     <div id="binary-list" class="text-muted">Loading...</div>
 
@@ -576,6 +586,7 @@
                 return '<div class="node-row node-row-grid node-row-grid-overview" role="link" tabindex="0" aria-label="' + nodeName + '" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
                     '<div class="node-cell node-cell-checkbox" data-label="Select"><input type="checkbox" onclick="toggleNodeSelect(event, \'' + nodeIDJS + '\')"' + isChecked + '></div>' +
                     '<div class="node-cell node-cell-primary" data-label="Node">' +
+                        '<span class="node-status-dot node-status-dot-' + esc(n.status || 'stopped') + '"></span>' +
                         '<span class="node-row-name">' + nodeName + '</span>' +
                     '</div>' +
                     '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
@@ -793,19 +804,78 @@
                 '<span class="badge ' + statusClass + '">' + esc(node.name || node.container_name) + '</span></a>';
         }
 
+        // --- Toast notifications ---
+        function showToast(message, type) {
+            type = type || 'info';
+            var container = document.getElementById('toast-container');
+            var el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(function() {
+                el.classList.add('toast-out');
+                setTimeout(function() { el.remove(); }, 300);
+            }, 3000);
+        }
+
+        // --- Confirm dialog (Promise-based) ---
+        function showConfirm(title, message, confirmLabel, btnClass) {
+            return new Promise(function(resolve) {
+                var overlay = document.createElement('div');
+                overlay.className = 'confirm-overlay';
+                overlay.innerHTML =
+                    '<div class="confirm-dialog">' +
+                        '<h3>' + title + '</h3>' +
+                        '<p>' + message + '</p>' +
+                        '<div class="confirm-actions">' +
+                            '<button class="btn btn-sm btn-secondary" id="confirm-cancel">Cancel</button>' +
+                            '<button class="btn btn-sm ' + (btnClass || 'btn-primary') + '" id="confirm-ok">' + confirmLabel + '</button>' +
+                        '</div>' +
+                    '</div>';
+                document.body.appendChild(overlay);
+                overlay.querySelector('#confirm-cancel').onclick = function() {
+                    overlay.remove();
+                    resolve(false);
+                };
+                overlay.querySelector('#confirm-ok').onclick = function() {
+                    overlay.remove();
+                    resolve(true);
+                };
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) { overlay.remove(); resolve(false); }
+                });
+            });
+        }
+
         async function deleteServer(id, name) {
-            if (!confirm('Delete server "' + name + '"? This cannot be undone.')) return;
+            var ok = await showConfirm(
+                'Delete Server',
+                'Are you sure you want to delete server <strong>"' + esc(name) + '"</strong>?<br>This cannot be undone.',
+                'Delete', 'btn-danger'
+            );
+            if (!ok) return;
             const resp = await API.delete('/api/servers/' + id);
             if (resp && resp.ok) {
+                showToast('Server "' + name + '" deleted.', 'success');
                 loadData();
+            } else {
+                showToast('Failed to delete server.', 'error');
             }
         }
 
         async function deleteNode(id, name) {
-            if (!confirm('Delete node "' + name + '"? This removes it from the dashboard only (container is not affected).')) return;
+            var ok = await showConfirm(
+                'Delete Node',
+                'Are you sure you want to delete node <strong>"' + esc(name) + '"</strong>?<br>This removes it from the dashboard only (container is not affected).',
+                'Delete', 'btn-danger'
+            );
+            if (!ok) return;
             const resp = await API.delete('/api/nodes/' + id);
             if (resp && resp.ok) {
+                showToast('Node "' + name + '" deleted.', 'success');
                 loadData();
+            } else {
+                showToast('Failed to delete node.', 'error');
             }
         }
 
@@ -873,11 +943,27 @@
             event.preventDefault();
             event.stopPropagation();
             closeNodeActions();
+
+            // Find node name for display
+            var node = nodes.find(function(n) { return n.id === id; });
+            var nodeName = node ? (node.display_name || node.name || node.container_name) : id;
+            var actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+
+            // Confirm dialog
+            var ok = await showConfirm(
+                actionLabel + ' Node',
+                'Are you sure you want to <strong>' + action + '</strong> node <strong>"' + esc(nodeName) + '"</strong>?',
+                actionLabel, action === 'stop' ? 'btn-warning' : 'btn-primary'
+            );
+            if (!ok) return false;
+
+            showToast(actionLabel + 'ing "' + nodeName + '"...', 'info');
             const result = await API.postJSON('/api/nodes/' + id + '/' + action, {});
             if (!(result && result.ok && result.data && result.data.success)) {
-                window.alert('Failed to ' + action + ' node: ' + (result?.data?.error || 'Unknown error'));
+                showToast('Failed to ' + action + ' "' + nodeName + '": ' + (result?.data?.error || 'Unknown error'), 'error');
                 return false;
             }
+            showToast('Node "' + nodeName + '" ' + action + (action === 'stop' ? 'ped' : 'ed') + ' successfully.', 'success');
             await loadData();
             await loadServerMetrics();
             return false;
@@ -942,14 +1028,23 @@
             if (selectedNodeIds.size === 0) return;
             var nodeIds = Array.from(selectedNodeIds);
             var actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
-            if (!confirm(actionLabel + ' ' + nodeIds.length + ' node(s)?')) return;
+            var btnClass = action === 'stop' ? 'btn-warning' : 'btn-primary';
+            var ok = await showConfirm(
+                actionLabel + ' Nodes',
+                'Are you sure you want to <strong>' + action + '</strong> ' + nodeIds.length + ' node(s)?',
+                actionLabel, btnClass
+            );
+            if (!ok) return;
 
+            showToast(actionLabel + 'ing ' + nodeIds.length + ' node(s)...', 'info');
             var result = await API.postJSON('/api/nodes/batch', { action: action, node_ids: nodeIds });
             if (result && result.ok) {
                 var data = result.data;
                 var failed = (data.results || []).filter(function(r) { return !r.success; });
                 if (failed.length > 0) {
-                    window.alert(failed.length + ' node(s) failed: ' + failed.map(function(r) { return r.error || 'unknown'; }).join(', '));
+                    showToast(failed.length + ' node(s) failed.', 'error');
+                } else {
+                    showToast('All ' + nodeIds.length + ' node(s) ' + action + (action === 'stop' ? 'ped' : 'ed') + '.', 'success');
                 }
                 clearBatchSelection();
                 await loadData();
@@ -1220,8 +1315,11 @@
         }
 
         // ── Agent Update ──
+        var latestReleaseVersion = '';
+
         function showAgentUpdate() {
             document.getElementById('modal-agent-update').classList.add('active');
+            loadGitHubReleases();
             loadBinaries();
             loadAgentVersions();
         }
@@ -1289,6 +1387,9 @@
         async function loadBinaries() {
             const data = await API.getJSON('/api/agent/binaries');
             binaryTable.setData(data && data.binaries ? data.binaries : []);
+            if (data && data.latest_release_version) {
+                latestReleaseVersion = data.latest_release_version;
+            }
         }
 
         const agentVersionTable = new DataTable({
@@ -1304,9 +1405,18 @@
             },
             renderItem: function(s) {
                 const online = s.status === 'online';
+                const ver = s.agent_version || 'unknown';
+                var verStyle = '';
+                if (ver === 'dev' || ver === 'unknown') {
+                    verStyle = ' style="color:var(--danger);font-weight:600"';
+                } else if (latestReleaseVersion && isOlderVersion(ver, latestReleaseVersion)) {
+                    verStyle = ' style="color:var(--warning);font-weight:600"';
+                } else if (latestReleaseVersion && !isOlderVersion(ver, latestReleaseVersion)) {
+                    verStyle = ' style="color:var(--success)"';
+                }
                 const badge = online ? '<span class="badge badge-success">online</span>' : '<span class="badge badge-danger">offline</span>';
                 const btn = online ? '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + s.id + '\')">Update</button>' : '-';
-                return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.agent_version || 'unknown') + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
+                return '<tr><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
             },
             renderFooter: function() { return '</tbody></table>'; }
         });
@@ -1314,6 +1424,91 @@
 
         async function loadAgentVersions() {
             agentVersionTable.setData(servers || []);
+        }
+
+        // ── GitHub Releases ──
+        const releaseTable = new DataTable({
+            containerId: 'github-releases',
+            pageSize: 5,
+            searchFields: ['tag_name'],
+            emptyMessage: 'No releases found.',
+            renderHeader: function() {
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>Agent Binaries</th><th>Date</th><th>Notes</th></tr></thead><tbody>';
+            },
+            renderItem: function(rel) {
+                var btns = '';
+                (rel.assets || []).forEach(function(a) {
+                    var label = (a.os || '?') + '/' + (a.arch || '?');
+                    var size = (a.size / 1024 / 1024).toFixed(1) + ' MB';
+                    btns += '<button class="btn btn-sm btn-outline" style="margin:2px;" ' +
+                        'onclick="downloadFromRelease(\'' + esc(a.url) + '\', \'' + esc(rel.tag_name) + '\', \'' + esc(a.os) + '\', \'' + esc(a.arch) + '\', this)" ' +
+                        'title="Download ' + esc(a.name) + ' (' + size + ')">' + esc(label) + '</button>';
+                });
+                var date = rel.published_at ? new Date(rel.published_at).toLocaleDateString() : '-';
+                var notesId = 'rel-notes-' + rel.tag_name.replace(/\./g, '-');
+                var notesBtn = rel.body ? '<button class="btn btn-sm btn-ghost" onclick="toggleReleaseNotes(\'' + notesId + '\')">Show</button>' : '-';
+                var notesRow = rel.body ? '<tr id="' + notesId + '" style="display:none"><td colspan="4"><pre style="white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:4px 0;padding:8px;background:var(--bg-secondary);border-radius:4px;">' + esc(rel.body) + '</pre></td></tr>' : '';
+                return '<tr><td><strong>' + esc(rel.tag_name) + '</strong></td><td>' + btns + '</td><td>' + date + '</td><td>' + notesBtn + '</td></tr>' + notesRow;
+            },
+            renderFooter: function() { return '</tbody></table>'; }
+        });
+        window._dt['github-releases'] = releaseTable;
+
+        async function loadGitHubReleases() {
+            try {
+                const data = await API.getJSON('/api/agent/releases');
+                releaseTable.setData(data && data.releases ? data.releases : []);
+                if (data && data.releases && data.releases.length > 0) {
+                    latestReleaseVersion = data.releases[0].tag_name;
+                    loadAgentVersions(); // Re-render with version highlighting
+                }
+            } catch (e) {
+                document.getElementById('github-releases').innerHTML = '<span class="text-danger">Failed to load releases</span>';
+            }
+        }
+
+        async function downloadFromRelease(url, version, os, arch, btnEl) {
+            var origText = btnEl.textContent;
+            btnEl.disabled = true;
+            btnEl.textContent = '...';
+            try {
+                const resp = await fetch('/api/agent/download-release', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, version: version, os: os, arch: arch })
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    alert('Download failed: ' + (data.error || resp.statusText));
+                    return;
+                }
+                btnEl.textContent = '\u2713';
+                btnEl.style.color = 'var(--success)';
+                loadBinaries();
+            } catch (e) {
+                alert('Download error: ' + e.message);
+            } finally {
+                btnEl.disabled = false;
+                setTimeout(function() { btnEl.textContent = origText; btnEl.style.color = ''; }, 3000);
+            }
+        }
+
+        function toggleReleaseNotes(id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+        }
+
+        function isOlderVersion(local, remote) {
+            if (local === 'dev' || local === 'unknown' || local === '') return true;
+            var l = local.replace(/^v/, '').split('.');
+            var r = remote.replace(/^v/, '').split('.');
+            for (var i = 0; i < 3; i++) {
+                var ln = parseInt(l[i] || '0', 10);
+                var rn = parseInt(r[i] || '0', 10);
+                if (ln < rn) return true;
+                if (ln > rn) return false;
+            }
+            return false;
         }
 
         async function updateAgent(serverID) {

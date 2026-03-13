@@ -54,11 +54,14 @@ func VerifyAndReplaceBinary(binaryData []byte, expectedChecksum string, agentCon
 		return nil, fmt.Errorf("write backup: %w", err)
 	}
 
+	// From here on, return partial result with BackupPath so caller can rollback
+	partial := &UpdateResult{BackupPath: backupPath}
+
 	// Write new binary to temp file in same directory (for atomic rename)
 	dir := filepath.Dir(execPath)
 	tmpFile := filepath.Join(dir, ".agent-update-tmp")
 	if err := os.WriteFile(tmpFile, binaryData, 0755); err != nil {
-		return nil, fmt.Errorf("write temp binary: %w", err)
+		return partial, fmt.Errorf("write temp binary: %w", err)
 	}
 
 	// Atomic replace (rename)
@@ -70,16 +73,16 @@ func VerifyAndReplaceBinary(binaryData []byte, expectedChecksum string, agentCon
 			_ = os.Remove(oldPath)
 			if err := os.Rename(execPath, oldPath); err != nil {
 				_ = os.Remove(tmpFile)
-				return nil, fmt.Errorf("rename current binary: %w", err)
+				return partial, fmt.Errorf("rename current binary: %w", err)
 			}
 			if err := os.Rename(tmpFile, execPath); err != nil {
 				// Rollback
 				_ = os.Rename(oldPath, execPath)
-				return nil, fmt.Errorf("rename new binary: %w", err)
+				return partial, fmt.Errorf("rename new binary: %w", err)
 			}
 		} else {
 			_ = os.Remove(tmpFile)
-			return nil, fmt.Errorf("replace binary: %w", err)
+			return partial, fmt.Errorf("replace binary: %w", err)
 		}
 	}
 

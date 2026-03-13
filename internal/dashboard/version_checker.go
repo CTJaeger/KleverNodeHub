@@ -126,6 +126,46 @@ func (vc *VersionChecker) check() {
 	}
 }
 
+// FetchReleases fetches the last N releases from GitHub (on-demand, no caching).
+func (vc *VersionChecker) FetchReleases(limit int) ([]ReleaseInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=%d", vc.owner, vc.repo, limit)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "KleverNodeHub/"+version.Version)
+
+	resp, err := vc.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20)) // 5 MB limit
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	var releases []ReleaseInfo
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, fmt.Errorf("parse releases: %w", err)
+	}
+
+	return releases, nil
+}
+
+// IsNewer returns true if remote version is newer than local.
+// Exported for use by handlers.
+func IsNewer(remote, local string) bool {
+	return isNewer(remote, local)
+}
+
 // isNewer returns true if remote version is newer than local.
 // Handles "dev" as always outdated.
 func isNewer(remote, local string) bool {
