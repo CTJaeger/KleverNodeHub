@@ -55,10 +55,11 @@ Any Device (Browser)
 - **Auto-discovery** — Agent detects existing Klever nodes on registration
 
 ### Configuration
-- **Remote config editing** — View and edit node YAML config files from the dashboard
+- **Remote config editing** — View and edit node config files from the dashboard
 - **Centralized push** — Push a config to multiple nodes at once
+- **Config version upgrade** — Download fresh configs when upgrading, with versioned backups
 - **Validator key management** — Generate, import, export BLS validator keys
-- **Auto-backup** — Config files backed up before every change
+- **Auto-backup** — Config files backed up before every change, one-click restore
 
 ### Monitoring & Alerting
 - **Real-time metrics** — CPU, memory, disk, network per server
@@ -69,16 +70,19 @@ Any Device (Browser)
 - **GeoIP detection** — Automatic server region detection
 
 ### Notifications
-- **Telegram bot** — Alerts + interactive commands (`/nodes`, `/status <name>`)
+- **Telegram bot** — Alerts with Markdown formatting
 - **Pushover** — Push notifications to any device
-- **Webhook** — Extensible to any notification service
-- **Per-channel rules** — Choose which alerts go to which channels
+- **Webhook** — HTTP POST to any URL with custom headers and retry logic
+- **Web Push** — Browser push notifications (works even when the tab is closed)
+- **Per-channel filtering** — Choose which alert types and severities go to which channels
 
 ### Dashboard
 - **Mobile-first** — Responsive UI that works on phone, tablet, and desktop
+- **Progressive Web App** — Installable on mobile/desktop, works like a native app
 - **Overview grid** — All servers and nodes at a glance with live status
 - **Live log streaming** — Docker container logs in the browser
-- **Agent auto-update** — Push agent updates from the dashboard
+- **Agent auto-update** — Push agent updates from the dashboard with inline progress per server
+- **Dashboard self-update** — One-click update from within the dashboard
 - **Data tables** — Pagination, search, and column filtering
 
 ## Security
@@ -324,6 +328,7 @@ This creates a GitHub Release with pre-built binaries for all platforms and SHA2
 
 ## Documentation
 
+- **[Complete Guide / Tutorial](tutorial.md)** — Step-by-step walkthrough of every feature with screenshots
 - **[Product Requirements Document](docs/PRD.md)** — Full specification with architecture, data models, API endpoints, workflows, and implementation phases
 
 ## License
