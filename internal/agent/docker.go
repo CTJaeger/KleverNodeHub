@@ -54,6 +54,7 @@ type containerJSON struct {
 	Config struct {
 		Image string   `json:"Image"`
 		Cmd   []string `json:"Cmd"`
+		Tty   bool     `json:"Tty"`
 	} `json:"Config"`
 	HostConfig struct {
 		Binds []string `json:"Binds"` // "host:container[:opts]"

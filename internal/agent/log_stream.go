@@ -28,6 +28,13 @@ func (d *DockerClient) FetchLogs(ctx context.Context, containerName string, tail
 		tail = 5000
 	}
 
+	// Check if the container uses TTY mode (raw output, no multiplexed headers)
+	cj, err := d.InspectContainer(ctx, containerName)
+	if err != nil {
+		return nil, fmt.Errorf("inspect container: %w", err)
+	}
+	isTTY := cj.Config.Tty
+
 	params := url.Values{
 		"stdout":     {"true"},
 		"stderr":     {"true"},
@@ -57,6 +64,9 @@ func (d *DockerClient) FetchLogs(ctx context.Context, containerName string, tail
 		return nil, fmt.Errorf("fetch logs %s: HTTP %d: %s", containerName, resp.StatusCode, string(body))
 	}
 
+	if isTTY {
+		return parseRawLogStream(resp.Body)
+	}
 	return parseDockerLogStream(resp.Body)
 }
 
@@ -185,6 +195,24 @@ func parseDockerLogStream(r io.Reader) ([]LogLine, error) {
 		})
 	}
 
+	return lines, nil
+}
+
+// parseRawLogStream parses raw (TTY mode) Docker log output into LogLines.
+// TTY containers output plain text without the 8-byte multiplexed header.
+func parseRawLogStream(r io.Reader) ([]LogLine, error) {
+	var lines []LogLine
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 64*1024), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		ts, msg := splitTimestamp(line)
+		lines = append(lines, LogLine{
+			Timestamp: ts,
+			Stream:    "stdout",
+			Message:   msg,
+		})
+	}
 	return lines, nil
 }
 
