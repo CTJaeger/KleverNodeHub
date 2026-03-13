@@ -3154,7 +3154,7 @@ textarea.form-input {
 }
 
 .confirm-dialog {
-    background: var(--card-bg);
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 24px;
