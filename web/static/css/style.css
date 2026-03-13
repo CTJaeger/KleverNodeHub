@@ -735,7 +735,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .node-table-head-overview,
 .node-row-grid-overview {
-    grid-template-columns: minmax(180px, 1.7fr) minmax(120px, 1.1fr) 82px 96px 92px minmax(118px, 0.95fr) minmax(150px, 1.15fr) 92px 40px;
+    grid-template-columns: 28px minmax(180px, 1.7fr) minmax(120px, 1.1fr) 82px 96px 92px minmax(118px, 0.95fr) minmax(150px, 1.15fr) 92px 40px;
 }
 
 .node-table-head-server,
@@ -826,6 +826,41 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: flex-end;
 }
 
+.node-cell-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.node-cell-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.batch-action-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+}
+
+.batch-action-bar.active {
+    display: flex;
+}
+
+.batch-action-bar .batch-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-right: 8px;
+}
+
 @media (max-width: 1320px) {
     .node-table-head-server,
     .node-row-grid-server {
@@ -841,11 +876,11 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 1480px) {
     .node-table-head-overview,
     .node-row-grid-overview {
-        grid-template-columns: minmax(180px, 1.8fr) minmax(120px, 1.05fr) 82px 92px minmax(118px, 0.95fr) minmax(150px, 1.15fr) 92px 40px;
+        grid-template-columns: 28px minmax(180px, 1.8fr) minmax(120px, 1.05fr) 82px 92px minmax(118px, 0.95fr) minmax(150px, 1.15fr) 92px 40px;
     }
 
-    .node-table-head-overview > :nth-child(4),
-    .node-row-grid-overview > :nth-child(4) {
+    .node-table-head-overview > :nth-child(5),
+    .node-row-grid-overview > :nth-child(5) {
         display: none;
     }
 }
@@ -853,13 +888,13 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 1220px) {
     .node-table-head-overview,
     .node-row-grid-overview {
-        grid-template-columns: minmax(180px, 1.8fr) 82px 92px minmax(118px, 0.95fr) 92px 40px;
+        grid-template-columns: 28px minmax(180px, 1.8fr) 82px 92px minmax(118px, 0.95fr) 92px 40px;
     }
 
-    .node-table-head-overview > :nth-child(2),
-    .node-row-grid-overview > :nth-child(2),
-    .node-table-head-overview > :nth-child(6),
-    .node-row-grid-overview > :nth-child(6) {
+    .node-table-head-overview > :nth-child(3),
+    .node-row-grid-overview > :nth-child(3),
+    .node-table-head-overview > :nth-child(7),
+    .node-row-grid-overview > :nth-child(7) {
         display: none;
     }
 }

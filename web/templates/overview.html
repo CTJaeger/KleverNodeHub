@@ -218,6 +218,16 @@
                 <div id="server-list"></div>
             </div>
 
+            <!-- Batch Action Bar -->
+            <div class="batch-action-bar" id="batch-action-bar">
+                <span class="batch-count" id="batch-count">0 selected</span>
+                <button class="btn btn-sm btn-primary" onclick="batchAction('start')">Start</button>
+                <button class="btn btn-sm btn-secondary" onclick="batchAction('stop')">Stop</button>
+                <button class="btn btn-sm btn-secondary" onclick="batchAction('restart')">Restart</button>
+                <button class="btn btn-sm btn-primary" onclick="showBatchUpgrade()">Upgrade</button>
+                <button class="btn btn-sm btn-secondary" onclick="clearBatchSelection()">Clear</button>
+            </div>
+
             <!-- Nodes Table -->
             <div id="nodes-table-container" style="margin-bottom:20px;display:none;">
                 <div class="data-table-container node-table-scroll">
@@ -228,6 +238,34 @@
                         </span>
                     </div>
                     <div id="nodes-list"></div>
+                </div>
+            </div>
+
+            <!-- Batch Upgrade Modal -->
+            <div class="modal-backdrop" id="modal-batch-upgrade" onclick="if(event.target===this) hideBatchUpgrade()">
+                <div class="modal-panel">
+                    <div class="modal-panel-header">
+                        <h3>Batch Upgrade</h3>
+                        <button class="modal-close-btn" onclick="hideBatchUpgrade()">&times;</button>
+                    </div>
+                    <div class="modal-panel-body">
+                        <p class="text-sm text-muted mb-16">
+                            Upgrade <strong id="batch-upgrade-count">0</strong> selected nodes to a new Docker image tag.
+                            Nodes are upgraded sequentially to maintain quorum.
+                        </p>
+                        <div class="form-group">
+                            <label class="form-label">Target Image Tag</label>
+                            <select class="form-input" id="batch-upgrade-tag"></select>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="batch-upgrade-config" checked>
+                                <span class="text-sm">Update config files (backup current configs first)</span>
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" onclick="executeBatchUpgrade()">Upgrade Selected Nodes</button>
+                        <div id="batch-upgrade-status" class="mt-16 hidden"></div>
+                    </div>
                 </div>
             </div>
 
@@ -381,6 +419,7 @@
         let nodes = [];
         let refreshInterval = null;
         let overviewSearchQuery = '';
+        const selectedNodeIds = new Set();
 
         // DataTable for servers
         const serverTable = new DataTable({
@@ -477,6 +516,7 @@
             emptyMessage: 'No nodes provisioned yet.',
             renderHeader: function() {
                 return '<div class="node-table-head node-table-head-overview">' +
+                    '<div class="node-table-head-cell node-cell-checkbox"><input type="checkbox" onchange="toggleSelectAllNodes(this.checked)" id="select-all-nodes"></div>' +
                     '<div class="node-table-head-cell">Node</div>' +
                     '<div class="node-table-head-cell">Server</div>' +
                     '<div class="node-table-head-cell">Type</div>' +
@@ -517,7 +557,9 @@
                     '</div>';
                 }
 
+                var isChecked = selectedNodeIds.has(n.id) ? ' checked' : '';
                 return '<div class="node-row node-row-grid node-row-grid-overview" role="link" tabindex="0" aria-label="' + nodeName + '" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
+                    '<div class="node-cell node-cell-checkbox" data-label="Select"><input type="checkbox" onclick="toggleNodeSelect(event, \'' + nodeIDJS + '\')"' + isChecked + '></div>' +
                     '<div class="node-cell node-cell-primary" data-label="Node">' +
                         '<span class="node-row-name">' + nodeName + '</span>' +
                     '</div>' +
@@ -839,6 +881,133 @@
                 return false;
             }
             return true;
+        }
+
+        // --- Batch Operations ---
+        function toggleNodeSelect(event, nodeId) {
+            event.stopPropagation();
+            if (selectedNodeIds.has(nodeId)) {
+                selectedNodeIds.delete(nodeId);
+            } else {
+                selectedNodeIds.add(nodeId);
+            }
+            updateBatchBar();
+        }
+
+        function toggleSelectAllNodes(checked) {
+            if (checked) {
+                nodes.forEach(function(n) { selectedNodeIds.add(n.id); });
+            } else {
+                selectedNodeIds.clear();
+            }
+            renderNodes();
+            updateBatchBar();
+        }
+
+        function clearBatchSelection() {
+            selectedNodeIds.clear();
+            var selectAll = document.getElementById('select-all-nodes');
+            if (selectAll) selectAll.checked = false;
+            renderNodes();
+            updateBatchBar();
+        }
+
+        function updateBatchBar() {
+            var bar = document.getElementById('batch-action-bar');
+            var count = document.getElementById('batch-count');
+            if (selectedNodeIds.size > 0) {
+                bar.classList.add('active');
+                count.textContent = selectedNodeIds.size + ' selected';
+            } else {
+                bar.classList.remove('active');
+            }
+        }
+
+        async function batchAction(action) {
+            if (selectedNodeIds.size === 0) return;
+            var nodeIds = Array.from(selectedNodeIds);
+            var actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+            if (!confirm(actionLabel + ' ' + nodeIds.length + ' node(s)?')) return;
+
+            var result = await API.postJSON('/api/nodes/batch', { action: action, node_ids: nodeIds });
+            if (result && result.ok) {
+                var data = result.data;
+                var failed = (data.results || []).filter(function(r) { return !r.success; });
+                if (failed.length > 0) {
+                    window.alert(failed.length + ' node(s) failed: ' + failed.map(function(r) { return r.error || 'unknown'; }).join(', '));
+                }
+                clearBatchSelection();
+                await loadData();
+                await loadServerMetrics();
+            }
+        }
+
+        function showBatchUpgrade() {
+            if (selectedNodeIds.size === 0) return;
+            document.getElementById('batch-upgrade-count').textContent = selectedNodeIds.size;
+            document.getElementById('batch-upgrade-status').classList.add('hidden');
+            document.getElementById('modal-batch-upgrade').classList.add('active');
+            loadBatchUpgradeTags();
+        }
+
+        function hideBatchUpgrade() {
+            document.getElementById('modal-batch-upgrade').classList.remove('active');
+        }
+
+        async function loadBatchUpgradeTags() {
+            try {
+                var data = await API.getJSON('/api/docker/tags');
+                var sel = document.getElementById('batch-upgrade-tag');
+                sel.innerHTML = '';
+                if (data && data.tags) {
+                    data.tags.forEach(function(tag) {
+                        sel.innerHTML += '<option value="' + esc(tag) + '">' + esc(tag) + '</option>';
+                    });
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function executeBatchUpgrade() {
+            var nodeIds = Array.from(selectedNodeIds);
+            var tag = document.getElementById('batch-upgrade-tag').value;
+            var upgradeConfig = document.getElementById('batch-upgrade-config').checked;
+            if (!tag) return;
+            if (!confirm('Upgrade ' + nodeIds.length + ' node(s) to ' + tag + '?')) return;
+
+            var statusEl = document.getElementById('batch-upgrade-status');
+            statusEl.classList.remove('hidden');
+            statusEl.innerHTML = '<span class="text-muted">Upgrading nodes sequentially...</span>';
+
+            var result = await API.postJSON('/api/nodes/batch/upgrade', { node_ids: nodeIds, image_tag: tag });
+            if (result && result.ok) {
+                var data = result.data;
+                var results = data.results || [];
+                var succeeded = results.filter(function(r) { return r.success; });
+                var failed = results.filter(function(r) { return !r.success; });
+                var html = '<strong>' + succeeded.length + '/' + results.length + ' upgraded.</strong>';
+                if (failed.length > 0) {
+                    html += '<br><span style="color:var(--error)">Failed: ' + failed.map(function(r) { return r.node_id + ': ' + (r.error || 'unknown'); }).join(', ') + '</span>';
+                }
+
+                // Config upgrade for successful nodes
+                if (upgradeConfig && succeeded.length > 0) {
+                    html += '<br><span class="text-muted">Updating configs...</span>';
+                    statusEl.innerHTML = html;
+                    for (var i = 0; i < succeeded.length; i++) {
+                        try {
+                            await API.postJSON('/api/nodes/' + succeeded[i].node_id + '/config/upgrade', { version_label: tag });
+                        } catch (e) { /* best effort */ }
+                    }
+                    html += '<br>Config update complete.';
+                }
+
+                statusEl.innerHTML = html;
+                clearBatchSelection();
+                await loadData();
+                await loadServerMetrics();
+            } else {
+                statusEl.innerHTML = '<span style="color:var(--error)">Upgrade request failed.</span>';
+            }
         }
 
         document.addEventListener('click', function() {
