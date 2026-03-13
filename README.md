@@ -7,6 +7,8 @@
 
 **Self-hosted management dashboard for Klever validator nodes**
 
+![Dashboard Overview](docs/dash.png)
+
 ---
 
 ## Overview
@@ -330,4 +332,8 @@ MIT
 
 ## Contributing
 
-This project is currently in early development. Contributions welcome once the core architecture is stable.
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
+
+For security vulnerabilities, please use [GitHub's private vulnerability reporting](https://github.com/CTJaeger/KleverNodeHub/security) instead of opening a public issue. See [SECURITY.md](SECURITY.md) for details.
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
