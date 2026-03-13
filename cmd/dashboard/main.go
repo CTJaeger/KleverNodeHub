@@ -322,6 +322,7 @@ func main() {
 	mux.Handle("PUT /api/settings/{key}", authMw(http.HandlerFunc(settingsHandler.HandleUpdateSingle)))
 	mux.Handle("POST /api/settings/reset", authMw(http.HandlerFunc(settingsHandler.HandleResetDefaults)))
 	mux.Handle("GET /api/system/version", authMw(http.HandlerFunc(systemHandler.HandleVersionInfo)))
+	mux.Handle("POST /api/system/check-update", authMw(http.HandlerFunc(systemHandler.HandleCheckUpdate)))
 	mux.Handle("POST /api/system/update", authMw(http.HandlerFunc(systemHandler.HandleSelfUpdate)))
 
 	// --- Graceful shutdown ---

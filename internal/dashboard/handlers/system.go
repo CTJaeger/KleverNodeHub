@@ -169,6 +169,13 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 	}()
 }
 
+// HandleCheckUpdate forces a version re-check and returns the result.
+// POST /api/system/check-update
+func (h *SystemHandler) HandleCheckUpdate(w http.ResponseWriter, _ *http.Request) {
+	h.versionChecker.ForceCheck()
+	h.HandleVersionInfo(w, nil)
+}
+
 func sha256Sum(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])

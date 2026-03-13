@@ -74,6 +74,11 @@ func (vc *VersionChecker) Latest() *ReleaseInfo {
 	return vc.latest
 }
 
+// ForceCheck triggers an immediate version check (on-demand).
+func (vc *VersionChecker) ForceCheck() {
+	vc.check()
+}
+
 func (vc *VersionChecker) check() {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", vc.owner, vc.repo)
 
