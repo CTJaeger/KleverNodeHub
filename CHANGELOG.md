@@ -3,12 +3,12 @@
 ## [Unreleased]
 
 ### 2026-03-13
-- **Agent Update Modal Redesign**:
-  - Removed manual upload form and "Available Binaries" section
-  - "Available Versions" table: shows GitHub releases with Download/Notes buttons and Downloaded status badge
-  - One-click download: automatically fetches only the binaries needed for registered server architectures
-  - "Server Agents" table: version dropdown per server for targeted updates (including rollback to older versions)
-  - "Update All" with version dropdown to deploy a specific version to all agents
+- **Agent Update Modal Redesign** (v2):
+  - "Available Versions": single dropdown + Download/Notes/Refresh (no table, no badges)
+  - Downloaded versions show "(downloaded)" label in dropdown, button changes to "Ready"
+  - "Server Agents": checkboxes per agent, offline agents greyed out + not selectable
+  - "Select All" toggle (skips offline agents), "Update" applies to selected agents only
+  - Headers left-aligned, clean minimal layout
   - UpdateStore now supports multiple versions per OS/arch (key: version/os/arch)
   - New endpoint: `POST /api/agent/download-release-auto` — smart download based on registered servers
   - `POST /api/agent/update/{server_id}` and `/all` now accept optional `{"version":"..."}` body
