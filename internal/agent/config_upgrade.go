@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -68,7 +67,7 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string) 
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	source, err := downloadNewConfigs(ctx, network, tmpDir)
 	if err != nil {
@@ -333,10 +332,4 @@ func RestoreConfigVersion(dataDir, backupName string) error {
 
 	log.Printf("restored %d config files from backup %s", restored, backupName)
 	return nil
-}
-
-// marshalJSON is a helper to marshal result to JSON string.
-func marshalJSON(v any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }
