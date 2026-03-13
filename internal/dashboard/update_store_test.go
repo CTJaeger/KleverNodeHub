@@ -94,7 +94,7 @@ func TestUpdateStoreLatestVersion(t *testing.T) {
 
 	// Backdate the first entry so the next store is clearly newer
 	s.mu.Lock()
-	if info := s.binaries["linux/amd64"]; info != nil {
+	if info := s.binaries["v0.1.0/linux/amd64"]; info != nil {
 		info.UploadedAt -= 10
 	}
 	s.mu.Unlock()
@@ -112,6 +112,14 @@ func TestUpdateStoreOverwrite(t *testing.T) {
 	s := NewUpdateStore(dir)
 
 	_, _ = s.Store("v0.1.0", "linux", "amd64", []byte("old"))
+
+	// Backdate the first entry so the next store is clearly newer
+	s.mu.Lock()
+	if bi := s.binaries["v0.1.0/linux/amd64"]; bi != nil {
+		bi.UploadedAt -= 10
+	}
+	s.mu.Unlock()
+
 	_, _ = s.Store("v0.2.0", "linux", "amd64", []byte("new binary"))
 
 	info := s.Get("linux", "amd64")
