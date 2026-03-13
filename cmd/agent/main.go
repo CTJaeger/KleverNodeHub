@@ -144,6 +144,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "closing") }()
+	conn.SetReadLimit(50 << 20) // 50 MB — agent binaries are ~10-15 MB base64-encoded
 
 	log.Println("connected to dashboard")
 

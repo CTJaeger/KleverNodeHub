@@ -59,7 +59,7 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn.SetReadLimit(1 << 20) // 1 MB — log responses can be large
+	conn.SetReadLimit(50 << 20) // 50 MB — agent update responses can include large payloads
 
 	log.Printf("agent WebSocket connected: %s", serverID)
 
