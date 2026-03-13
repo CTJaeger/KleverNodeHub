@@ -791,15 +791,24 @@
 
         async function loadLogs() {
             const tail = document.getElementById('log-lines').value || 100;
+            const viewer = document.getElementById('log-viewer');
             try {
-                const data = await API.getJSON('/api/nodes/' + nodeId + '/logs?tail=' + tail);
+                const resp = await API.fetch('/api/nodes/' + nodeId + '/logs?tail=' + tail);
+                if (!resp || !resp.ok) {
+                    const err = resp ? await resp.json().catch(() => ({})) : {};
+                    viewer.innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(err.error || 'HTTP ' + (resp ? resp.status : 'no response')) + '</div>';
+                    return;
+                }
+                const data = await resp.json();
                 if (data && data.lines) {
                     logData = data.lines;
                     syncNodePageSearchState();
                     renderLogView();
+                } else {
+                    viewer.innerHTML = '<div class="text-muted text-sm" style="padding:16px;text-align:center;">No log lines returned.</div>';
                 }
             } catch (e) {
-                document.getElementById('log-viewer').innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
+                viewer.innerHTML = '<div style="color:var(--error);padding:16px;">Failed to load logs: ' + esc(e.message || 'error') + '</div>';
             }
         }
 
