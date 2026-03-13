@@ -341,6 +341,15 @@ func (h *AgentHandler) handleAgentInfo(ctx context.Context, serverID string, msg
 		return
 	}
 
+	// Update agent version if provided
+	if info.Version != "" {
+		if srv, err := h.serverStore.GetByID(serverID); err == nil && srv.AgentVersion != info.Version {
+			srv.AgentVersion = info.Version
+			_ = h.serverStore.Update(srv)
+			log.Printf("agent %s version updated to %s", serverID, info.Version)
+		}
+	}
+
 	if info.PublicIP == "" {
 		return
 	}
