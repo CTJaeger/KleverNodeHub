@@ -381,11 +381,15 @@
                 <div class="modal-panel-body">
                     <!-- Available Versions -->
                     <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <h4 style="margin:0;">Available Versions</h4>
+                            <select id="release-version-select" class="form-input node-inline-select" style="width:auto;"></select>
+                            <button class="btn btn-sm btn-primary" id="release-download-btn" onclick="downloadSelectedRelease()" disabled>Download</button>
+                            <button class="btn btn-sm btn-ghost" id="release-notes-btn" onclick="toggleSelectedReleaseNotes()" style="display:none;">Notes</button>
                             <button class="btn btn-sm btn-outline" onclick="loadGitHubReleases()">Refresh</button>
+                            <span id="release-status" class="text-sm text-muted"></span>
                         </div>
-                        <div id="github-releases" class="text-muted">Loading...</div>
+                        <pre id="release-notes-content" style="display:none;white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:8px 0 0;padding:8px;background:var(--bg-secondary);border-radius:4px;"></pre>
                     </div>
 
                     <!-- Server Agents -->
@@ -393,8 +397,11 @@
                     <div id="agent-version-list"></div>
 
                     <div class="mt-16" style="display:flex;align-items:center;gap:8px;">
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.85rem;">
+                            <input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)"> Select All
+                        </label>
                         <select id="update-all-version" class="form-input node-inline-select" style="width:auto;"></select>
-                        <button class="btn btn-primary btn-sm" onclick="updateAllAgents()">Update All</button>
+                        <button class="btn btn-primary btn-sm" onclick="updateSelectedAgents()">Update</button>
                         <span id="update-all-status" class="text-sm text-muted"></span>
                     </div>
                 </div>
@@ -1287,8 +1294,8 @@
 
         // ── Agent Update ──
         var latestReleaseVersion = '';
-
         var downloadedVersions = [];
+        var githubReleases = [];
 
         function showAgentUpdate() {
             document.getElementById('modal-agent-update').classList.add('active');
@@ -1308,39 +1315,35 @@
                 if (data && data.latest_release_version) {
                     latestReleaseVersion = data.latest_release_version;
                 }
-                populateVersionDropdowns();
+                populateUpdateVersionDropdown();
+                updateReleaseDropdownState();
             } catch (e) { /* ignore */ }
         }
 
-        function populateVersionDropdowns() {
-            // Update all version selects in agent table + the "Update All" dropdown
-            var selects = document.querySelectorAll('.agent-version-select');
-            selects.forEach(function(sel) {
-                var current = sel.value;
-                sel.innerHTML = '';
-                downloadedVersions.forEach(function(v) {
-                    var opt = document.createElement('option');
-                    opt.value = v;
-                    opt.textContent = v;
-                    sel.appendChild(opt);
-                });
-                if (current && downloadedVersions.indexOf(current) !== -1) sel.value = current;
-            });
+        function populateUpdateVersionDropdown() {
             var allSel = document.getElementById('update-all-version');
             if (allSel) {
                 var cur = allSel.value;
                 allSel.innerHTML = '';
-                downloadedVersions.forEach(function(v) {
+                if (downloadedVersions.length === 0) {
                     var opt = document.createElement('option');
-                    opt.value = v;
-                    opt.textContent = v;
+                    opt.value = '';
+                    opt.textContent = 'No versions downloaded';
+                    opt.disabled = true;
                     allSel.appendChild(opt);
-                });
-                if (cur && downloadedVersions.indexOf(cur) !== -1) allSel.value = cur;
+                } else {
+                    downloadedVersions.forEach(function(v) {
+                        var opt = document.createElement('option');
+                        opt.value = v;
+                        opt.textContent = v;
+                        allSel.appendChild(opt);
+                    });
+                    if (cur && downloadedVersions.indexOf(cur) !== -1) allSel.value = cur;
+                }
             }
         }
 
-        // ── Agent Version Table ──
+        // ── Agent Version Table (with checkboxes) ──
         const agentVersionTable = new DataTable({
             containerId: 'agent-version-list',
             pageSize: 25,
@@ -1350,7 +1353,7 @@
             ],
             emptyMessage: 'No servers registered.',
             renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Version</th><th>OS</th><th>Status</th><th style="text-align:right">Action</th></tr></thead><tbody>';
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr style="text-align:left;"><th style="width:30px;"></th><th>Server</th><th>Version</th><th>OS</th><th>Status</th></tr></thead><tbody>';
             },
             renderItem: function(s) {
                 var online = s.status === 'online';
@@ -1364,80 +1367,132 @@
                     verStyle = ' style="color:var(--success)"';
                 }
                 var badge = online ? '<span class="badge badge-online">online</span>' : '<span class="badge badge-offline">offline</span>';
-                var action = '-';
-                if (online && downloadedVersions.length > 0) {
-                    var opts = '';
-                    downloadedVersions.forEach(function(v) {
-                        opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
-                    });
-                    action = '<div style="display:flex;gap:4px;justify-content:flex-end;">' +
-                        '<select class="form-input node-inline-select agent-version-select" style="width:auto;font-size:0.8rem;" id="ver-' + esc(s.id) + '">' + opts + '</select>' +
-                        '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + escJS(s.id) + '\')">Update</button>' +
-                        '</div>';
-                } else if (online) {
-                    action = '<span class="text-muted text-sm">No binaries</span>';
-                }
-                return '<tr><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + action + '</td></tr>';
+                var disabled = online ? '' : ' disabled';
+                var rowStyle = online ? '' : ' style="opacity:0.45;"';
+                var cb = '<input type="checkbox" class="agent-select-cb" data-server-id="' + esc(s.id) + '"' + disabled + '>';
+                return '<tr' + rowStyle + '><td>' + cb + '</td><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td></tr>';
             },
-            renderFooter: function() { return '</tbody></table>'; }
+            renderFooter: function() { return '</tbody></table>'; },
+            onRender: function() {
+                // Sync "Select All" checkbox state
+                var allCb = document.getElementById('agent-select-all');
+                if (allCb) {
+                    var cbs = document.querySelectorAll('.agent-select-cb:not(:disabled)');
+                    var checked = document.querySelectorAll('.agent-select-cb:not(:disabled):checked');
+                    allCb.checked = cbs.length > 0 && checked.length === cbs.length;
+                }
+            }
         });
         window._dt['agent-version-list'] = agentVersionTable;
+
+        function toggleSelectAllAgents(checked) {
+            document.querySelectorAll('.agent-select-cb:not(:disabled)').forEach(function(cb) {
+                cb.checked = checked;
+            });
+        }
+
+        function getSelectedServerIDs() {
+            var ids = [];
+            document.querySelectorAll('.agent-select-cb:checked').forEach(function(cb) {
+                ids.push(cb.getAttribute('data-server-id'));
+            });
+            return ids;
+        }
 
         async function loadAgentVersions() {
             agentVersionTable.setData(servers || []);
         }
 
-        // ── GitHub Releases Table ──
-        const releaseTable = new DataTable({
-            containerId: 'github-releases',
-            pageSize: 5,
-            searchFields: ['tag_name'],
-            emptyMessage: 'No releases found.',
-            renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>Date</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>';
-            },
-            renderItem: function(rel) {
-                var date = rel.published_at ? new Date(rel.published_at).toLocaleDateString() : '-';
-                var notesId = 'rel-notes-' + rel.tag_name.replace(/\./g, '-');
-                var isDl = downloadedVersions.indexOf(rel.tag_name) !== -1;
-                var statusBadge = isDl
-                    ? '<span class="badge badge-running">Downloaded</span>'
-                    : '<span class="badge badge-stopped">Available</span>';
+        // ── GitHub Releases (Dropdown) ──
+        function updateReleaseDropdownState() {
+            var sel = document.getElementById('release-version-select');
+            var dlBtn = document.getElementById('release-download-btn');
+            var notesBtn = document.getElementById('release-notes-btn');
+            var statusEl = document.getElementById('release-status');
+            if (!sel || !sel.value) return;
 
-                var actions = '';
-                if (!isDl && (rel.assets || []).length > 0) {
-                    actions += '<button class="btn btn-sm btn-primary" id="dl-btn-' + esc(rel.tag_name) + '" onclick="downloadRelease(\'' + escJS(rel.tag_name) + '\', this)">Download</button>';
-                } else if (isDl) {
-                    actions += '<span class="text-success text-sm" style="margin-right:8px;">Ready</span>';
-                }
-                if (rel.body) {
-                    actions += '<button class="btn btn-sm btn-ghost" style="margin-left:4px;" onclick="toggleReleaseNotes(\'' + notesId + '\')">Notes</button>';
-                }
+            var tag = sel.value;
+            var isDl = downloadedVersions.indexOf(tag) !== -1;
+            var rel = githubReleases.find(function(r) { return r.tag_name === tag; });
+            var hasAssets = rel && (rel.assets || []).length > 0;
 
-                var notesRow = rel.body ? '<tr id="' + notesId + '" style="display:none"><td colspan="4"><pre style="white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:4px 0;padding:8px;background:var(--bg-secondary);border-radius:4px;">' + esc(rel.body) + '</pre></td></tr>' : '';
+            if (isDl) {
+                dlBtn.textContent = 'Ready';
+                dlBtn.disabled = true;
+                dlBtn.className = 'btn btn-sm btn-outline';
+                statusEl.textContent = '';
+            } else if (hasAssets) {
+                dlBtn.textContent = 'Download';
+                dlBtn.disabled = false;
+                dlBtn.className = 'btn btn-sm btn-primary';
+                statusEl.textContent = '';
+            } else {
+                dlBtn.textContent = 'Download';
+                dlBtn.disabled = true;
+                dlBtn.className = 'btn btn-sm btn-outline';
+                statusEl.textContent = 'No assets';
+            }
 
-                return '<tr><td><strong>' + esc(rel.tag_name) + '</strong></td><td style="color:var(--text-secondary);">' + date + '</td><td>' + statusBadge + '</td><td style="text-align:right;">' + actions + '</td></tr>' + notesRow;
-            },
-            renderFooter: function() { return '</tbody></table>'; }
-        });
-        window._dt['github-releases'] = releaseTable;
-
-        async function loadGitHubReleases() {
-            try {
-                var data = await API.getJSON('/api/agent/releases');
-                releaseTable.setData(data && data.releases ? data.releases : []);
-                if (data && data.releases && data.releases.length > 0) {
-                    latestReleaseVersion = data.releases[0].tag_name;
-                    loadAgentVersions();
-                }
-            } catch (e) {
-                document.getElementById('github-releases').innerHTML = '<span class="text-danger">Failed to load releases</span>';
+            if (rel && rel.body) {
+                notesBtn.style.display = '';
+            } else {
+                notesBtn.style.display = 'none';
+                document.getElementById('release-notes-content').style.display = 'none';
             }
         }
 
-        async function downloadRelease(tag, btnEl) {
-            btnEl.disabled = true;
-            btnEl.textContent = 'Downloading...';
+        function onReleaseVersionChange() {
+            document.getElementById('release-notes-content').style.display = 'none';
+            updateReleaseDropdownState();
+        }
+
+        function toggleSelectedReleaseNotes() {
+            var sel = document.getElementById('release-version-select');
+            var pre = document.getElementById('release-notes-content');
+            if (pre.style.display !== 'none') { pre.style.display = 'none'; return; }
+            var rel = githubReleases.find(function(r) { return r.tag_name === sel.value; });
+            if (rel && rel.body) {
+                pre.textContent = rel.body;
+                pre.style.display = '';
+            }
+        }
+
+        async function loadGitHubReleases() {
+            var sel = document.getElementById('release-version-select');
+            sel.innerHTML = '<option value="">Loading...</option>';
+            try {
+                var data = await API.getJSON('/api/agent/releases');
+                githubReleases = (data && data.releases) ? data.releases : [];
+                sel.innerHTML = '';
+                if (githubReleases.length === 0) {
+                    sel.innerHTML = '<option value="">No releases</option>';
+                    return;
+                }
+                githubReleases.forEach(function(rel) {
+                    var opt = document.createElement('option');
+                    opt.value = rel.tag_name;
+                    var label = rel.tag_name;
+                    if (downloadedVersions.indexOf(rel.tag_name) !== -1) label += ' (downloaded)';
+                    opt.textContent = label;
+                    sel.appendChild(opt);
+                });
+                sel.onchange = onReleaseVersionChange;
+                latestReleaseVersion = githubReleases[0].tag_name;
+                updateReleaseDropdownState();
+                loadAgentVersions();
+            } catch (e) {
+                sel.innerHTML = '<option value="">Failed to load</option>';
+            }
+        }
+
+        async function downloadSelectedRelease() {
+            var sel = document.getElementById('release-version-select');
+            var btn = document.getElementById('release-download-btn');
+            var tag = sel.value;
+            if (!tag) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Downloading...';
             try {
                 var resp = await fetch('/api/agent/download-release-auto', {
                     method: 'POST',
@@ -1447,8 +1502,8 @@
                 var data = await resp.json();
                 if (!resp.ok) {
                     showToast('Download failed: ' + (data.error || resp.statusText), 'error');
-                    btnEl.disabled = false;
-                    btnEl.textContent = 'Download';
+                    btn.disabled = false;
+                    btn.textContent = 'Download';
                     return;
                 }
                 var ok = (data.results || []).filter(function(r) { return r.success; }).length;
@@ -1459,17 +1514,13 @@
                     showToast(tag + ' downloaded (' + ok + ' binaries).', 'success');
                 }
                 await loadDownloadedVersions();
+                // Update dropdown labels
                 loadGitHubReleases();
             } catch (e) {
                 showToast('Download error: ' + e.message, 'error');
-                btnEl.disabled = false;
-                btnEl.textContent = 'Download';
+                btn.disabled = false;
+                btn.textContent = 'Download';
             }
-        }
-
-        function toggleReleaseNotes(id) {
-            var el = document.getElementById(id);
-            if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
         }
 
         function isOlderVersion(local, remote) {
@@ -1485,64 +1536,42 @@
             return false;
         }
 
-        async function updateAgent(serverID) {
-            var sel = document.getElementById('ver-' + serverID);
-            var version = sel ? sel.value : '';
-            if (!version) { showToast('No version selected.', 'error'); return; }
-
-            var srv = servers.find(function(s) { return s.id === serverID; });
-            var name = srv ? srv.name : serverID;
-            var ok = await showConfirm('Update Agent', 'Update <strong>"' + esc(name) + '"</strong> to <strong>' + esc(version) + '</strong>?', 'Update', 'btn-primary');
-            if (!ok) return;
-
-            showToast('Updating "' + name + '"...', 'info');
-            try {
-                var resp = await fetch('/api/agent/update/' + serverID, {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ version: version })
-                });
-                var data = await resp.json();
-                if (!resp.ok || !data.success) {
-                    showToast('Update failed: ' + (data.error || resp.statusText), 'error');
-                    return;
-                }
-                showToast('"' + name + '" updated to ' + data.version + '.', 'success');
-                await loadData();
-                loadAgentVersions();
-            } catch (e) {
-                showToast('Update error: ' + e.message, 'error');
-            }
-        }
-
-        async function updateAllAgents() {
+        async function updateSelectedAgents() {
             var sel = document.getElementById('update-all-version');
             var version = sel ? sel.value : '';
             if (!version) { showToast('No version selected.', 'error'); return; }
 
-            var ok = await showConfirm('Update All Agents', 'Update ALL connected agents to <strong>' + esc(version) + '</strong>?', 'Update All', 'btn-primary');
+            var selectedIDs = getSelectedServerIDs();
+            if (selectedIDs.length === 0) { showToast('No agents selected.', 'error'); return; }
+
+            var names = selectedIDs.map(function(id) {
+                var srv = servers.find(function(s) { return s.id === id; });
+                return srv ? srv.name : id;
+            });
+            var ok = await showConfirm('Update Agents', 'Update <strong>' + names.length + '</strong> agent(s) to <strong>' + esc(version) + '</strong>?<br><br>' + names.map(function(n) { return esc(n); }).join(', '), 'Update', 'btn-primary');
             if (!ok) return;
 
             var status = document.getElementById('update-all-status');
             status.textContent = 'Updating...';
-            try {
-                var resp = await fetch('/api/agent/update/all', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ version: version })
-                });
-                var data = await resp.json();
-                if (!data.results) {
-                    status.textContent = 'No results returned';
-                    return;
-                }
-                var okCount = data.results.filter(function(r) { return r.success; }).length;
-                var failCount = data.results.filter(function(r) { return !r.success; }).length;
-                status.textContent = okCount + ' updated, ' + failCount + ' failed';
-                if (failCount > 0) showToast(failCount + ' agent(s) failed.', 'error');
-                else showToast('All agents updated to ' + version + '.', 'success');
-                await loadData();
-                loadAgentVersions();
+            var okCount = 0;
+            var failCount = 0;
+            for (var i = 0; i < selectedIDs.length; i++) {
+                try {
+                    var resp = await fetch('/api/agent/update/' + selectedIDs[i], {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ version: version })
+                    });
+                    var data = await resp.json();
+                    if (resp.ok && data.success) okCount++;
+                    else failCount++;
+                } catch (e) { failCount++; }
+            }
+            status.textContent = okCount + ' updated, ' + failCount + ' failed';
+            if (failCount > 0) showToast(failCount + ' agent(s) failed.', 'error');
+            else showToast('All selected agents updated to ' + version + '.', 'success');
+            await loadData();
+            loadAgentVersions();
             } catch (e) {
                 status.textContent = 'Error: ' + e.message;
             }
