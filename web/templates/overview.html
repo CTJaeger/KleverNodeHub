@@ -393,17 +393,8 @@
                     </div>
 
                     <!-- Server Agents -->
-                    <h4>Server Agents</h4>
+                    <h4 style="margin-bottom:8px;">Server Agents</h4>
                     <div id="agent-version-list"></div>
-
-                    <div class="mt-16" style="display:flex;align-items:center;gap:8px;">
-                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.85rem;">
-                            <input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)"> Select All
-                        </label>
-                        <select id="update-all-version" class="form-input node-inline-select" style="width:auto;"></select>
-                        <button class="btn btn-primary btn-sm" onclick="updateSelectedAgents()">Update</button>
-                        <span id="update-all-status" class="text-sm text-muted"></span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1343,7 +1334,9 @@
             }
         }
 
-        // ── Agent Version Table (with checkboxes) ──
+        // ── Agent Version Table (with checkboxes, inline status) ──
+        var agentUpdateStatus = {}; // serverID -> { text, type: 'wait'|'updating'|'restarting'|'ok'|'fail' }
+
         const agentVersionTable = new DataTable({
             containerId: 'agent-version-list',
             pageSize: 25,
@@ -1353,42 +1346,82 @@
             ],
             emptyMessage: 'No servers registered.',
             renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr style="text-align:left;"><th style="width:30px;"></th><th>Server</th><th>Version</th><th>OS</th><th>Status</th></tr></thead><tbody>';
+                var th = 'padding:8px 10px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);background:var(--bg-primary);';
+                return '<table style="width:100%;font-size:0.85rem;border-collapse:collapse;">' +
+                    '<thead><tr>' +
+                    '<th style="' + th + 'width:30px;border-radius:6px 0 0 0;"></th>' +
+                    '<th style="' + th + 'text-align:left;">Server</th>' +
+                    '<th style="' + th + 'text-align:left;">Version</th>' +
+                    '<th style="' + th + 'text-align:left;">OS</th>' +
+                    '<th style="' + th + 'text-align:left;border-radius:0 6px 0 0;">Status</th>' +
+                    '</tr></thead><tbody>';
             },
             renderItem: function(s) {
                 var online = s.status === 'online';
                 var ver = s.agent_version || 'unknown';
-                var verStyle = '';
+                var verColor = 'var(--text-primary)';
                 if (ver === 'dev' || ver === 'unknown') {
-                    verStyle = ' style="color:var(--danger);font-weight:600"';
+                    verColor = 'var(--error)';
                 } else if (latestReleaseVersion && isOlderVersion(ver, latestReleaseVersion)) {
-                    verStyle = ' style="color:var(--warning);font-weight:600"';
+                    verColor = 'var(--warning)';
                 } else if (latestReleaseVersion && !isOlderVersion(ver, latestReleaseVersion)) {
-                    verStyle = ' style="color:var(--success)"';
+                    verColor = 'var(--success)';
                 }
-                var badge = online ? '<span class="badge badge-online">online</span>' : '<span class="badge badge-offline">offline</span>';
                 var disabled = online ? '' : ' disabled';
-                var rowStyle = online ? '' : ' style="opacity:0.45;"';
-                var cb = '<input type="checkbox" class="agent-select-cb" data-server-id="' + esc(s.id) + '"' + disabled + '>';
-                return '<tr' + rowStyle + '><td>' + cb + '</td><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td></tr>';
-            },
-            renderFooter: function() { return '</tbody></table>'; },
-            onRender: function() {
-                // Sync "Select All" checkbox state
-                var allCb = document.getElementById('agent-select-all');
-                if (allCb) {
-                    var cbs = document.querySelectorAll('.agent-select-cb:not(:disabled)');
-                    var checked = document.querySelectorAll('.agent-select-cb:not(:disabled):checked');
-                    allCb.checked = cbs.length > 0 && checked.length === cbs.length;
+                var rowOpacity = online ? '1' : '0.45';
+                var cb = '<input type="checkbox" class="agent-select-cb" data-server-id="' + esc(s.id) + '"' + disabled + ' onchange="syncAgentSelectAll()">';
+                var td = 'padding:6px 10px;border-bottom:1px solid var(--border);';
+
+                // Inline update status or normal status dot
+                var us = agentUpdateStatus[s.id];
+                var statusCell;
+                if (us) {
+                    var usIcon = us.type === 'ok' ? '\u2705' : us.type === 'fail' ? '\u274C' : us.type === 'wait' ? '\u23F3' : '\u2B6E';
+                    var usColor = us.type === 'ok' ? 'var(--success)' : us.type === 'fail' ? 'var(--error)' : 'var(--info)';
+                    statusCell = '<span style="color:' + usColor + ';font-size:0.8rem;">' + usIcon + ' ' + esc(us.text) + '</span>';
+                } else {
+                    var dotColor = online ? 'var(--success)' : 'var(--text-muted)';
+                    statusCell = '<span style="color:' + dotColor + ';">\u25CF</span> ' + (online ? 'online' : 'offline');
                 }
+
+                return '<tr style="opacity:' + rowOpacity + ';">' +
+                    '<td style="' + td + '">' + cb + '</td>' +
+                    '<td style="' + td + '">' + esc(s.name) + '</td>' +
+                    '<td style="' + td + 'color:' + verColor + ';font-weight:600;">' + esc(ver) + '</td>' +
+                    '<td style="' + td + '">' + esc(s.os_info || '-') + '</td>' +
+                    '<td style="' + td + '">' + statusCell + '</td>' +
+                    '</tr>';
+            },
+            renderFooter: function() {
+                return '</tbody>' +
+                    '<tfoot><tr style="background:var(--bg-primary);">' +
+                    '<td style="padding:8px 10px;border-radius:0 0 0 6px;"><input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)"></td>' +
+                    '<td style="padding:8px 10px;font-size:0.8rem;color:var(--text-secondary);">Select All</td>' +
+                    '<td colspan="2" style="padding:8px 10px;"><select id="update-all-version" class="form-input node-inline-select" style="width:auto;font-size:0.8rem;padding:3px 6px;"></select></td>' +
+                    '<td style="padding:8px 10px;text-align:right;border-radius:0 0 6px 0;"><button class="btn btn-primary btn-sm" id="btn-update-selected" onclick="updateSelectedAgents()" disabled>Update</button></td>' +
+                    '</tr></tfoot></table>';
+            },
+            onRender: function() {
+                syncAgentSelectAll();
+                populateUpdateVersionDropdown();
             }
         });
         window._dt['agent-version-list'] = agentVersionTable;
+
+        function syncAgentSelectAll() {
+            var allCb = document.getElementById('agent-select-all');
+            var updateBtn = document.getElementById('btn-update-selected');
+            var cbs = document.querySelectorAll('.agent-select-cb:not(:disabled)');
+            var checked = document.querySelectorAll('.agent-select-cb:not(:disabled):checked');
+            if (allCb) allCb.checked = cbs.length > 0 && checked.length === cbs.length;
+            if (updateBtn) updateBtn.disabled = checked.length === 0;
+        }
 
         function toggleSelectAllAgents(checked) {
             document.querySelectorAll('.agent-select-cb:not(:disabled)').forEach(function(cb) {
                 cb.checked = checked;
             });
+            syncAgentSelectAll();
         }
 
         function getSelectedServerIDs() {
@@ -1525,6 +1558,28 @@
             return false;
         }
 
+        function setAgentStatus(id, text, type) {
+            agentUpdateStatus[id] = { text: text, type: type };
+            agentVersionTable.setData(servers || []);
+        }
+
+        async function waitForAgentVersion(serverID, targetVersion, timeoutMs) {
+            var deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                await new Promise(function(r) { setTimeout(r, 2000); });
+                try {
+                    var data = await API.getJSON('/api/servers');
+                    var srvList = (data && data.servers) || [];
+                    var srv = srvList.find(function(s) { return s.id === serverID; });
+                    if (srv && srv.status === 'online' && srv.agent_version === targetVersion) {
+                        servers = srvList;
+                        return true;
+                    }
+                } catch (e) { /* retry */ }
+            }
+            return false;
+        }
+
         async function updateSelectedAgents() {
             var sel = document.getElementById('update-all-version');
             var version = sel ? sel.value : '';
@@ -1540,22 +1595,59 @@
             var ok = await showConfirm('Update Agents', 'Update <strong>' + names.length + '</strong> agent(s) to <strong>' + esc(version) + '</strong>?<br><br>' + names.map(function(n) { return esc(n); }).join(', '), 'Update', 'btn-primary');
             if (!ok) return;
 
-            var status = document.getElementById('update-all-status');
-            status.textContent = 'Updating...';
+            // Mark all as waiting
+            selectedIDs.forEach(function(id) { setAgentStatus(id, 'Waiting...', 'wait'); });
+
             var okCount = 0;
             var failCount = 0;
             for (var i = 0; i < selectedIDs.length; i++) {
+                var sid = selectedIDs[i];
+                setAgentStatus(sid, 'Updating...', 'updating');
+                var sendOk = false;
                 try {
-                    var data = await API.postJSON('/api/agent/update/' + selectedIDs[i], { version: version });
-                    if (data && data.success) okCount++;
-                    else failCount++;
-                } catch (e) { failCount++; }
+                    var data = await API.postJSON('/api/agent/update/' + sid, { version: version });
+                    sendOk = data && data.success;
+                } catch (e) {
+                    // Agent restarts after update → WebSocket dies → API call may fail
+                    // Treat network errors as potential success, wait for reconnect
+                    sendOk = false;
+                }
+
+                if (sendOk) {
+                    // Response came back before restart — wait briefly for reconnect with new version
+                    setAgentStatus(sid, 'Restarting...', 'restarting');
+                    var reconnected = await waitForAgentVersion(sid, version, 15000);
+                    if (reconnected) {
+                        setAgentStatus(sid, version, 'ok');
+                        okCount++;
+                    } else {
+                        setAgentStatus(sid, 'Restart timeout', 'fail');
+                        failCount++;
+                    }
+                } else {
+                    // Likely disconnected during restart — wait for reconnect
+                    setAgentStatus(sid, 'Restarting...', 'restarting');
+                    var reconnected = await waitForAgentVersion(sid, version, 15000);
+                    if (reconnected) {
+                        setAgentStatus(sid, version, 'ok');
+                        okCount++;
+                    } else {
+                        setAgentStatus(sid, 'Failed', 'fail');
+                        failCount++;
+                    }
+                }
             }
-            status.textContent = okCount + ' updated, ' + failCount + ' failed';
+
             if (failCount > 0) showToast(failCount + ' agent(s) failed.', 'error');
-            else showToast('All selected agents updated to ' + version + '.', 'success');
+            else showToast('All agents updated to ' + version + '.', 'success');
             await loadData();
             loadAgentVersions();
+
+            // Clear inline statuses after a delay
+            setTimeout(function() {
+                agentUpdateStatus = {};
+                agentVersionTable.setData(servers || []);
+            }, 5000);
         }
 
         // --- Version Check & Self-Update ---
