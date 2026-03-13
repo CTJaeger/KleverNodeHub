@@ -7,9 +7,20 @@
   - `internal/dashboard/version_checker.go` — Periodic GitHub release checker (30 min interval), semver comparison, asset finder
   - `internal/dashboard/version_checker_test.go` — Tests for isNewer, compareVersions, FindAsset
   - `internal/dashboard/handlers/system.go` — SystemHandler: GET /api/system/version (version info + update check), POST /api/system/update (download + SHA256 verify + replace + restart)
+  - `internal/dashboard/handlers/restart_unix.go` — `syscall.Exec` for in-place restart (preserves PID, nohup, systemd)
+  - `internal/dashboard/handlers/restart_windows.go` — `exec.Command` + `os.Exit` fallback for Windows
   - `cmd/dashboard/main.go` — VersionChecker + SystemHandler wiring, new routes
-  - `web/templates/overview.html` — Update banner with version info, release notes link, "Update Now" button, dismiss per version
+  - `web/templates/overview.html` — Update banner with Docker-aware rendering (update button vs docker pull hint), dismiss per version
   - `web/static/css/style.css` — Update banner styles
+  - `deploy/` — systemd service files for dashboard and agent
+- **Fix: Log viewer not working on node detail page** (multiple cascading bugs):
+  - `internal/agent/docker.go` — Added `Tty` field to container config for TTY detection
+  - `internal/agent/log_stream.go` — Added `parseRawLogStream()` for TTY containers (no multiplexed headers)
+  - `internal/dashboard/ws/agent_handler.go` — Set WebSocket read limit to 1MB (was 32KB default, caused `StatusMessageTooBig`)
+  - `web/templates/node.html` — Fixed `API.fetch()` → `API.get()`, proper error display on log load failure
+- **Fix: ANSI escape codes rendered raw in logs** — Added `ansiToHtml()` parser converting ANSI color codes to HTML spans
+- **Fix: Duplicate timestamps in log viewer** — Docker timestamps checkbox defaults to OFF
+- **Fix: Batch upgrade tag dropdown showing `[object Object]`** — Extract `tag.name` from DockerTag objects in overview.html
 
 ### 2026-03-12
 - **Docker Hub**: Automated multi-arch Docker image builds (linux/amd64, linux/arm64) in release workflow
