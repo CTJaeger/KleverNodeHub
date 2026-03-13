@@ -540,9 +540,15 @@ func (e *Executor) executeAgentUpdate(payload any, result *models.CommandResult)
 	}
 	configDir := filepath.Dir(execPath)
 
-	// Verify and replace binary
+	// Verify and replace binary (auto-rollback on failure)
 	updateResult, err := VerifyAndReplaceBinary(binaryData, checksum, configDir)
 	if err != nil {
+		if updateResult != nil && updateResult.BackupPath != "" {
+			if rbErr := RollbackBinary(updateResult.BackupPath); rbErr != nil {
+				return fmt.Errorf("update failed: %w, rollback also failed: %v", err, rbErr)
+			}
+			return fmt.Errorf("update failed (rolled back automatically): %w", err)
+		}
 		return fmt.Errorf("update binary: %w", err)
 	}
 

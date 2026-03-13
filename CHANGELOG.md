@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### 2026-03-13
+- **Node Action Confirmations & Status Feedback**:
+  - Confirm dialogs before Start/Stop/Restart/Delete actions (styled modal, not browser `confirm()`)
+  - Delete uses red "Danger" button, Stop uses orange "Warning" button
+  - Container status dot (green/grey/yellow) next to node name in overview table
+  - Toast notifications: success/error/info feedback after every node action
+  - Batch operations also use styled confirm dialogs + toast feedback
+  - Added `badge-restarting` CSS style (yellow, pulsing dot)
+- **Log Viewer: Auto-Refresh statt Docker Timestamps**:
+  - Docker Timestamps Checkbox entfernt (überflüssig)
+  - Neues Auto-Refresh Dropdown: Off / 5s / 10s / 30s (Default: 10s)
+  - Logs werden automatisch neu geladen wenn Tab geöffnet wird
+- **Agent Update Improvements**: GitHub release integration, outdated highlighting, auto-rollback
+  - `GET /api/agent/releases` — List GitHub releases with agent binary assets
+  - `POST /api/agent/download-release` — One-click download of agent binary from GitHub (SSRF-protected)
+  - Agent version highlighting: red for `dev`/unknown, orange for outdated, green for current
+  - Auto-rollback: if `VerifyAndReplaceBinary` fails after backup, automatically restores previous binary
+  - Changelog display: expandable release notes per version in Agent Update modal
+  - `GET /api/agent/binaries` now includes `latest_release_version` from GitHub
 - **Issue #35 — Self-Update for Dashboard**: Automatic version checking via GitHub Releases API + binary self-update
   - `internal/dashboard/version_checker.go` — Periodic GitHub release checker (30 min interval), semver comparison, asset finder
   - `internal/dashboard/version_checker_test.go` — Tests for isNewer, compareVersions, FindAsset
