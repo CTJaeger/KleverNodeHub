@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Klever Node Hub! This guide will 
 
 ## Prerequisites
 
-- Go 1.22+
+- Go 1.26+
 - Docker (for testing containerized deployment)
 - [golangci-lint](https://golangci-lint.run/welcome/install-local/)
 
