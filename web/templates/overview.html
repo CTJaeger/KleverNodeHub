@@ -379,59 +379,23 @@
                     <button class="modal-close-btn" onclick="hideAgentUpdate()">&times;</button>
                 </div>
                 <div class="modal-panel-body">
-                    <!-- Upload Binary -->
-                    <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
-                        <h4>Upload Agent Binary</h4>
-                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-                            <div class="form-group">
-                                <label class="form-label">Version</label>
-                                <input class="form-input" id="upload-version" placeholder="e.g. v0.2.0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">OS</label>
-                                <select class="form-input" id="upload-os">
-                                    <option value="linux">linux</option>
-                                    <option value="darwin">darwin</option>
-                                    <option value="windows">windows</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Arch</label>
-                                <select class="form-input" id="upload-arch">
-                                    <option value="amd64">amd64</option>
-                                    <option value="arm64">arm64</option>
-                                    <option value="arm">arm</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Binary File</label>
-                            <input type="file" id="upload-binary" class="form-input">
-                        </div>
-                        <button class="btn btn-primary btn-sm" onclick="uploadBinary()">Upload</button>
-                        <span id="upload-status" class="text-sm text-muted" style="margin-left:8px;"></span>
-                    </div>
-
-                    <!-- GitHub Releases -->
+                    <!-- Available Versions -->
                     <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                            <h4 style="margin:0;">GitHub Releases</h4>
+                            <h4 style="margin:0;">Available Versions</h4>
                             <button class="btn btn-sm btn-outline" onclick="loadGitHubReleases()">Refresh</button>
                         </div>
                         <div id="github-releases" class="text-muted">Loading...</div>
                     </div>
 
-                    <!-- Available Binaries (downloaded/uploaded) -->
-                    <h4>Available Binaries</h4>
-                    <div id="binary-list" class="text-muted">Loading...</div>
-
-                    <!-- Agent Versions -->
-                    <h4 class="mt-16">Server Agent Versions</h4>
+                    <!-- Server Agents -->
+                    <h4>Server Agents</h4>
                     <div id="agent-version-list"></div>
 
-                    <div class="mt-16">
-                        <button class="btn btn-primary btn-sm" onclick="updateAllAgents()">Update All Agents</button>
-                        <span id="update-all-status" class="text-sm text-muted" style="margin-left:8px;"></span>
+                    <div class="mt-16" style="display:flex;align-items:center;gap:8px;">
+                        <select id="update-all-version" class="form-input node-inline-select" style="width:auto;"></select>
+                        <button class="btn btn-primary btn-sm" onclick="updateAllAgents()">Update All</button>
+                        <span id="update-all-status" class="text-sm text-muted"></span>
                     </div>
                 </div>
             </div>
@@ -536,7 +500,7 @@
         const nodeTable = new DataTable({
             containerId: 'nodes-list',
             pageSize: 25,
-            searchFields: ['display_name', 'name', 'container_name', 'node_type', 'status', 'bls_public_key', 'docker_image_tag'],
+            searchFields: ['display_name', 'name', 'container_name', 'node_type', 'status', 'bls_public_key', 'docker_image_tag', 'server_name'],
             columns: [
                 { key: 'status', label: 'Status', filterable: true },
                 { key: 'node_type', label: 'Type', filterable: true }
@@ -712,6 +676,10 @@
                 return;
             }
             container.style.display = '';
+            // Enrich nodes with server_name so DataTable search can find by server
+            const serverMap = {};
+            servers.forEach(function(s) { serverMap[s.id] = s.name || s.hostname; });
+            nodes.forEach(function(n) { n.server_name = serverMap[n.server_id] || ''; });
             nodeTable.setData(nodes);
             if (overviewSearchQuery) setOverviewSearch(overviewSearchQuery);
         }
@@ -1320,10 +1288,12 @@
         // ── Agent Update ──
         var latestReleaseVersion = '';
 
+        var downloadedVersions = [];
+
         function showAgentUpdate() {
             document.getElementById('modal-agent-update').classList.add('active');
             loadGitHubReleases();
-            loadBinaries();
+            loadDownloadedVersions();
             loadAgentVersions();
         }
 
@@ -1331,70 +1301,46 @@
             document.getElementById('modal-agent-update').classList.remove('active');
         }
 
-        async function uploadBinary() {
-            const version = document.getElementById('upload-version').value.trim();
-            const os = document.getElementById('upload-os').value;
-            const arch = document.getElementById('upload-arch').value;
-            const fileInput = document.getElementById('upload-binary');
-            const status = document.getElementById('upload-status');
-
-            if (!version || !fileInput.files.length) {
-                status.textContent = 'Version and binary file are required';
-                return;
-            }
-
-            status.textContent = 'Uploading...';
-            const form = new FormData();
-            form.append('version', version);
-            form.append('os', os);
-            form.append('arch', arch);
-            form.append('binary', fileInput.files[0]);
-
+        async function loadDownloadedVersions() {
             try {
-                const resp = await fetch('/api/agent/upload', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token },
-                    body: form
-                });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    status.textContent = 'Error: ' + (data.error || resp.statusText);
-                    return;
+                var data = await API.getJSON('/api/agent/binaries');
+                downloadedVersions = (data && data.downloaded_versions) || [];
+                if (data && data.latest_release_version) {
+                    latestReleaseVersion = data.latest_release_version;
                 }
-                status.textContent = 'Uploaded ' + data.version + ' (' + data.checksum.substring(0, 12) + '...)';
-                document.getElementById('upload-version').value = '';
-                fileInput.value = '';
-                loadBinaries();
-            } catch (e) {
-                status.textContent = 'Upload failed: ' + e.message;
+                populateVersionDropdowns();
+            } catch (e) { /* ignore */ }
+        }
+
+        function populateVersionDropdowns() {
+            // Update all version selects in agent table + the "Update All" dropdown
+            var selects = document.querySelectorAll('.agent-version-select');
+            selects.forEach(function(sel) {
+                var current = sel.value;
+                sel.innerHTML = '';
+                downloadedVersions.forEach(function(v) {
+                    var opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    sel.appendChild(opt);
+                });
+                if (current && downloadedVersions.indexOf(current) !== -1) sel.value = current;
+            });
+            var allSel = document.getElementById('update-all-version');
+            if (allSel) {
+                var cur = allSel.value;
+                allSel.innerHTML = '';
+                downloadedVersions.forEach(function(v) {
+                    var opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    allSel.appendChild(opt);
+                });
+                if (cur && downloadedVersions.indexOf(cur) !== -1) allSel.value = cur;
             }
         }
 
-        const binaryTable = new DataTable({
-            containerId: 'binary-list',
-            pageSize: 10,
-            searchFields: ['version', 'os', 'arch'],
-            emptyMessage: 'No binaries uploaded yet.',
-            renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>OS/Arch</th><th>Size</th><th>Checksum</th><th>Uploaded</th></tr></thead><tbody>';
-            },
-            renderItem: function(b) {
-                const size = (b.size / 1024 / 1024).toFixed(1) + ' MB';
-                const date = new Date(b.uploaded_at * 1000).toLocaleString();
-                return '<tr><td>' + esc(b.version) + '</td><td>' + esc(b.os + '/' + b.arch) + '</td><td>' + size + '</td><td title="' + esc(b.checksum) + '">' + esc(b.checksum.substring(0, 12)) + '...</td><td>' + date + '</td></tr>';
-            },
-            renderFooter: function() { return '</tbody></table>'; }
-        });
-        window._dt['binary-list'] = binaryTable;
-
-        async function loadBinaries() {
-            const data = await API.getJSON('/api/agent/binaries');
-            binaryTable.setData(data && data.binaries ? data.binaries : []);
-            if (data && data.latest_release_version) {
-                latestReleaseVersion = data.latest_release_version;
-            }
-        }
-
+        // ── Agent Version Table ──
         const agentVersionTable = new DataTable({
             containerId: 'agent-version-list',
             pageSize: 25,
@@ -1404,11 +1350,11 @@
             ],
             emptyMessage: 'No servers registered.',
             renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Agent Version</th><th>OS</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Server</th><th>Version</th><th>OS</th><th>Status</th><th style="text-align:right">Action</th></tr></thead><tbody>';
             },
             renderItem: function(s) {
-                const online = s.status === 'online';
-                const ver = s.agent_version || 'unknown';
+                var online = s.status === 'online';
+                var ver = s.agent_version || 'unknown';
                 var verStyle = '';
                 if (ver === 'dev' || ver === 'unknown') {
                     verStyle = ' style="color:var(--danger);font-weight:600"';
@@ -1417,9 +1363,21 @@
                 } else if (latestReleaseVersion && !isOlderVersion(ver, latestReleaseVersion)) {
                     verStyle = ' style="color:var(--success)"';
                 }
-                const badge = online ? '<span class="badge badge-success">online</span>' : '<span class="badge badge-danger">offline</span>';
-                const btn = online ? '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + s.id + '\')">Update</button>' : '-';
-                return '<tr><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + btn + '</td></tr>';
+                var badge = online ? '<span class="badge badge-online">online</span>' : '<span class="badge badge-offline">offline</span>';
+                var action = '-';
+                if (online && downloadedVersions.length > 0) {
+                    var opts = '';
+                    downloadedVersions.forEach(function(v) {
+                        opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+                    });
+                    action = '<div style="display:flex;gap:4px;justify-content:flex-end;">' +
+                        '<select class="form-input node-inline-select agent-version-select" style="width:auto;font-size:0.8rem;" id="ver-' + esc(s.id) + '">' + opts + '</select>' +
+                        '<button class="btn btn-sm btn-primary" onclick="updateAgent(\'' + escJS(s.id) + '\')">Update</button>' +
+                        '</div>';
+                } else if (online) {
+                    action = '<span class="text-muted text-sm">No binaries</span>';
+                }
+                return '<tr><td>' + esc(s.name) + '</td><td' + verStyle + '>' + esc(ver) + '</td><td>' + esc(s.os_info || '-') + '</td><td>' + badge + '</td><td>' + action + '</td></tr>';
             },
             renderFooter: function() { return '</tbody></table>'; }
         });
@@ -1429,29 +1387,36 @@
             agentVersionTable.setData(servers || []);
         }
 
-        // ── GitHub Releases ──
+        // ── GitHub Releases Table ──
         const releaseTable = new DataTable({
             containerId: 'github-releases',
             pageSize: 5,
             searchFields: ['tag_name'],
             emptyMessage: 'No releases found.',
             renderHeader: function() {
-                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>Agent Binaries</th><th>Date</th><th>Notes</th></tr></thead><tbody>';
+                return '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Version</th><th>Date</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>';
             },
             renderItem: function(rel) {
-                var btns = '';
-                (rel.assets || []).forEach(function(a) {
-                    var label = (a.os || '?') + '/' + (a.arch || '?');
-                    var size = (a.size / 1024 / 1024).toFixed(1) + ' MB';
-                    btns += '<button class="btn btn-sm btn-outline" style="margin:2px;" ' +
-                        'onclick="downloadFromRelease(\'' + esc(a.url) + '\', \'' + esc(rel.tag_name) + '\', \'' + esc(a.os) + '\', \'' + esc(a.arch) + '\', this)" ' +
-                        'title="Download ' + esc(a.name) + ' (' + size + ')">' + esc(label) + '</button>';
-                });
                 var date = rel.published_at ? new Date(rel.published_at).toLocaleDateString() : '-';
                 var notesId = 'rel-notes-' + rel.tag_name.replace(/\./g, '-');
-                var notesBtn = rel.body ? '<button class="btn btn-sm btn-ghost" onclick="toggleReleaseNotes(\'' + notesId + '\')">Show</button>' : '-';
+                var isDl = downloadedVersions.indexOf(rel.tag_name) !== -1;
+                var statusBadge = isDl
+                    ? '<span class="badge badge-running">Downloaded</span>'
+                    : '<span class="badge badge-stopped">Available</span>';
+
+                var actions = '';
+                if (!isDl && (rel.assets || []).length > 0) {
+                    actions += '<button class="btn btn-sm btn-primary" id="dl-btn-' + esc(rel.tag_name) + '" onclick="downloadRelease(\'' + escJS(rel.tag_name) + '\', this)">Download</button>';
+                } else if (isDl) {
+                    actions += '<span class="text-success text-sm" style="margin-right:8px;">Ready</span>';
+                }
+                if (rel.body) {
+                    actions += '<button class="btn btn-sm btn-ghost" style="margin-left:4px;" onclick="toggleReleaseNotes(\'' + notesId + '\')">Notes</button>';
+                }
+
                 var notesRow = rel.body ? '<tr id="' + notesId + '" style="display:none"><td colspan="4"><pre style="white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:4px 0;padding:8px;background:var(--bg-secondary);border-radius:4px;">' + esc(rel.body) + '</pre></td></tr>' : '';
-                return '<tr><td><strong>' + esc(rel.tag_name) + '</strong></td><td>' + btns + '</td><td>' + date + '</td><td>' + notesBtn + '</td></tr>' + notesRow;
+
+                return '<tr><td><strong>' + esc(rel.tag_name) + '</strong></td><td style="color:var(--text-secondary);">' + date + '</td><td>' + statusBadge + '</td><td style="text-align:right;">' + actions + '</td></tr>' + notesRow;
             },
             renderFooter: function() { return '</tbody></table>'; }
         });
@@ -1459,40 +1424,46 @@
 
         async function loadGitHubReleases() {
             try {
-                const data = await API.getJSON('/api/agent/releases');
+                var data = await API.getJSON('/api/agent/releases');
                 releaseTable.setData(data && data.releases ? data.releases : []);
                 if (data && data.releases && data.releases.length > 0) {
                     latestReleaseVersion = data.releases[0].tag_name;
-                    loadAgentVersions(); // Re-render with version highlighting
+                    loadAgentVersions();
                 }
             } catch (e) {
                 document.getElementById('github-releases').innerHTML = '<span class="text-danger">Failed to load releases</span>';
             }
         }
 
-        async function downloadFromRelease(url, version, os, arch, btnEl) {
-            var origText = btnEl.textContent;
+        async function downloadRelease(tag, btnEl) {
             btnEl.disabled = true;
-            btnEl.textContent = '...';
+            btnEl.textContent = 'Downloading...';
             try {
-                const resp = await fetch('/api/agent/download-release', {
+                var resp = await fetch('/api/agent/download-release-auto', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, version: version, os: os, arch: arch })
+                    body: JSON.stringify({ tag: tag })
                 });
-                const data = await resp.json();
+                var data = await resp.json();
                 if (!resp.ok) {
-                    alert('Download failed: ' + (data.error || resp.statusText));
+                    showToast('Download failed: ' + (data.error || resp.statusText), 'error');
+                    btnEl.disabled = false;
+                    btnEl.textContent = 'Download';
                     return;
                 }
-                btnEl.textContent = '\u2713';
-                btnEl.style.color = 'var(--success)';
-                loadBinaries();
+                var ok = (data.results || []).filter(function(r) { return r.success; }).length;
+                var fail = (data.results || []).filter(function(r) { return !r.success; }).length;
+                if (fail > 0) {
+                    showToast(ok + ' downloaded, ' + fail + ' failed.', 'error');
+                } else {
+                    showToast(tag + ' downloaded (' + ok + ' binaries).', 'success');
+                }
+                await loadDownloadedVersions();
+                loadGitHubReleases();
             } catch (e) {
-                alert('Download error: ' + e.message);
-            } finally {
+                showToast('Download error: ' + e.message, 'error');
                 btnEl.disabled = false;
-                setTimeout(function() { btnEl.textContent = origText; btnEl.style.color = ''; }, 3000);
+                btnEl.textContent = 'Download';
             }
         }
 
@@ -1515,41 +1486,62 @@
         }
 
         async function updateAgent(serverID) {
-            if (!confirm('Send update to this agent?')) return;
+            var sel = document.getElementById('ver-' + serverID);
+            var version = sel ? sel.value : '';
+            if (!version) { showToast('No version selected.', 'error'); return; }
+
+            var srv = servers.find(function(s) { return s.id === serverID; });
+            var name = srv ? srv.name : serverID;
+            var ok = await showConfirm('Update Agent', 'Update <strong>"' + esc(name) + '"</strong> to <strong>' + esc(version) + '</strong>?', 'Update', 'btn-primary');
+            if (!ok) return;
+
+            showToast('Updating "' + name + '"...', 'info');
             try {
-                const resp = await fetch('/api/agent/update/' + serverID, {
+                var resp = await fetch('/api/agent/update/' + serverID, {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token }
+                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ version: version })
                 });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    alert('Update failed: ' + (data.error || resp.statusText));
+                var data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    showToast('Update failed: ' + (data.error || resp.statusText), 'error');
                     return;
                 }
-                alert('Agent updated to ' + data.version);
+                showToast('"' + name + '" updated to ' + data.version + '.', 'success');
+                await loadData();
                 loadAgentVersions();
             } catch (e) {
-                alert('Update error: ' + e.message);
+                showToast('Update error: ' + e.message, 'error');
             }
         }
 
         async function updateAllAgents() {
-            if (!confirm('Update ALL connected agents?')) return;
-            const status = document.getElementById('update-all-status');
+            var sel = document.getElementById('update-all-version');
+            var version = sel ? sel.value : '';
+            if (!version) { showToast('No version selected.', 'error'); return; }
+
+            var ok = await showConfirm('Update All Agents', 'Update ALL connected agents to <strong>' + esc(version) + '</strong>?', 'Update All', 'btn-primary');
+            if (!ok) return;
+
+            var status = document.getElementById('update-all-status');
             status.textContent = 'Updating...';
             try {
-                const resp = await fetch('/api/agent/update/all', {
+                var resp = await fetch('/api/agent/update/all', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + API.token }
+                    headers: { 'Authorization': 'Bearer ' + API.token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ version: version })
                 });
-                const data = await resp.json();
+                var data = await resp.json();
                 if (!data.results) {
                     status.textContent = 'No results returned';
                     return;
                 }
-                const ok = data.results.filter(r => r.success).length;
-                const fail = data.results.filter(r => !r.success).length;
-                status.textContent = ok + ' updated, ' + fail + ' failed';
+                var okCount = data.results.filter(function(r) { return r.success; }).length;
+                var failCount = data.results.filter(function(r) { return !r.success; }).length;
+                status.textContent = okCount + ' updated, ' + failCount + ' failed';
+                if (failCount > 0) showToast(failCount + ' agent(s) failed.', 'error');
+                else showToast('All agents updated to ' + version + '.', 'success');
+                await loadData();
                 loadAgentVersions();
             } catch (e) {
                 status.textContent = 'Error: ' + e.message;

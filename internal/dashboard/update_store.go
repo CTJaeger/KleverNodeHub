@@ -27,7 +27,7 @@ type AgentBinaryInfo struct {
 type UpdateStore struct {
 	mu       sync.RWMutex
 	dataDir  string
-	binaries map[string]*AgentBinaryInfo // key: "os/arch"
+	binaries map[string]*AgentBinaryInfo // key: "version/os/arch"
 }
 
 // NewUpdateStore creates a new update store.
@@ -67,7 +67,7 @@ func (s *UpdateStore) Store(version, osName, arch string, data []byte) (*AgentBi
 		FilePath:   filePath,
 	}
 
-	key := osName + "/" + arch
+	key := version + "/" + osName + "/" + arch
 	s.binaries[key] = info
 	s.saveIndex()
 
@@ -75,17 +75,17 @@ func (s *UpdateStore) Store(version, osName, arch string, data []byte) (*AgentBi
 	return info, nil
 }
 
-// Get returns the binary info for a specific OS/arch combo.
+// Get returns the binary info for the latest version of a specific OS/arch.
 func (s *UpdateStore) Get(osName, arch string) *AgentBinaryInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.binaries[osName+"/"+arch]
+	return s.latestForArch(osName, arch)
 }
 
-// GetBinary returns the binary data for a specific OS/arch.
+// GetBinary returns the binary data for the latest version of a specific OS/arch.
 func (s *UpdateStore) GetBinary(osName, arch string) ([]byte, *AgentBinaryInfo, error) {
 	s.mu.RLock()
-	info := s.binaries[osName+"/"+arch]
+	info := s.latestForArch(osName, arch)
 	s.mu.RUnlock()
 
 	if info == nil {
@@ -98,6 +98,54 @@ func (s *UpdateStore) GetBinary(osName, arch string) ([]byte, *AgentBinaryInfo, 
 	}
 
 	return data, info, nil
+}
+
+// GetBinaryVersion returns the binary data for a specific version and OS/arch.
+func (s *UpdateStore) GetBinaryVersion(version, osName, arch string) ([]byte, *AgentBinaryInfo, error) {
+	s.mu.RLock()
+	info := s.binaries[version+"/"+osName+"/"+arch]
+	s.mu.RUnlock()
+
+	if info == nil {
+		return nil, nil, fmt.Errorf("no binary for %s %s/%s", version, osName, arch)
+	}
+
+	data, err := os.ReadFile(info.FilePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read binary: %w", err)
+	}
+
+	return data, info, nil
+}
+
+// DownloadedVersions returns a sorted list of unique version strings in the store.
+func (s *UpdateStore) DownloadedVersions() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	seen := map[string]bool{}
+	for _, info := range s.binaries {
+		seen[info.Version] = true
+	}
+	versions := make([]string, 0, len(seen))
+	for v := range seen {
+		versions = append(versions, v)
+	}
+	return versions
+}
+
+// latestForArch finds the most recently uploaded binary for an OS/arch (must hold read lock).
+func (s *UpdateStore) latestForArch(osName, arch string) *AgentBinaryInfo {
+	var latest *AgentBinaryInfo
+	suffix := "/" + osName + "/" + arch
+	for key, info := range s.binaries {
+		if len(key) > len(suffix) && key[len(key)-len(suffix):] == suffix {
+			if latest == nil || info.UploadedAt > latest.UploadedAt {
+				latest = info
+			}
+		}
+	}
+	return latest
 }
 
 // List returns all stored binary infos.
@@ -141,11 +189,16 @@ func (s *UpdateStore) loadIndex() {
 		return
 	}
 
-	// Restore file paths
+	// Restore file paths — migrate old "os/arch" keys to "version/os/arch"
 	for key, info := range entries {
 		filename := fmt.Sprintf("agent-%s-%s-%s", info.Version, info.OS, info.Arch)
 		info.FilePath = filepath.Join(s.dataDir, filename)
-		s.binaries[key] = info
+		newKey := info.Version + "/" + info.OS + "/" + info.Arch
+		s.binaries[newKey] = info
+		// Clean up old-format key if present
+		if key != newKey {
+			delete(s.binaries, key)
+		}
 	}
 }
 
