@@ -991,9 +991,9 @@
         function updateBatchBar() {
             var bar = document.getElementById('batch-action-bar');
             var count = document.getElementById('batch-count');
+            count.textContent = selectedNodeIds.size + ' selected';
             if (selectedNodeIds.size > 0) {
                 bar.classList.add('active');
-                count.textContent = selectedNodeIds.size + ' selected';
             } else {
                 bar.classList.remove('active');
             }
