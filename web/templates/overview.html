@@ -246,15 +246,6 @@
                             Provisioned Nodes
                         </span>
                     </div>
-                    <!-- Batch Action Bar -->
-                    <div class="batch-action-bar" id="batch-action-bar">
-                        <span class="batch-count" id="batch-count">0 selected</span>
-                        <button class="btn btn-sm btn-primary" onclick="batchAction('start')">Start</button>
-                        <button class="btn btn-sm btn-secondary" onclick="batchAction('stop')">Stop</button>
-                        <button class="btn btn-sm btn-secondary" onclick="batchAction('restart')">Restart</button>
-                        <button class="btn btn-sm btn-primary" onclick="showBatchUpgrade()">Upgrade</button>
-                        <button class="btn btn-sm btn-secondary" onclick="clearBatchSelection()">Clear</button>
-                    </div>
                     <div id="nodes-list"></div>
                 </div>
             </div>
@@ -510,8 +501,20 @@
             ],
             emptyMessage: 'No nodes provisioned yet.',
             renderHeader: function() {
-                return '<div class="node-table-head node-table-head-overview">' +
-                    '<div class="node-table-head-cell node-cell-checkbox"><input type="checkbox" onchange="toggleSelectAllNodes(this.checked)" id="select-all-nodes"></div>' +
+                var allChecked = nodes.length > 0 && selectedNodeIds.size === nodes.length;
+                var someChecked = selectedNodeIds.size > 0;
+                var batchActive = someChecked ? ' active' : '';
+                var batchHtml = '<div class="batch-action-bar' + batchActive + '" id="batch-action-bar">' +
+                    '<span class="batch-count" id="batch-count">' + selectedNodeIds.size + ' selected</span>' +
+                    '<button class="btn btn-sm btn-primary"' + (someChecked ? '' : ' disabled') + ' onclick="batchAction(\'start\')">Start</button>' +
+                    '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="batchAction(\'stop\')">Stop</button>' +
+                    '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="batchAction(\'restart\')">Restart</button>' +
+                    '<button class="btn btn-sm btn-primary"' + (someChecked ? '' : ' disabled') + ' onclick="showBatchUpgrade()">Upgrade</button>' +
+                    '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="clearBatchSelection()">Clear</button>' +
+                    '</div>';
+                return batchHtml +
+                '<div class="node-table-head node-table-head-overview">' +
+                    '<div class="node-table-head-cell node-cell-checkbox"><input type="checkbox" onchange="toggleSelectAllNodes(this.checked)" id="select-all-nodes"' + (allChecked ? ' checked' : '') + '></div>' +
                     '<div class="node-table-head-cell">Node</div>' +
                     '<div class="node-table-head-cell">Server</div>' +
                     '<div class="node-table-head-cell">Type</div>' +
@@ -966,36 +969,22 @@
             } else {
                 selectedNodeIds.add(nodeId);
             }
-            updateBatchBar();
+            nodeTable.render();
         }
 
         function toggleSelectAllNodes(checked) {
             if (checked) {
-                nodes.forEach(function(n) { selectedNodeIds.add(n.id); });
+                // Add all currently visible (filtered) nodes
+                nodeTable.filteredData.forEach(function(n) { selectedNodeIds.add(n.id); });
             } else {
                 selectedNodeIds.clear();
             }
-            renderNodes();
-            updateBatchBar();
+            nodeTable.render();
         }
 
         function clearBatchSelection() {
             selectedNodeIds.clear();
-            var selectAll = document.getElementById('select-all-nodes');
-            if (selectAll) selectAll.checked = false;
-            renderNodes();
-            updateBatchBar();
-        }
-
-        function updateBatchBar() {
-            var bar = document.getElementById('batch-action-bar');
-            var count = document.getElementById('batch-count');
-            count.textContent = selectedNodeIds.size + ' selected';
-            if (selectedNodeIds.size > 0) {
-                bar.classList.add('active');
-            } else {
-                bar.classList.remove('active');
-            }
+            nodeTable.render();
         }
 
         async function batchAction(action) {
