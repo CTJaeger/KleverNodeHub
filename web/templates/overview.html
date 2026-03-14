@@ -237,16 +237,6 @@
                 <div id="server-list"></div>
             </div>
 
-            <!-- Batch Action Bar -->
-            <div class="batch-action-bar" id="batch-action-bar">
-                <span class="batch-count" id="batch-count">0 selected</span>
-                <button class="btn btn-sm btn-primary" onclick="batchAction('start')">Start</button>
-                <button class="btn btn-sm btn-secondary" onclick="batchAction('stop')">Stop</button>
-                <button class="btn btn-sm btn-secondary" onclick="batchAction('restart')">Restart</button>
-                <button class="btn btn-sm btn-primary" onclick="showBatchUpgrade()">Upgrade</button>
-                <button class="btn btn-sm btn-secondary" onclick="clearBatchSelection()">Clear</button>
-            </div>
-
             <!-- Nodes Table -->
             <div id="nodes-table-container" style="margin-bottom:20px;display:none;">
                 <div class="data-table-container node-table-scroll">
@@ -255,6 +245,15 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                             Provisioned Nodes
                         </span>
+                    </div>
+                    <!-- Batch Action Bar -->
+                    <div class="batch-action-bar" id="batch-action-bar">
+                        <span class="batch-count" id="batch-count">0 selected</span>
+                        <button class="btn btn-sm btn-primary" onclick="batchAction('start')">Start</button>
+                        <button class="btn btn-sm btn-secondary" onclick="batchAction('stop')">Stop</button>
+                        <button class="btn btn-sm btn-secondary" onclick="batchAction('restart')">Restart</button>
+                        <button class="btn btn-sm btn-primary" onclick="showBatchUpgrade()">Upgrade</button>
+                        <button class="btn btn-sm btn-secondary" onclick="clearBatchSelection()">Clear</button>
                     </div>
                     <div id="nodes-list"></div>
                 </div>
