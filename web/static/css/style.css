@@ -916,18 +916,23 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .batch-action-bar {
-    display: none;
+    display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 18px;
     background: var(--bg-card);
-    border: 1px solid var(--accent);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: 12px;
 }
 
 .batch-action-bar.active {
-    display: flex;
+    border-color: var(--accent);
+}
+
+.batch-action-bar:not(.active) .btn {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .batch-action-bar .batch-count {
