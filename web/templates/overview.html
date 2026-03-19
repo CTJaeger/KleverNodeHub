@@ -841,13 +841,22 @@
         }
 
         async function deleteNode(id, name) {
-            var ok = await showConfirm(
-                'Delete Node',
-                'Are you sure you want to delete node <strong>"' + esc(name) + '"</strong>?' +
-                '<br><br><label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-                '<input type="checkbox" id="delete-remove-container" checked> Also stop &amp; remove the Docker container</label>',
-                'Delete', 'btn-danger'
-            );
+            // Look up full node info for safety confirmation
+            var node = (nodes || []).find(function(n) { return n.id === id; });
+            var container = node ? (node.container_name || '-') : '-';
+            var status = node ? (node.status || 'unknown') : 'unknown';
+            var server = node ? (node.server_name || node.server_id || '-') : '-';
+
+            var details = '<table style="width:100%;margin:10px 0;font-size:0.85rem;border-collapse:collapse;">' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Display Name</td><td style="padding:4px 8px;font-weight:600;">' + esc(name) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Container</td><td style="padding:4px 8px;font-family:monospace;">' + esc(container) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Server</td><td style="padding:4px 8px;">' + esc(server) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Status</td><td style="padding:4px 8px;">' + esc(status) + '</td></tr>' +
+                '</table>' +
+                '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+                '<input type="checkbox" id="delete-remove-container" checked> Also stop &amp; remove the Docker container</label>';
+
+            var ok = await showConfirm('Delete Node', details, 'Delete', 'btn-danger');
             if (!ok) return;
             var removeCb = document.getElementById('delete-remove-container');
             var removeContainer = removeCb ? removeCb.checked : false;
