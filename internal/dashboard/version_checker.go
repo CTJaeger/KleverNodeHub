@@ -210,14 +210,30 @@ func compareVersions(a, b string) int {
 }
 
 // FindAsset returns the download URL for a specific binary type.
+// Supports both legacy (klever-node-hub-, klever-agent-) and short (dashboard-, agent-) prefixes.
 func (r *ReleaseInfo) FindAsset(prefix, goos, goarch string) string {
 	if r == nil {
 		return ""
 	}
-	target := fmt.Sprintf("%s-%s-%s", prefix, goos, goarch)
-	for _, a := range r.Assets {
-		if strings.HasPrefix(a.Name, target) {
-			return a.BrowserDownloadURL
+	suffix := fmt.Sprintf("-%s-%s", goos, goarch)
+	// Build list of candidate prefixes (e.g. "klever-node-hub" → ["klever-node-hub", "dashboard"])
+	prefixes := []string{prefix}
+	switch prefix {
+	case "klever-node-hub":
+		prefixes = append(prefixes, "dashboard")
+	case "dashboard":
+		prefixes = append(prefixes, "klever-node-hub")
+	case "klever-agent":
+		prefixes = append(prefixes, "agent")
+	case "agent":
+		prefixes = append(prefixes, "klever-agent")
+	}
+	for _, p := range prefixes {
+		target := p + suffix
+		for _, a := range r.Assets {
+			if strings.HasPrefix(a.Name, target) {
+				return a.BrowserDownloadURL
+			}
 		}
 	}
 	return ""

@@ -45,6 +45,7 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestFindAsset(t *testing.T) {
+	// Test with legacy names (klever-node-hub-, klever-agent-)
 	r := &ReleaseInfo{
 		Assets: []ReleaseAsset{
 			{Name: "klever-node-hub-linux-amd64", BrowserDownloadURL: "https://example.com/hub-linux-amd64"},
@@ -66,5 +67,23 @@ func TestFindAsset(t *testing.T) {
 	url = r.FindAsset("klever-node-hub", "darwin", "arm64")
 	if url != "" {
 		t.Errorf("FindAsset missing should be empty, got %q", url)
+	}
+
+	// Test with short names (dashboard-, agent-)
+	r2 := &ReleaseInfo{
+		Assets: []ReleaseAsset{
+			{Name: "dashboard-linux-amd64", BrowserDownloadURL: "https://example.com/dash-short"},
+			{Name: "agent-linux-amd64", BrowserDownloadURL: "https://example.com/agent-short"},
+		},
+	}
+
+	url = r2.FindAsset("klever-node-hub", "linux", "amd64")
+	if url != "https://example.com/dash-short" {
+		t.Errorf("FindAsset short dashboard = %q, want dash-short", url)
+	}
+
+	url = r2.FindAsset("klever-agent", "linux", "amd64")
+	if url != "https://example.com/agent-short" {
+		t.Errorf("FindAsset short agent = %q, want agent-short", url)
 	}
 }
