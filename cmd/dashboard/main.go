@@ -264,7 +264,7 @@ func main() {
 	mux.Handle("DELETE /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleDelete)))
 	mux.Handle("GET /api/nodes", authMw(http.HandlerFunc(serverHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleGetNode)))
-	mux.Handle("DELETE /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleDeleteNode)))
+	mux.Handle("DELETE /api/nodes/{id}", authMw(http.HandlerFunc(nodeHandler.HandleDelete)))
 	mux.Handle("POST /api/nodes/{id}/start", authMw(http.HandlerFunc(nodeHandler.HandleStart)))
 	mux.Handle("POST /api/nodes/{id}/stop", authMw(http.HandlerFunc(nodeHandler.HandleStop)))
 	mux.Handle("POST /api/nodes/{id}/restart", authMw(http.HandlerFunc(nodeHandler.HandleRestart)))

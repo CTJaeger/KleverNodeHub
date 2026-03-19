@@ -843,16 +843,24 @@
         async function deleteNode(id, name) {
             var ok = await showConfirm(
                 'Delete Node',
-                'Are you sure you want to delete node <strong>"' + esc(name) + '"</strong>?<br>This removes it from the dashboard only (container is not affected).',
+                'Are you sure you want to delete node <strong>"' + esc(name) + '"</strong>?' +
+                '<br><br><label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+                '<input type="checkbox" id="delete-remove-container" checked> Also stop &amp; remove the Docker container</label>',
                 'Delete', 'btn-danger'
             );
             if (!ok) return;
-            const resp = await API.delete('/api/nodes/' + id);
+            var removeCb = document.getElementById('delete-remove-container');
+            var removeContainer = removeCb ? removeCb.checked : false;
+            var url = '/api/nodes/' + id;
+            if (removeContainer) url += '?remove_container=true';
+            const resp = await API.delete(url);
             if (resp && resp.ok) {
                 showToast('Node "' + name + '" deleted.', 'success');
                 loadData();
             } else {
-                showToast('Failed to delete node.', 'error');
+                var errMsg = 'Failed to delete node.';
+                try { var d = await resp.json(); if (d.error) errMsg = d.error; } catch(e) {}
+                showToast(errMsg, 'error');
             }
         }
 
