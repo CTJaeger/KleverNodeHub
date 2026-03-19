@@ -496,10 +496,14 @@
         }
 
         async function deleteNode(id, name) {
-            if (!confirm('Delete node "' + name + '"? This removes it from the dashboard only (container is not affected).')) return;
-            var resp = await API.delete('/api/nodes/' + id);
+            if (!confirm('Delete node "' + name + '"?\nThis will stop and remove the Docker container.')) return;
+            var resp = await API.delete('/api/nodes/' + id + '?remove_container=true');
             if (resp && resp.ok) {
                 loadData();
+            } else {
+                var errMsg = 'Failed to delete node.';
+                try { var d = await resp.json(); if (d.error) errMsg = d.error; } catch(e) {}
+                alert(errMsg);
             }
         }
 

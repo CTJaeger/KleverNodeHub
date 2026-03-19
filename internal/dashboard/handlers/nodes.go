@@ -148,6 +148,37 @@ func (h *NodeHandler) executeNodeCommand(nodeID, action string) batchResultEntry
 	return result
 }
 
+// HandleDelete removes a node. If ?remove_container=true, it first sends
+// node.remove to the agent to stop and remove the Docker container.
+// DELETE /api/nodes/{id}
+func (h *NodeHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing node ID"})
+		return
+	}
+
+	removeContainer := r.URL.Query().Get("remove_container") == "true"
+
+	if removeContainer {
+		// Try to remove the Docker container via the agent
+		result := h.executeNodeCommand(id, "node.remove")
+		if !result.Success && result.Error != "" && !containsOffline(result.Error) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "failed to remove container: " + result.Error,
+			})
+			return
+		}
+		// If agent is offline, still delete the DB record (user can clean up manually)
+	}
+
+	if err := h.nodeStore.Delete(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // extractNodeID extracts the node ID from the URL path.
 // Expects URL pattern: /api/nodes/{id}/action
 func extractNodeID(r *http.Request) string {
