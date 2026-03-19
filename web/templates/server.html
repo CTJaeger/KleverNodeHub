@@ -496,7 +496,11 @@
         }
 
         async function deleteNode(id, name) {
-            if (!confirm('Delete node "' + name + '"?\nThis will stop and remove the Docker container.')) return;
+            var node = (nodes || []).find(function(n) { return n.id === id; });
+            var container = node ? (node.container_name || '-') : '-';
+            var status = node ? (node.status || 'unknown') : 'unknown';
+            var msg = 'Delete node "' + name + '"?\n\nContainer: ' + container + '\nStatus: ' + status + '\n\nThis will stop and remove the Docker container.';
+            if (!confirm(msg)) return;
             var resp = await API.delete('/api/nodes/' + id + '?remove_container=true');
             if (resp && resp.ok) {
                 loadData();
