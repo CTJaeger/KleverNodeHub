@@ -125,14 +125,14 @@ func (p *Provisioner) stepPreflight(ctx context.Context) error {
 		return fmt.Errorf("docker not accessible: %w", err)
 	}
 
-	// Check port availability
+	// Find available port — auto-assign next free if requested port is taken
 	port := p.req.Port
 	if port <= 0 {
 		port = 8080
 	}
-	if !IsPortAvailable(port) {
-		return fmt.Errorf("port %d is already in use", port)
-	}
+	port = FindAvailablePort(port)
+	p.req.Port = port
+	log.Printf("provisioning: using REST API port %d", port)
 
 	// Check node name is not empty
 	if p.req.NodeName == "" {
