@@ -286,6 +286,26 @@ func ParseOSArch(osInfo string) (string, string) {
 	return parseOSArch(osInfo)
 }
 
+// parseAgentAssetName checks if a release asset name is an agent binary
+// and extracts the OS and arch. Supports both "agent-linux-amd64" and
+// "klever-agent-linux-amd64" naming conventions.
+func parseAgentAssetName(name string) (osName, arch string, ok bool) {
+	var suffix string
+	switch {
+	case strings.HasPrefix(name, "klever-agent-"):
+		suffix = strings.TrimPrefix(name, "klever-agent-")
+	case strings.HasPrefix(name, "agent-"):
+		suffix = strings.TrimPrefix(name, "agent-")
+	default:
+		return "", "", false
+	}
+	parts := strings.Split(suffix, "-")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".exe"), true
+}
+
 // HandleGitHubReleases handles GET /api/agent/releases
 // Returns available releases from GitHub with agent binary assets.
 func (h *UpdateHandler) HandleGitHubReleases(w http.ResponseWriter, _ *http.Request) {
@@ -314,15 +334,9 @@ func (h *UpdateHandler) HandleGitHubReleases(w http.ResponseWriter, _ *http.Requ
 	for _, rel := range releases {
 		var agentAssets []assetInfo
 		for _, a := range rel.Assets {
-			if !strings.HasPrefix(a.Name, "klever-agent-") {
+			osName, arch, isAgent := parseAgentAssetName(a.Name)
+			if !isAgent {
 				continue
-			}
-			// Parse OS/arch from name: klever-agent-linux-amd64
-			parts := strings.Split(strings.TrimPrefix(a.Name, "klever-agent-"), "-")
-			osName, arch := "", ""
-			if len(parts) >= 2 {
-				osName = parts[0]
-				arch = parts[1]
 			}
 			agentAssets = append(agentAssets, assetInfo{
 				Name: a.Name,
@@ -393,7 +407,7 @@ func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http
 	}
 
 	// Try to verify checksum if checksums file is available
-	// URL format: https://github.com/CTJaeger/KleverNodeHub/releases/download/v0.3.3/klever-agent-linux-amd64
+	// URL format: https://github.com/CTJaeger/KleverNodeHub/releases/download/v0.3.3/agent-linux-amd64
 	urlParts := strings.Split(req.URL, "/")
 	if len(urlParts) >= 2 {
 		tag := urlParts[len(urlParts)-2]
@@ -482,16 +496,10 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 	var results []dlResult
 
 	for _, asset := range targetRelease.Assets {
-		if !strings.HasPrefix(asset.Name, "klever-agent-") {
+		osName, arch, isAgent := parseAgentAssetName(asset.Name)
+		if !isAgent {
 			continue
 		}
-		parts := strings.Split(strings.TrimPrefix(asset.Name, "klever-agent-"), "-")
-		if len(parts) < 2 {
-			continue
-		}
-		osName, arch := parts[0], parts[1]
-		// Strip .exe suffix from arch
-		arch = strings.TrimSuffix(arch, ".exe")
 
 		if !needed[osName+"/"+arch] {
 			continue
