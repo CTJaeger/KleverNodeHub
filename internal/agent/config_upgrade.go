@@ -224,13 +224,13 @@ func extractTOMLValue(content, key string) string {
 // downloadNewConfigs downloads configs to tmpDir from primary or fallback source.
 // Returns the source name ("primary" or "fallback").
 func downloadNewConfigs(ctx context.Context, network, tmpDir string) (string, error) {
-	configURL, ok := configURLs[network]
+	src, ok := configSources[network]
 	if !ok {
-		configURL = configURLs["mainnet"] // default to mainnet
+		src = configSources["mainnet"] // default to mainnet
 	}
 
 	// Try primary: official tar.gz archive
-	if err := downloadAndExtractConfig(ctx, configURL, tmpDir); err == nil {
+	if err := downloadAndExtractConfig(ctx, src.URL, tmpDir, src.StripComponents); err == nil {
 		return "primary", nil
 	}
 

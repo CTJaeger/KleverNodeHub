@@ -22,10 +22,18 @@ const (
 	provisionTimeout   = 10 * time.Minute
 )
 
-// Config URLs for official Klever node configuration archives.
-var configURLs = map[string]string{
-	"mainnet": "https://backup.mainnet.klever.org/config.mainnet.108.tar.gz",
-	"testnet": "https://backup.testnet.klever.org/config.testnet.109.tar.gz",
+// configSource holds the URL and archive strip depth for a network's config archive.
+type configSource struct {
+	URL             string
+	StripComponents int // number of leading path components to strip from the tar archive
+}
+
+// Config sources for official Klever node configuration archives.
+// Mainnet archives have structure: config/*.yaml (strip 1)
+// Testnet archives have structure: config/node/*.yaml (strip 2)
+var configSources = map[string]configSource{
+	"mainnet": {"https://backup.mainnet.klever.org/config.mainnet.108.tar.gz", 1},
+	"testnet": {"https://backup.testnet.klever.org/config.testnet.109.tar.gz", 2},
 }
 
 // ProvisionStep represents a single provisioning step.
@@ -162,7 +170,7 @@ func (p *Provisioner) stepCreateDirs(ctx context.Context) error {
 
 // stepDownloadConfig downloads and extracts the official Klever config archive.
 func (p *Provisioner) stepDownloadConfig(ctx context.Context) error {
-	configURL, ok := configURLs[p.req.Network]
+	src, ok := configSources[p.req.Network]
 	if !ok {
 		return fmt.Errorf("unknown network: %s", p.req.Network)
 	}
@@ -170,7 +178,7 @@ func (p *Provisioner) stepDownloadConfig(ctx context.Context) error {
 	configDir := filepath.Join(p.nodeDir, "config")
 
 	// Try primary: official tar.gz archive
-	if err := downloadAndExtractConfig(ctx, configURL, configDir); err != nil {
+	if err := downloadAndExtractConfig(ctx, src.URL, configDir, src.StripComponents); err != nil {
 		log.Printf("primary config download failed: %v, trying fallback...", err)
 
 		// Fallback: individual files from GitHub
@@ -210,8 +218,10 @@ func chownRecursive(dir string, uid, gid int) error {
 	})
 }
 
-// downloadAndExtractConfig downloads a tar.gz archive and extracts with strip-components=1.
-func downloadAndExtractConfig(ctx context.Context, configURL, configDir string) error {
+// downloadAndExtractConfig downloads a tar.gz archive and extracts it.
+// stripComponents removes leading path components (like tar --strip-components).
+// Mainnet archives use config/*.yaml (strip=1), testnet uses config/node/*.yaml (strip=2).
+func downloadAndExtractConfig(ctx context.Context, configURL, configDir string, stripComponents int) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, configURL, nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -227,7 +237,7 @@ func downloadAndExtractConfig(ctx context.Context, configURL, configDir string) 
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	return extractTarGz(resp.Body, configDir, 1)
+	return extractTarGz(resp.Body, configDir, stripComponents)
 }
 
 // Fallback config files from GitHub.
