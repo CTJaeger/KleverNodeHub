@@ -52,7 +52,7 @@ type containerCreateResponse struct {
 // PullImage pulls a Docker image from the registry.
 func (d *DockerClient) PullImage(ctx context.Context, image string) error {
 	u := fmt.Sprintf("http://localhost/%s/images/create?fromImage=%s",
-		dockerAPIVersion, url.QueryEscape(image))
+		d.apiVersion, url.QueryEscape(image))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
@@ -78,7 +78,7 @@ func (d *DockerClient) PullImage(ctx context.Context, image string) error {
 // PullImageWithProgress pulls a Docker image and streams progress updates.
 func (d *DockerClient) PullImageWithProgress(ctx context.Context, image string, onProgress func(status string)) error {
 	u := fmt.Sprintf("http://localhost/%s/images/create?fromImage=%s",
-		dockerAPIVersion, url.QueryEscape(image))
+		d.apiVersion, url.QueryEscape(image))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
@@ -172,7 +172,7 @@ func (d *DockerClient) CreateContainer(ctx context.Context, cfg *ContainerConfig
 	}
 
 	u := fmt.Sprintf("http://localhost/%s/containers/create?name=%s",
-		dockerAPIVersion, url.QueryEscape(cfg.Name))
+		d.apiVersion, url.QueryEscape(cfg.Name))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -210,7 +210,7 @@ func (d *DockerClient) RemoveContainer(ctx context.Context, containerName string
 	}
 
 	u := fmt.Sprintf("http://localhost/%s/containers/%s?v=false%s",
-		dockerAPIVersion, containerName, forceParam)
+		d.apiVersion, containerName, forceParam)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
 	if err != nil {
@@ -445,7 +445,7 @@ func (d *DockerClient) ListLocalImages(ctx context.Context) ([]string, error) {
 	})
 
 	u := fmt.Sprintf("http://localhost/%s/images/json?filters=%s",
-		dockerAPIVersion, url.QueryEscape(string(filterJSON)))
+		d.apiVersion, url.QueryEscape(string(filterJSON)))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

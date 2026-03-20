@@ -13,15 +13,16 @@ import (
 )
 
 const (
-	defaultDockerSocket = "/var/run/docker.sock"
-	dockerAPIVersion    = "v1.41" // Docker Engine 20.10+
-	kleverImage         = "kleverapp/klever-go"
+	defaultDockerSocket    = "/var/run/docker.sock"
+	fallbackDockerAPIVersion = "v1.44" // fallback if version detection fails
+	kleverImage            = "kleverapp/klever-go"
 )
 
 // DockerClient talks to the Docker Engine API via Unix socket.
 type DockerClient struct {
 	httpClient *http.Client
 	host       string // socket path
+	apiVersion string // detected API version (e.g. "v1.47")
 }
 
 // NewDockerClient creates a client connected to the Docker socket.
@@ -36,10 +37,48 @@ func NewDockerClient(socketPath string) *DockerClient {
 		},
 	}
 
-	return &DockerClient{
+	client := &DockerClient{
 		httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second},
 		host:       socketPath,
+		apiVersion: fallbackDockerAPIVersion,
 	}
+
+	// Auto-detect Docker API version
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if ver, err := client.detectAPIVersion(ctx); err == nil {
+		client.apiVersion = ver
+		log.Printf("Docker API version: %s", ver)
+	} else {
+		log.Printf("Docker API version detection failed, using %s: %v", fallbackDockerAPIVersion, err)
+	}
+
+	return client
+}
+
+// detectAPIVersion queries the Docker daemon for its API version.
+func (d *DockerClient) detectAPIVersion(ctx context.Context) (string, error) {
+	// /version works without API version prefix
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/version", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var info struct {
+		APIVersion string `json:"ApiVersion"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return "", err
+	}
+	if info.APIVersion == "" {
+		return "", fmt.Errorf("empty API version")
+	}
+	return "v" + info.APIVersion, nil
 }
 
 // containerJSON is the minimal subset of Docker's container inspect response.
@@ -84,7 +123,7 @@ type containerListEntry struct {
 // the container to read Config.Image which always preserves the original name.
 func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, error) {
 	u := fmt.Sprintf("http://localhost/%s/containers/json?all=true",
-		dockerAPIVersion)
+		d.apiVersion)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -132,7 +171,7 @@ func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, erro
 
 // InspectContainer returns detailed information about a container.
 func (d *DockerClient) InspectContainer(ctx context.Context, containerID string) (*containerJSON, error) {
-	u := fmt.Sprintf("http://localhost/%s/containers/%s/json", dockerAPIVersion, containerID)
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/json", d.apiVersion, containerID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -225,7 +264,7 @@ type containerStatsResult struct {
 // containerStats fetches a one-shot stats snapshot for a container.
 func (d *DockerClient) containerStats(ctx context.Context, containerID string) (*containerStatsResult, error) {
 	u := fmt.Sprintf("http://localhost/%s/containers/%s/stats?stream=false&one-shot=true",
-		dockerAPIVersion, containerID)
+		d.apiVersion, containerID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -283,7 +322,7 @@ func (d *DockerClient) containerStats(ctx context.Context, containerID string) (
 
 // StartContainer starts a stopped container.
 func (d *DockerClient) StartContainer(ctx context.Context, containerName string) error {
-	u := fmt.Sprintf("http://localhost/%s/containers/%s/start", dockerAPIVersion, containerName)
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/start", d.apiVersion, containerName)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
@@ -309,7 +348,7 @@ func (d *DockerClient) StartContainer(ctx context.Context, containerName string)
 
 // StopContainer stops a running container with a graceful timeout.
 func (d *DockerClient) StopContainer(ctx context.Context, containerName string, timeoutSec int) error {
-	u := fmt.Sprintf("http://localhost/%s/containers/%s/stop?t=%d", dockerAPIVersion, containerName, timeoutSec)
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/stop?t=%d", d.apiVersion, containerName, timeoutSec)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
@@ -335,7 +374,7 @@ func (d *DockerClient) StopContainer(ctx context.Context, containerName string, 
 
 // RestartContainer restarts a container with a graceful timeout.
 func (d *DockerClient) RestartContainer(ctx context.Context, containerName string, timeoutSec int) error {
-	u := fmt.Sprintf("http://localhost/%s/containers/%s/restart?t=%d", dockerAPIVersion, containerName, timeoutSec)
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/restart?t=%d", d.apiVersion, containerName, timeoutSec)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {

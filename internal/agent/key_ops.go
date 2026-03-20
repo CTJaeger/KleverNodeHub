@@ -146,7 +146,7 @@ func (d *DockerClient) createContainerRaw(ctx context.Context, name string, body
 	}
 
 	u := fmt.Sprintf("http://localhost/%s/containers/create?name=%s",
-		dockerAPIVersion, url.QueryEscape(name))
+		d.apiVersion, url.QueryEscape(name))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(jsonBody))
 	if err != nil {
