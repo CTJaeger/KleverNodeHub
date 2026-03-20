@@ -46,7 +46,7 @@ func (d *DockerClient) FetchLogs(ctx context.Context, containerName string, tail
 	}
 
 	u := fmt.Sprintf("http://localhost/%s/containers/%s/logs?%s",
-		dockerAPIVersion, url.PathEscape(containerName), params.Encode())
+		d.apiVersion, url.PathEscape(containerName), params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -85,7 +85,7 @@ func (d *DockerClient) StreamLogs(ctx context.Context, containerName string, sin
 	}
 
 	u := fmt.Sprintf("http://localhost/%s/containers/%s/logs?%s",
-		dockerAPIVersion, url.PathEscape(containerName), params.Encode())
+		d.apiVersion, url.PathEscape(containerName), params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
