@@ -161,15 +161,30 @@ func (h *NodeHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	removeContainer := r.URL.Query().Get("remove_container") == "true"
 
 	if removeContainer {
-		// Try to remove the Docker container via the agent
 		result := h.executeNodeCommand(id, "node.remove")
-		if !result.Success && result.Error != "" && !containsOffline(result.Error) {
+		if !result.Success {
+			errMsg := result.Error
+			if errMsg == "" {
+				errMsg = "unknown error"
+			}
+			if containsOffline(errMsg) {
+				// Agent offline — only delete DB record, warn user
+				if err := h.nodeStore.Delete(id); err != nil {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status":  "deleted",
+					"warning": "Agent offline — removed from dashboard only. Container may still exist on the server.",
+				})
+				return
+			}
+			// Container removal failed — do NOT delete DB record
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "failed to remove container: " + result.Error,
+				"error": "failed to remove container: " + errMsg,
 			})
 			return
 		}
-		// If agent is offline, still delete the DB record (user can clean up manually)
 	}
 
 	if err := h.nodeStore.Delete(id); err != nil {
