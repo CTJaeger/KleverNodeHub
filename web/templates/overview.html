@@ -1299,6 +1299,18 @@
         var downloadedVersions = [];
         var githubReleases = [];
 
+        // Sort version strings descending (newest first). Handles v0.3.25 format.
+        function sortVersionsDesc(arr) {
+            return arr.slice().sort(function(a, b) {
+                var pa = (a.replace(/^v/, '')).split('.').map(Number);
+                var pb = (b.replace(/^v/, '')).split('.').map(Number);
+                for (var i = 0; i < 3; i++) {
+                    if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0);
+                }
+                return 0;
+            });
+        }
+
         function showAgentUpdate() {
             document.getElementById('modal-agent-update').classList.add('active');
             loadGitHubReleases();
@@ -1327,6 +1339,7 @@
             if (allSel) {
                 var cur = allSel.value;
                 allSel.innerHTML = '';
+                downloadedVersions = sortVersionsDesc(downloadedVersions);
                 if (downloadedVersions.length === 0) {
                     var opt = document.createElement('option');
                     opt.value = '';
@@ -1501,6 +1514,14 @@
             try {
                 var data = await API.getJSON('/api/agent/releases');
                 githubReleases = (data && data.releases) ? data.releases : [];
+                githubReleases.sort(function(a, b) {
+                    var pa = (a.tag_name.replace(/^v/, '')).split('.').map(Number);
+                    var pb = (b.tag_name.replace(/^v/, '')).split('.').map(Number);
+                    for (var i = 0; i < 3; i++) {
+                        if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0);
+                    }
+                    return 0;
+                });
                 sel.innerHTML = '';
                 if (githubReleases.length === 0) {
                     sel.innerHTML = '<option value="">No releases</option>';
