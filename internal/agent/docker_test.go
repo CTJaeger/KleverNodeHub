@@ -302,8 +302,8 @@ func TestDiscoverNodesMultiple(t *testing.T) {
 	defer sockCleanup()
 
 	listResponse := []containerListEntry{
-		{ID: "c1", Names: []string{"/klever-node1"}, State: "running"},
-		{ID: "c2", Names: []string{"/klever-backup"}, State: "exited"},
+		{ID: "c1", Names: []string{"/klever-node1"}, Image: "kleverapp/klever-go:v0.60.0", State: "running"},
+		{ID: "c2", Names: []string{"/klever-backup"}, Image: "kleverapp/klever-go:v0.59.0", State: "exited"},
 	}
 
 	inspectC1 := containerJSON{ID: "c1", Name: "/klever-node1"}
