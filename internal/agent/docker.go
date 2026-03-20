@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -77,14 +76,12 @@ type containerListEntry struct {
 }
 
 // ListKleverContainers returns IDs of all containers using the klever-go image.
+// We list ALL containers and filter by image name ourselves, because Docker's
+// "ancestor" filter matches by image ID which can miss containers created from
+// a different pull/digest of the same image name.
 func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, error) {
-	// List all containers (including stopped) filtered by ancestor image
-	filterJSON, _ := json.Marshal(map[string][]string{
-		"ancestor": {kleverImage},
-	})
-
-	u := fmt.Sprintf("http://localhost/%s/containers/json?all=true&filters=%s",
-		dockerAPIVersion, url.QueryEscape(string(filterJSON)))
+	u := fmt.Sprintf("http://localhost/%s/containers/json?all=true",
+		dockerAPIVersion)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -109,7 +106,10 @@ func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, erro
 
 	ids := make([]string, 0, len(entries))
 	for _, e := range entries {
-		ids = append(ids, e.ID)
+		// Match image name with or without tag (e.g. "kleverapp/klever-go:v1.7.15")
+		if e.Image == kleverImage || strings.HasPrefix(e.Image, kleverImage+":") {
+			ids = append(ids, e.ID)
+		}
 	}
 	return ids, nil
 }
