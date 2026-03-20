@@ -1170,8 +1170,9 @@
         }
 
         async function startProvision() {
+            const serverSel = document.getElementById('prov-server');
             const req = {
-                server_id: document.getElementById('prov-server').value,
+                server_id: serverSel.value,
                 node_name: document.getElementById('prov-name').value,
                 network: document.getElementById('prov-network').value,
                 image_tag: document.getElementById('prov-tag').value,
@@ -1182,10 +1183,26 @@
             const displayName = document.getElementById('prov-display-name').value;
             if (displayName) req.config_overrides.NodeDisplayName = displayName;
 
+            if (!req.server_id) {
+                alert('No server selected. Is any server online?');
+                return;
+            }
             if (!req.node_name) {
                 alert('Node name is required');
                 return;
             }
+
+            // Safety confirmation showing exactly which server
+            var serverName = serverSel.options[serverSel.selectedIndex].textContent;
+            var details = '<table style="width:100%;margin:10px 0;font-size:0.85rem;border-collapse:collapse;">' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Server</td><td style="padding:4px 8px;font-weight:600;">' + esc(serverName) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Node Name</td><td style="padding:4px 8px;font-family:monospace;">' + esc(req.node_name) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Network</td><td style="padding:4px 8px;">' + esc(req.network) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Image</td><td style="padding:4px 8px;">' + esc(req.image_tag) + '</td></tr>' +
+                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Port</td><td style="padding:4px 8px;">' + req.port + '</td></tr>' +
+                '</table>';
+            var ok = await showConfirm('Confirm Provisioning', details, 'Deploy', 'btn-primary');
+            if (!ok) return;
 
             // Switch to progress view
             document.getElementById('prov-step-config').classList.add('hidden');
