@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	defaultDockerSocket    = "/var/run/docker.sock"
+	defaultDockerSocket      = "/var/run/docker.sock"
 	fallbackDockerAPIVersion = "v1.44" // fallback if version detection fails
-	kleverImage            = "kleverapp/klever-go"
+	kleverImage              = "kleverapp/klever-go"
 )
 
 // DockerClient talks to the Docker Engine API via Unix socket.
