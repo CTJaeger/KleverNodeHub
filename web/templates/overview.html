@@ -796,7 +796,7 @@
         }
 
         // --- Confirm dialog (Promise-based) ---
-        function showConfirm(title, message, confirmLabel, btnClass) {
+        function showConfirm(title, message, confirmLabel, btnClass, beforeClose) {
             return new Promise(function(resolve) {
                 var overlay = document.createElement('div');
                 overlay.className = 'confirm-overlay';
@@ -815,6 +815,7 @@
                     resolve(false);
                 };
                 overlay.querySelector('#confirm-ok').onclick = function() {
+                    if (beforeClose) beforeClose();
                     overlay.remove();
                     resolve(true);
                 };
@@ -856,10 +857,13 @@
                 '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
                 '<input type="checkbox" id="delete-remove-container" checked> Also stop &amp; remove the Docker container</label>';
 
-            var ok = await showConfirm('Delete Node', details, 'Delete', 'btn-danger');
+            // Read checkbox BEFORE showConfirm removes the dialog from DOM
+            var removeContainer = false;
+            var ok = await showConfirm('Delete Node', details, 'Delete', 'btn-danger', function() {
+                var cb = document.getElementById('delete-remove-container');
+                removeContainer = cb ? cb.checked : false;
+            })
             if (!ok) return;
-            var removeCb = document.getElementById('delete-remove-container');
-            var removeContainer = removeCb ? removeCb.checked : false;
             var url = '/api/nodes/' + id;
             if (removeContainer) url += '?remove_container=true';
             const resp = await API.delete(url);

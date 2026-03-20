@@ -79,6 +79,9 @@ type containerListEntry struct {
 // We list ALL containers and filter by image name ourselves, because Docker's
 // "ancestor" filter matches by image ID which can miss containers created from
 // a different pull/digest of the same image name.
+// When Docker returns a sha256 digest instead of the image name (happens when the
+// original tag is removed after pulling a newer version), we fall back to inspecting
+// the container to read Config.Image which always preserves the original name.
 func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, error) {
 	u := fmt.Sprintf("http://localhost/%s/containers/json?all=true",
 		dockerAPIVersion)
@@ -109,6 +112,19 @@ func (d *DockerClient) ListKleverContainers(ctx context.Context) ([]string, erro
 		// Match image name with or without tag (e.g. "kleverapp/klever-go:v1.7.15")
 		if e.Image == kleverImage || strings.HasPrefix(e.Image, kleverImage+":") {
 			ids = append(ids, e.ID)
+			continue
+		}
+		// Docker sometimes returns sha256 digest instead of image name when the
+		// tag was removed locally. Fall back to inspect to get Config.Image.
+		if strings.HasPrefix(e.Image, "sha256:") {
+			cj, err := d.InspectContainer(ctx, e.ID)
+			if err != nil {
+				continue
+			}
+			img := cj.Config.Image
+			if img == kleverImage || strings.HasPrefix(img, kleverImage+":") {
+				ids = append(ids, e.ID)
+			}
 		}
 	}
 	return ids, nil
