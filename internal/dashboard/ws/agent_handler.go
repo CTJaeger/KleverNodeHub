@@ -176,8 +176,15 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 	}
 
 	log.Printf("discovery from %s: %d nodes found", serverID, len(report.Nodes))
+	for _, d := range report.Nodes {
+		log.Printf("  discovered: container=%q display=%q status=%s", d.ContainerName, d.DisplayName, d.Status)
+	}
 
 	existing, _ := h.nodeStore.ListByServer(serverID)
+	log.Printf("discovery: %d existing nodes in DB for server %s", len(existing), serverID)
+	for _, e := range existing {
+		log.Printf("  existing: id=%s container=%q display=%q", e.ID, e.ContainerName, e.DisplayName)
+	}
 
 	for _, discovered := range report.Nodes {
 		meta := map[string]any{
@@ -197,7 +204,9 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				existing[i].DataDirectory = discovered.DataDirectory
 				existing[i].BLSPublicKey = discovered.BLSPublicKey
 				existing[i].Metadata = meta
-				_ = h.nodeStore.Update(&existing[i])
+				if err := h.nodeStore.Update(&existing[i]); err != nil {
+					log.Printf("discovery: failed to update node %q: %v", discovered.ContainerName, err)
+				}
 				break
 			}
 		}
@@ -207,7 +216,8 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 			if discovered.RedundancyLevel > 0 {
 				nodeType = "observer"
 			}
-			_ = h.nodeStore.Create(&models.Node{
+			log.Printf("discovery: new node %q (container: %s) on server %s", discovered.DisplayName, discovered.ContainerName, serverID)
+			if err := h.nodeStore.Create(&models.Node{
 				ID:              fmt.Sprintf("node-%s-%d", discovered.ContainerName, time.Now().UnixNano()),
 				ServerID:        serverID,
 				Name:            discovered.DisplayName,
@@ -222,7 +232,9 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				Status:          discovered.Status,
 				Metadata:        meta,
 				CreatedAt:       time.Now().Unix(),
-			})
+			}); err != nil {
+				log.Printf("discovery: failed to create node %q: %v", discovered.ContainerName, err)
+			}
 		}
 	}
 }

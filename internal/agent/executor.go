@@ -75,7 +75,7 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 	case "node.create":
 		err = e.executeCreate(ctx, msg.Payload, result)
 	case "node.remove":
-		err = e.docker.RemoveContainer(ctx, containerName, false)
+		err = e.docker.RemoveContainer(ctx, containerName, true)
 	case "node.upgrade":
 		imageTag := extractStringField(msg.Payload, "image_tag")
 		if imageTag == "" {
