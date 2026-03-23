@@ -308,9 +308,9 @@ func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
 
 	// Resolve container name to dashboard node ID and merge metrics into node metadata
 	nodeID := evt.NodeID
-	node, err := h.nodeStore.GetByContainerID(evt.NodeID)
+	node, err := h.nodeStore.GetByContainerAndServer(evt.NodeID, evt.ServerID)
 	if err != nil {
-		log.Printf("node metrics: container %q not found in DB: %v", evt.NodeID, err)
+		log.Printf("node metrics: container %q on server %q not found in DB: %v", evt.NodeID, evt.ServerID, err)
 	} else {
 		nodeID = node.ID
 
