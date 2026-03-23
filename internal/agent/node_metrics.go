@@ -260,15 +260,25 @@ func (c *NodeMetricsCollector) PollInterval() time.Duration {
 // It sends metrics and stall events to the provided channels.
 // The goroutine stops when ctx is canceled.
 func (c *NodeMetricsCollector) RunPoller(ctx context.Context, serverID string, metricsCh chan<- *models.Message, stallCh chan<- *models.Message) {
+	c.mu.RLock()
+	nodeCount := len(c.nodes)
+	c.mu.RUnlock()
+	log.Printf("node metrics poller started: %d nodes, interval=%s", nodeCount, c.pollInterval)
+
 	ticker := time.NewTicker(c.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("node metrics poller stopped: context cancelled")
 			return
 		case <-ticker.C:
+			c.mu.RLock()
+			n := len(c.nodes)
+			c.mu.RUnlock()
 			events, stalls := c.CollectAll(serverID)
+			log.Printf("node metrics poll: %d nodes registered, %d events, %d stalls", n, len(events), len(stalls))
 
 			for _, evt := range events {
 				msg := &models.Message{
