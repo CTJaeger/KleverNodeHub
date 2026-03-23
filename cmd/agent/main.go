@@ -125,7 +125,11 @@ func main() {
 
 // runAgentLoop connects to the dashboard and runs the message pump until disconnected.
 func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string, publicIP string) error {
-	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
+	// Create a loop-scoped context so all goroutines (poller, sender) stop on disconnect
+	loopCtx, loopCancel := context.WithCancel(ctx)
+	defer loopCancel()
+
+	dialCtx, dialCancel := context.WithTimeout(loopCtx, 15*time.Second)
 	defer dialCancel()
 
 	tlsConfig, err := ag.TLSConfig()
@@ -150,7 +154,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 
 	// Send agent info on connect
 	infoMsg := ag.BuildInfoMessage(publicIP)
-	if err := writeMessage(ctx, conn, infoMsg); err != nil {
+	if err := writeMessage(loopCtx, conn, infoMsg); err != nil {
 		return fmt.Errorf("send agent info: %w", err)
 	}
 
@@ -158,7 +162,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	go func() {
 		report := ag.RunDiscovery(dockerSocket)
 		discoveryMsg := ag.BuildDiscoveryMessage(report)
-		if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
+		if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
 			log.Printf("send discovery: %v", err)
 		}
 		log.Printf("initial discovery: %d nodes found", len(report.Nodes))
@@ -183,14 +187,14 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	nodeMetricsCh := make(chan *models.Message, 32)
 	nodeStallCh := make(chan *models.Message, 8)
 
-	// Start node metrics poller
-	go nodeMetrics.RunPoller(ctx, ag.Config().ServerID, nodeMetricsCh, nodeStallCh)
+	// Start node metrics poller (uses loopCtx so it stops on disconnect)
+	go nodeMetrics.RunPoller(loopCtx, ag.Config().ServerID, nodeMetricsCh, nodeStallCh)
 
 	// Heartbeat + discovery + node metrics sender
 	go func() {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-loopCtx.Done():
 				return
 			case <-heartbeatTicker.C:
 				hb := &models.Message{
@@ -204,14 +208,14 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					},
 					Timestamp: time.Now().Unix(),
 				}
-				if err := writeMessage(ctx, conn, hb); err != nil {
+				if err := writeMessage(loopCtx, conn, hb); err != nil {
 					log.Printf("send heartbeat: %v", err)
 					return
 				}
 			case <-discoveryTicker.C:
 				report := ag.RunDiscovery(dockerSocket)
 				discoveryMsg := ag.BuildDiscoveryMessage(report)
-				if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
+				if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
 					log.Printf("send discovery: %v", err)
 					return
 				}
@@ -220,24 +224,24 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 				log.Printf("triggered immediate discovery")
 				report := ag.RunDiscovery(dockerSocket)
 				discoveryMsg := ag.BuildDiscoveryMessage(report)
-				if err := writeMessage(ctx, conn, discoveryMsg); err != nil {
+				if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
 					log.Printf("send discovery: %v", err)
 					return
 				}
 				nodeMetrics.UpdateNodes(report)
 			case msg := <-nodeMetricsCh:
-				if err := writeMessage(ctx, conn, msg); err != nil {
+				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send node metrics: %v", err)
 					return
 				}
 			case msg := <-nodeStallCh:
 				log.Printf("ALERT: nonce stall detected — %s", msg.ID)
-				if err := writeMessage(ctx, conn, msg); err != nil {
+				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send stall alert: %v", err)
 					return
 				}
 			case msg := <-resultCh:
-				if err := writeMessage(ctx, conn, msg); err != nil {
+				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send result: %v", err)
 					return
 				}
@@ -247,7 +251,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 
 	// Read loop: receive commands from dashboard
 	for {
-		_, data, err := conn.Read(ctx)
+		_, data, err := conn.Read(loopCtx)
 		if err != nil {
 			return fmt.Errorf("read: %w", err)
 		}
@@ -265,7 +269,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 				resultMsg := agent.BuildResultMessage(result)
 				select {
 				case resultCh <- resultMsg:
-				case <-ctx.Done():
+				case <-loopCtx.Done():
 				}
 				// Trigger immediate discovery after provisioning
 				if m.Action == "node.provision" && result.Success {

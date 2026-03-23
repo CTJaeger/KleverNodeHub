@@ -6,6 +6,7 @@
 - **Batch Upgrade Progressbar**: Statt eines einzelnen Batch-Requests werden Nodes jetzt sequentiell einzeln upgraded, mit einer visuellen Progressbar (aktueller Node, X/Y, Prozentzahl). Config-Updates haben eigene Progress-Phase. Erfolg/Fehler wird pro Node angezeigt.
 - **Version-Spalte in Node-Liste**: Neue "Version"-Spalte zeigt den Docker Image Tag (Softwarestand) jeder Node direkt in der Übersichtstabelle. Wird bei schmalen Screens ausgeblendet.
 - **Fix: Klever-Metriken (Nonce/Sync) in Node-Metadata mergen**: `handleNodeMetrics` schreibt jetzt `klv_nonce`, `klv_is_syncing` etc. auch in die Node-Metadata, sodass die Overview-Tabelle sie anzeigen kann. Vorher wurden sie nur in den MetricsStore (Zeitreihen) geschrieben.
+- **Fix: Node metrics poller stops after reconnect**: `runAgentLoop` verwendet jetzt einen loop-spezifischen Context. Vorher teilten sich alte und neue Poller-Goroutines den gleichen top-level Context → nach Reconnect schrieb der alte Poller in einen toten Channel und der neue startete mit leerer Node-Liste.
 
 ### 2026-03-13
 - **Agent Update Modal Redesign** (v2):
