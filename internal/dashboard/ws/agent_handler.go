@@ -308,7 +308,10 @@ func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
 
 	// Resolve container name to dashboard node ID and merge metrics into node metadata
 	nodeID := evt.NodeID
-	if node, err := h.nodeStore.GetByContainerID(evt.NodeID); err == nil {
+	node, err := h.nodeStore.GetByContainerID(evt.NodeID)
+	if err != nil {
+		log.Printf("node metrics: container %q not found in DB: %v", evt.NodeID, err)
+	} else {
 		nodeID = node.ID
 
 		// Merge Klever metrics into node metadata so the overview can display them
