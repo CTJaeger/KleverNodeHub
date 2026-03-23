@@ -63,6 +63,9 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 
+	// Force a fresh check so assets are up-to-date (CI may still be uploading when the user clicks update).
+	h.versionChecker.ForceCheck()
+
 	latest := h.versionChecker.Latest()
 	if latest == nil || !latest.HasUpdate {
 		writeJSON(w, http.StatusOK, map[string]any{
