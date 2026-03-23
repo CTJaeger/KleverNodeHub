@@ -39,10 +39,10 @@ SSH_KEY ?=
 SSH_OPTS := $(if $(SSH_KEY),-i $(SSH_KEY),)
 
 build-linux-dashboard: $(BIN_DIR)
-	GOOS=$(LINUX_GOOS) GOARCH=$(LINUX_GOARCH) go build -ldflags="$(LDFLAGS)" -o $(LINUX_DASHBOARD_BIN) ./cmd/dashboard
+	CGO_ENABLED=0 GOOS=$(LINUX_GOOS) GOARCH=$(LINUX_GOARCH) go build -ldflags="$(LDFLAGS)" -o $(LINUX_DASHBOARD_BIN) ./cmd/dashboard
 
 build-linux-agent: $(BIN_DIR)
-	GOOS=$(LINUX_GOOS) GOARCH=$(LINUX_GOARCH) go build -ldflags="$(LDFLAGS)" -o $(LINUX_AGENT_BIN) ./cmd/agent
+	CGO_ENABLED=0 GOOS=$(LINUX_GOOS) GOARCH=$(LINUX_GOARCH) go build -ldflags="$(LDFLAGS)" -o $(LINUX_AGENT_BIN) ./cmd/agent
 
 build-linux: build-linux-dashboard build-linux-agent
 
