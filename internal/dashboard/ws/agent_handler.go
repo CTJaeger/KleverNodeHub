@@ -299,10 +299,19 @@ func (h *AgentHandler) handleNodeMetrics(msg *models.Message) {
 		return
 	}
 
-	// Resolve container name to dashboard node ID
+	// Resolve container name to dashboard node ID and merge metrics into node metadata
 	nodeID := evt.NodeID
 	if node, err := h.nodeStore.GetByContainerID(evt.NodeID); err == nil {
 		nodeID = node.ID
+
+		// Merge Klever metrics into node metadata so the overview can display them
+		if node.Metadata == nil {
+			node.Metadata = make(map[string]any)
+		}
+		for k, v := range numeric {
+			node.Metadata[k] = v
+		}
+		_ = h.nodeStore.Update(node)
 	}
 
 	if err := h.metricsStore.InsertNodeMetrics(nodeID, evt.ServerID, numeric, evt.CollectedAt); err != nil {
