@@ -59,11 +59,21 @@ func (s *NodeStore) GetByID(id string) (*models.Node, error) {
 	return scanNode(row)
 }
 
-// GetByContainerID retrieves a node by its Docker container ID.
+// GetByContainerID retrieves a node by its Docker container name.
+// Deprecated: Use GetByContainerAndServer for unambiguous lookups.
 func (s *NodeStore) GetByContainerID(containerID string) (*models.Node, error) {
 	row := s.db.db.QueryRow(`
 		SELECT id, server_id, name, container_name, node_type, redundancy_level, rest_api_port, display_name, docker_image_tag, data_directory, bls_public_key, status, created_at, updated_at, metadata
 		FROM nodes WHERE container_name = ?`, containerID)
+
+	return scanNode(row)
+}
+
+// GetByContainerAndServer retrieves a node by container name scoped to a specific server.
+func (s *NodeStore) GetByContainerAndServer(containerName, serverID string) (*models.Node, error) {
+	row := s.db.db.QueryRow(`
+		SELECT id, server_id, name, container_name, node_type, redundancy_level, rest_api_port, display_name, docker_image_tag, data_directory, bls_public_key, status, created_at, updated_at, metadata
+		FROM nodes WHERE container_name = ? AND server_id = ?`, containerName, serverID)
 
 	return scanNode(row)
 }
