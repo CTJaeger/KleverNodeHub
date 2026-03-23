@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-03-22
+- **Batch Upgrade Progressbar**: Statt eines einzelnen Batch-Requests werden Nodes jetzt sequentiell einzeln upgraded, mit einer visuellen Progressbar (aktueller Node, X/Y, Prozentzahl). Config-Updates haben eigene Progress-Phase. Erfolg/Fehler wird pro Node angezeigt.
+- **Version-Spalte in Node-Liste**: Neue "Version"-Spalte zeigt den Docker Image Tag (Softwarestand) jeder Node direkt in der Übersichtstabelle. Wird bei schmalen Screens ausgeblendet.
+
 ### 2026-03-13
 - **Agent Update Modal Redesign** (v2):
   - "Available Versions": single dropdown + Download/Notes/Refresh (no table, no badges)
