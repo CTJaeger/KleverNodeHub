@@ -203,7 +203,14 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				existing[i].RestAPIPort = discovered.RestAPIPort
 				existing[i].DataDirectory = discovered.DataDirectory
 				existing[i].BLSPublicKey = discovered.BLSPublicKey
-				existing[i].Metadata = meta
+				// Merge Docker stats into existing metadata (preserve Klever metrics)
+				if existing[i].Metadata == nil {
+					existing[i].Metadata = meta
+				} else {
+					for k, v := range meta {
+						existing[i].Metadata[k] = v
+					}
+				}
 				if err := h.nodeStore.Update(&existing[i]); err != nil {
 					log.Printf("discovery: failed to update node %q: %v", discovered.ContainerName, err)
 				}
