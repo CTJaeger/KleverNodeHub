@@ -272,7 +272,17 @@
                                 <span class="text-sm">Update config files (backup current configs first)</span>
                             </label>
                         </div>
-                        <button class="btn btn-primary" onclick="executeBatchUpgrade()">Upgrade Selected Nodes</button>
+                        <button class="btn btn-primary" id="batch-upgrade-btn" onclick="executeBatchUpgrade()">Upgrade Selected Nodes</button>
+                        <div id="batch-upgrade-progress" class="mt-16 hidden">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                                <span id="batch-upgrade-progress-label" class="text-sm text-muted">0 / 0</span>
+                                <span id="batch-upgrade-progress-pct" class="text-sm" style="margin-left:auto;font-weight:600;">0%</span>
+                            </div>
+                            <div style="width:100%;height:8px;background:rgba(123,146,191,0.15);border-radius:4px;overflow:hidden;">
+                                <div id="batch-upgrade-progress-bar" style="width:0%;height:100%;background:var(--accent);border-radius:4px;transition:width 0.3s ease;"></div>
+                            </div>
+                            <div id="batch-upgrade-progress-current" class="text-sm text-muted mt-8" style="min-height:20px;"></div>
+                        </div>
                         <div id="batch-upgrade-status" class="mt-16 hidden"></div>
                     </div>
                 </div>
@@ -518,6 +528,7 @@
                     '<div class="node-table-head-cell">Node</div>' +
                     '<div class="node-table-head-cell">Server</div>' +
                     '<div class="node-table-head-cell">Type</div>' +
+                    '<div class="node-table-head-cell">Version</div>' +
                     '<div class="node-table-head-cell">Nonce</div>' +
                     '<div class="node-table-head-cell">Sync</div>' +
                     '<div class="node-table-head-cell">CPU</div>' +
@@ -564,6 +575,7 @@
                     '</div>' +
                     '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
                     '<div class="node-cell" data-label="Type">' + esc(n.node_type || '-') + '</div>' +
+                    '<div class="node-cell node-cell-mono" data-label="Version">' + esc(n.docker_image_tag || '-') + '</div>' +
                     '<div class="node-cell node-cell-mono" data-label="Nonce">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</div>' +
                     '<div class="node-cell" data-label="Sync">' +
                         syncHtml +
@@ -1040,6 +1052,11 @@
             if (selectedNodeIds.size === 0) return;
             document.getElementById('batch-upgrade-count').textContent = selectedNodeIds.size;
             document.getElementById('batch-upgrade-status').classList.add('hidden');
+            document.getElementById('batch-upgrade-progress').classList.add('hidden');
+            var bar = document.getElementById('batch-upgrade-progress-bar');
+            bar.style.width = '0%';
+            bar.style.background = 'var(--accent)';
+            document.getElementById('batch-upgrade-btn').disabled = false;
             document.getElementById('modal-batch-upgrade').classList.add('active');
             loadBatchUpgradeTags();
         }
@@ -1069,40 +1086,94 @@
             if (!tag) return;
             if (!confirm('Upgrade ' + nodeIds.length + ' node(s) to ' + tag + '?')) return;
 
+            // Build node name map for progress display
+            var nodeNameMap = {};
+            (nodes || []).forEach(function(n) { nodeNameMap[n.id] = n.display_name || n.name || n.container_name || n.id; });
+
+            var btn = document.getElementById('batch-upgrade-btn');
+            var progressWrap = document.getElementById('batch-upgrade-progress');
+            var progressBar = document.getElementById('batch-upgrade-progress-bar');
+            var progressLabel = document.getElementById('batch-upgrade-progress-label');
+            var progressPct = document.getElementById('batch-upgrade-progress-pct');
+            var progressCurrent = document.getElementById('batch-upgrade-progress-current');
             var statusEl = document.getElementById('batch-upgrade-status');
-            statusEl.classList.remove('hidden');
-            statusEl.innerHTML = '<span class="text-muted">Upgrading nodes sequentially...</span>';
 
-            var result = await API.postJSON('/api/nodes/batch/upgrade', { node_ids: nodeIds, image_tag: tag });
-            if (result && result.ok) {
-                var data = result.data;
-                var results = data.results || [];
-                var succeeded = results.filter(function(r) { return r.success; });
-                var failed = results.filter(function(r) { return !r.success; });
-                var html = '<strong>' + succeeded.length + '/' + results.length + ' upgraded.</strong>';
-                if (failed.length > 0) {
-                    html += '<br><span style="color:var(--error)">Failed: ' + failed.map(function(r) { return r.node_id + ': ' + (r.error || 'unknown'); }).join(', ') + '</span>';
+            btn.disabled = true;
+            progressWrap.classList.remove('hidden');
+            statusEl.classList.add('hidden');
+
+            var total = nodeIds.length;
+            var succeeded = [];
+            var failed = [];
+
+            function updateProgress(done, currentName, phase) {
+                var pct = Math.round((done / total) * 100);
+                progressBar.style.width = pct + '%';
+                progressLabel.textContent = done + ' / ' + total;
+                progressPct.textContent = pct + '%';
+                if (currentName) {
+                    progressCurrent.innerHTML = '<span class="text-muted">' + esc(phase || 'Upgrading') + ': </span><strong>' + esc(currentName) + '</strong>';
                 }
-
-                // Config upgrade for successful nodes
-                if (upgradeConfig && succeeded.length > 0) {
-                    html += '<br><span class="text-muted">Updating configs...</span>';
-                    statusEl.innerHTML = html;
-                    for (var i = 0; i < succeeded.length; i++) {
-                        try {
-                            await API.postJSON('/api/nodes/' + succeeded[i].node_id + '/config/upgrade', { version_label: tag });
-                        } catch (e) { /* best effort */ }
-                    }
-                    html += '<br>Config update complete.';
-                }
-
-                statusEl.innerHTML = html;
-                clearBatchSelection();
-                await loadData();
-                await loadServerMetrics();
-            } else {
-                statusEl.innerHTML = '<span style="color:var(--error)">Upgrade request failed.</span>';
             }
+
+            // Phase 1: Upgrade nodes sequentially
+            for (var i = 0; i < total; i++) {
+                var nid = nodeIds[i];
+                var name = nodeNameMap[nid] || nid;
+                updateProgress(i, name, 'Upgrading');
+                try {
+                    var result = await API.postJSON('/api/nodes/' + nid + '/upgrade', { image_tag: tag });
+                    if (result && result.ok && result.data && result.data.success !== false) {
+                        succeeded.push(nid);
+                    } else {
+                        failed.push({ id: nid, name: name, error: (result && result.data && result.data.error) || 'unknown error' });
+                    }
+                } catch (e) {
+                    failed.push({ id: nid, name: name, error: e.message || 'request failed' });
+                }
+            }
+            updateProgress(total, null);
+            progressCurrent.textContent = '';
+
+            // Phase 2: Config upgrade for successful nodes
+            if (upgradeConfig && succeeded.length > 0) {
+                progressBar.style.width = '0%';
+                progressLabel.textContent = '0 / ' + succeeded.length;
+                progressPct.textContent = '0%';
+                for (var j = 0; j < succeeded.length; j++) {
+                    var sid = succeeded[j];
+                    updateProgress(j, nodeNameMap[sid] || sid, 'Config update');
+                    try {
+                        await API.postJSON('/api/nodes/' + sid + '/config/upgrade', { version_label: tag });
+                    } catch (e) { /* best effort */ }
+                }
+                updateProgress(succeeded.length, null);
+                progressCurrent.textContent = '';
+            }
+
+            // Show final result
+            progressBar.style.width = '100%';
+            progressBar.style.background = failed.length > 0 ? 'var(--warning, #e6a817)' : 'var(--success, #22c55e)';
+            progressPct.textContent = 'Done';
+
+            var html = '<strong>' + succeeded.length + '/' + total + ' upgraded successfully.</strong>';
+            if (failed.length > 0) {
+                html += '<br><span style="color:var(--error)">Failed:</span><ul style="margin:4px 0 0 16px;padding:0;">';
+                failed.forEach(function(f) {
+                    html += '<li><strong>' + esc(f.name) + '</strong>: ' + esc(f.error) + '</li>';
+                });
+                html += '</ul>';
+            }
+            if (upgradeConfig && succeeded.length > 0) {
+                html += '<br>Config update complete.';
+            }
+            statusEl.innerHTML = html;
+            statusEl.classList.remove('hidden');
+            btn.disabled = false;
+
+            clearBatchSelection();
+            await loadData();
+            await loadServerMetrics();
         }
 
         document.addEventListener('click', function() {
