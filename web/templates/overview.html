@@ -384,33 +384,40 @@
                     <button class="modal-close-btn" onclick="hideAgentUpdate()">&times;</button>
                 </div>
                 <div class="modal-panel-body">
-                    <!-- Available Versions -->
-                    <div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            <h4 style="margin:0;">Available Versions</h4>
-                            <select id="release-version-select" class="form-input node-inline-select" style="width:auto;"></select>
-                            <button class="btn btn-sm btn-primary" id="release-download-btn" onclick="downloadSelectedRelease()" disabled>Download</button>
-                            <button class="btn btn-sm btn-ghost" id="release-notes-btn" onclick="toggleSelectedReleaseNotes()" style="display:none;">Notes</button>
-                            <button class="btn btn-sm btn-outline" onclick="loadGitHubReleases()">Refresh</button>
-                            <span id="release-status" class="text-sm text-muted"></span>
-                        </div>
-                        <pre id="release-notes-content" style="display:none;white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:8px 0 0;padding:8px;background:var(--bg-secondary);border-radius:4px;"></pre>
-                    </div>
-
                     <!-- Server Agents -->
                     <h4 style="margin-bottom:8px;">Server Agents</h4>
                     <div id="agent-version-list"></div>
-                    <div id="agent-action-bar" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-primary);border-radius:0 0 6px 6px;">
-                        <input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)">
-                        <span style="font-size:0.8rem;color:var(--text-secondary);">Select All</span>
-                        <select id="update-all-version" class="form-input node-inline-select" style="width:auto;font-size:0.8rem;padding:3px 6px;margin-left:auto;"></select>
-                        <button class="btn btn-primary btn-sm" id="btn-update-selected" onclick="updateSelectedAgents()" disabled>Update</button>
-                    </div>
+
                     <!-- Quick Update All -->
-                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                    <div style="margin-top:12px;">
                         <button class="btn btn-primary w-full" id="btn-quick-update-all" onclick="quickUpdateAllAgents()" disabled style="opacity:0.5;">
                             Update All Agents to Latest
                         </button>
+                    </div>
+
+                    <!-- Expert Settings -->
+                    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+                        <h4 style="margin:0 0 12px;color:var(--text-secondary);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.5px;">Expert Settings</h4>
+
+                        <!-- Available Versions (Release Dropdown) -->
+                        <div style="margin-bottom:16px;">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <select id="release-version-select" class="form-input node-inline-select" style="width:auto;"></select>
+                                <button class="btn btn-sm btn-primary" id="release-download-btn" onclick="downloadSelectedRelease()" disabled>Download</button>
+                                <button class="btn btn-sm btn-ghost" id="release-notes-btn" onclick="toggleSelectedReleaseNotes()" style="display:none;">Notes</button>
+                                <button class="btn btn-sm btn-outline" onclick="loadGitHubReleases()">Refresh</button>
+                                <span id="release-status" class="text-sm text-muted"></span>
+                            </div>
+                            <pre id="release-notes-content" style="display:none;white-space:pre-wrap;font-size:0.8rem;max-height:200px;overflow:auto;margin:8px 0 0;padding:8px;background:var(--bg-secondary);border-radius:4px;"></pre>
+                        </div>
+
+                        <!-- Select + Version + Update -->
+                        <div id="agent-action-bar" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-primary);border-radius:6px;">
+                            <input type="checkbox" id="agent-select-all" onchange="toggleSelectAllAgents(this.checked)">
+                            <span style="font-size:0.8rem;color:var(--text-secondary);">Select All</span>
+                            <select id="update-all-version" class="form-input node-inline-select" style="width:auto;font-size:0.8rem;padding:3px 6px;margin-left:auto;"></select>
+                            <button class="btn btn-primary btn-sm" id="btn-update-selected" onclick="updateSelectedAgents()" disabled>Update</button>
+                        </div>
                     </div>
                 </div>
             </div>

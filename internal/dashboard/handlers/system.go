@@ -55,10 +55,10 @@ func (h *SystemHandler) HandleVersionInfo(w http.ResponseWriter, _ *http.Request
 // HandleSelfUpdate downloads and applies a self-update.
 // POST /api/system/update
 func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request) {
-	if isRunningInDocker() {
+	if isRunningInDocker() && !dockerSelfUpdateAvailable() {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"success": false,
-			"message": "self-update is not available in Docker — pull the new image instead",
+			"message": "self-update requires Docker socket — mount /var/run/docker.sock",
 		})
 		return
 	}
@@ -92,6 +92,25 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 			checksumURL = a.BrowserDownloadURL
 			break
 		}
+	}
+
+	// Docker mode: pull new image and recreate container
+	if isRunningInDocker() {
+		log.Printf("self-update (docker): updating to %s", latest.TagName)
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":     true,
+			"new_version": latest.TagName,
+			"message":     "pulling image and recreating container...",
+		})
+
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if err := dockerSelfUpdate(latest.TagName); err != nil {
+				log.Printf("self-update (docker): FAILED: %v", err)
+			}
+		}()
+		return
 	}
 
 	log.Printf("self-update: downloading %s from %s", latest.TagName, downloadURL)
