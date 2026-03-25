@@ -146,6 +146,8 @@ docker run -d \
 
 On first access (`https://your-server:9443`), a setup wizard will guide you through setting a password and optionally registering a Passkey. Recovery codes are printed to the log on first run.
 
+> **Trusted HTTPS / PWA:** The dashboard uses a self-signed certificate by default. To get a trusted certificate (required for mobile PWA install), place a reverse proxy with Let's Encrypt in front of it. See the **[Reverse Proxy Setup Guide](docs/reverse-proxy.md)** for Apache, Nginx, and Caddy configurations.
+
 > **Note:** Password login works via IP address — no domain required. Passkeys require a valid domain name. Klever Extension login requires the browser extension and a linked wallet address.
 
 ### Dashboard CLI Flags
@@ -329,6 +331,7 @@ This creates a GitHub Release with pre-built binaries for all platforms and SHA2
 ## Documentation
 
 - **[Complete Guide / Tutorial](tutorial.md)** — Step-by-step walkthrough of every feature with screenshots
+- **[Reverse Proxy Setup](docs/reverse-proxy.md)** — HTTPS with Let's Encrypt via Apache, Nginx, or Caddy (required for PWA install on mobile)
 - **[Product Requirements Document](docs/PRD.md)** — Full specification with architecture, data models, API endpoints, workflows, and implementation phases
 
 ## License
