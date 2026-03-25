@@ -742,7 +742,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .node-table-head-overview,
 .node-row-grid-overview {
-    grid-template-columns: 28px minmax(100px, 1.2fr) minmax(80px, 1fr) 68px 68px 82px 86px 68px minmax(70px, 0.85fr) minmax(110px, 1.1fr) 72px 40px;
+    grid-template-columns: 28px minmax(100px, 1.2fr) minmax(80px, 1fr) 68px 76px 82px 86px 68px minmax(56px, 0.7fr) minmax(90px, 0.9fr) 72px 40px;
 }
 
 .node-table-head-server,
@@ -1378,12 +1378,12 @@ h1, h2, h3, h4, h5, h6 {
 .badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 30px;
-    padding: 0 12px;
+    gap: 5px;
+    min-height: 26px;
+    padding: 0 9px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0;
     white-space: nowrap;
