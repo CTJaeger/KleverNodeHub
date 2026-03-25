@@ -75,6 +75,25 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 
+	// Docker mode: pull new image and recreate container (no binary needed)
+	if isRunningInDocker() {
+		log.Printf("self-update (docker): updating to %s", latest.TagName)
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":     true,
+			"new_version": latest.TagName,
+			"message":     "pulling image and recreating container...",
+		})
+
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if err := dockerSelfUpdate(latest.TagName); err != nil {
+				log.Printf("self-update (docker): FAILED: %v", err)
+			}
+		}()
+		return
+	}
+
 	// Find the right asset for this OS/arch
 	downloadURL := latest.FindAsset("klever-node-hub", runtime.GOOS, runtime.GOARCH)
 	if downloadURL == "" {
@@ -92,25 +111,6 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 			checksumURL = a.BrowserDownloadURL
 			break
 		}
-	}
-
-	// Docker mode: pull new image and recreate container
-	if isRunningInDocker() {
-		log.Printf("self-update (docker): updating to %s", latest.TagName)
-
-		writeJSON(w, http.StatusOK, map[string]any{
-			"success":     true,
-			"new_version": latest.TagName,
-			"message":     "pulling image and recreating container...",
-		})
-
-		go func() {
-			time.Sleep(500 * time.Millisecond)
-			if err := dockerSelfUpdate(latest.TagName); err != nil {
-				log.Printf("self-update (docker): FAILED: %v", err)
-			}
-		}()
-		return
 	}
 
 	log.Printf("self-update: downloading %s from %s", latest.TagName, downloadURL)
