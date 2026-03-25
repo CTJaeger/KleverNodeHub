@@ -4,6 +4,7 @@ package models
 type Server struct {
 	ID            string         `json:"id"`
 	Name          string         `json:"name"`
+	DisplayName   string         `json:"display_name,omitempty"`
 	Hostname      string         `json:"hostname"`
 	IPAddress     string         `json:"ip_address"`
 	PublicIP      string         `json:"public_ip,omitempty"`
