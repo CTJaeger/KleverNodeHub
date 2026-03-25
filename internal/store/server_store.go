@@ -36,9 +36,9 @@ func (s *ServerStore) Create(server *models.Server) error {
 	}
 
 	_, err = s.db.db.Exec(`
-		INSERT INTO servers (id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		server.ID, server.Name, server.Hostname, server.IPAddress,
+		INSERT INTO servers (id, name, display_name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		server.ID, server.Name, server.DisplayName, server.Hostname, server.IPAddress,
 		server.PublicIP, server.Region,
 		server.OSInfo, server.AgentVersion, server.Status, server.LastHeartbeat,
 		server.Certificate, server.RegisteredAt, server.UpdatedAt, string(metadata),
@@ -52,7 +52,7 @@ func (s *ServerStore) Create(server *models.Server) error {
 // GetByID retrieves a server by ID.
 func (s *ServerStore) GetByID(id string) (*models.Server, error) {
 	row := s.db.db.QueryRow(`
-		SELECT id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
+		SELECT id, name, display_name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
 		FROM servers WHERE id = ?`, id)
 
 	return scanServer(row)
@@ -61,7 +61,7 @@ func (s *ServerStore) GetByID(id string) (*models.Server, error) {
 // List retrieves all servers.
 func (s *ServerStore) List() ([]models.Server, error) {
 	rows, err := s.db.db.Query(`
-		SELECT id, name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
+		SELECT id, name, display_name, hostname, ip_address, public_ip, region, os_info, agent_version, status, last_heartbeat, certificate, registered_at, updated_at, metadata
 		FROM servers ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)
@@ -92,9 +92,9 @@ func (s *ServerStore) Update(server *models.Server) error {
 	}
 
 	result, err := s.db.db.Exec(`
-		UPDATE servers SET name=?, hostname=?, ip_address=?, public_ip=?, region=?, os_info=?, agent_version=?, status=?, last_heartbeat=?, certificate=?, updated_at=?, metadata=?
+		UPDATE servers SET name=?, display_name=?, hostname=?, ip_address=?, public_ip=?, region=?, os_info=?, agent_version=?, status=?, last_heartbeat=?, certificate=?, updated_at=?, metadata=?
 		WHERE id=?`,
-		server.Name, server.Hostname, server.IPAddress, server.PublicIP, server.Region,
+		server.Name, server.DisplayName, server.Hostname, server.IPAddress, server.PublicIP, server.Region,
 		server.OSInfo, server.AgentVersion, server.Status, server.LastHeartbeat,
 		server.Certificate, server.UpdatedAt, string(metadata), server.ID,
 	)
@@ -204,7 +204,7 @@ func scanServerFromScanner(s scanner) (*models.Server, error) {
 	var cert []byte
 
 	err := s.Scan(
-		&srv.ID, &srv.Name, &srv.Hostname, &srv.IPAddress,
+		&srv.ID, &srv.Name, &srv.DisplayName, &srv.Hostname, &srv.IPAddress,
 		&srv.PublicIP, &srv.Region,
 		&srv.OSInfo, &srv.AgentVersion, &srv.Status, &srv.LastHeartbeat,
 		&cert, &srv.RegisteredAt, &srv.UpdatedAt, &metadataStr,
