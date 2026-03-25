@@ -156,6 +156,38 @@ func (h *ServerHandler) HandleUpdateServer(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "display_name": server.DisplayName})
 }
 
+// HandleUpdateNode updates a node's display name.
+// PATCH /api/nodes/{id}
+func (h *ServerHandler) HandleUpdateNode(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing node ID"})
+		return
+	}
+
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	node, err := h.nodeStore.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	node.DisplayName = body.DisplayName
+	if err := h.nodeStore.Update(node); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "display_name": node.DisplayName})
+}
+
 // HandleGetNode returns a single node by ID.
 // GET /api/nodes/{id}
 func (h *ServerHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {

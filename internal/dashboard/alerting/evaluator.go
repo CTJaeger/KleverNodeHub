@@ -159,6 +159,19 @@ func (e *Evaluator) migrateRules() {
 		}
 	}
 
+	// Migrate nonce-stall threshold from 15s to 120s (short pauses are normal between epochs)
+	nonceRule, err := e.alertStore.GetRule("builtin-nonce-stall")
+	if err == nil && nonceRule.Threshold == 15 {
+		nonceRule.Threshold = 120
+		nonceRule.DurationSec = 60
+		nonceRule.CooldownMin = 15
+		if err := e.alertStore.UpdateRule(nonceRule); err != nil {
+			log.Printf("alert evaluator: migrate nonce-stall rule: %v", err)
+		} else {
+			log.Println("alert evaluator: migrated nonce-stall threshold 15s → 120s")
+		}
+	}
+
 	// Ensure any missing builtin rules are created
 	for _, rule := range DefaultRules() {
 		if !rule.Builtin {

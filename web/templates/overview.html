@@ -408,16 +408,9 @@
                     </div>
                     <!-- Quick Update All -->
                     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-                        <button class="btn btn-primary w-full" id="btn-quick-update-all" onclick="quickUpdateAllAgents()">
+                        <button class="btn btn-primary w-full" id="btn-quick-update-all" onclick="quickUpdateAllAgents()" disabled style="opacity:0.5;">
                             Update All Agents to Latest
                         </button>
-                        <div id="quick-update-progress" style="display:none;margin-top:12px;">
-                            <div id="quick-update-status" class="text-sm text-muted"></div>
-                            <div class="progress-bar-track" style="margin-top:8px;">
-                                <div class="progress-bar-fill" id="quick-update-bar" style="width:0%;"></div>
-                            </div>
-                            <div id="quick-update-agents" style="margin-top:8px;"></div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -599,7 +592,7 @@
                             ? '<span class="badge badge-running">Master</span>'
                             : '<span class="badge badge-warning">Fallback</span>') +
                     '</div>' +
-                    '<div class="node-cell node-cell-mono" data-label="Version">' + esc(n.docker_image_tag || '-') + '</div>' +
+                    '<div class="node-cell node-cell-mono" data-label="Version">' + esc(shortVersion(n.docker_image_tag)) + '</div>' +
                     '<div class="node-cell node-cell-mono" data-label="Nonce">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</div>' +
                     '<div class="node-cell" data-label="Sync">' +
                         syncHtml +
@@ -618,6 +611,7 @@
                             '<button class="actions-menu-btn" aria-label="Node actions" onclick="toggleNodeActions(event, \'' + nodeIDJS + '\')">...</button>' +
                             '<div class="actions-dropdown" id="node-actions-' + esc(n.id) + '">' +
                                 '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + nodeURLJS + '\')">Details</button>' +
+                                '<button class="actions-dropdown-item" onclick="renameNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">Rename</button>' +
                                 '<div class="actions-dropdown-divider"></div>' +
                                 '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'start\')">Start</button>' +
                                 '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'stop\')">Stop</button>' +
@@ -760,7 +754,22 @@
                 }
             });
 
-            var html = '';
+            // Table header (same as flat view but without checkbox)
+            var html = '<div class="node-table-head node-table-head-overview">' +
+                '<div class="node-table-head-cell node-cell-checkbox"></div>' +
+                '<div class="node-table-head-cell">Node</div>' +
+                '<div class="node-table-head-cell">Server</div>' +
+                '<div class="node-table-head-cell">Type</div>' +
+                '<div class="node-table-head-cell">Role</div>' +
+                '<div class="node-table-head-cell">Version</div>' +
+                '<div class="node-table-head-cell">Nonce</div>' +
+                '<div class="node-table-head-cell">Sync</div>' +
+                '<div class="node-table-head-cell">CPU</div>' +
+                '<div class="node-table-head-cell">Memory</div>' +
+                '<div class="node-table-head-cell node-table-head-status">Status</div>' +
+                '<div class="node-table-head-cell node-table-head-actions">Actions</div>' +
+            '</div>';
+
             // Render BLS groups
             Object.keys(groups).forEach(function(blsKey) {
                 var group = groups[blsKey].sort(function(a, b) {
@@ -769,29 +778,25 @@
                 var masterName = esc(group[0].display_name || group[0].name || group[0].container_name);
                 var shortBLS = blsKey.substring(0, 8) + '...' + blsKey.substring(blsKey.length - 8);
 
-                html += '<div class="bls-group">';
-                html += '<div class="bls-group-header">';
-                html += '<span class="bls-group-name">' + masterName + '</span>';
-                html += '<span class="bls-group-key text-muted text-sm" title="' + esc(blsKey) + '">BLS: ' + esc(shortBLS) + '</span>';
-                html += '<span class="bls-group-count text-muted text-sm">' + group.length + ' node' + (group.length > 1 ? 's' : '') + '</span>';
-                html += '</div>';
+                html += '<div class="bls-group-header">' +
+                    '<span class="bls-group-name">' + masterName + '</span>' +
+                    '<span class="bls-group-key text-muted text-sm" title="' + esc(blsKey) + '">BLS: ' + esc(shortBLS) + '</span>' +
+                    '<span class="bls-group-count text-muted text-sm">' + group.length + ' node' + (group.length > 1 ? 's' : '') + '</span>' +
+                '</div>';
                 group.forEach(function(n) {
                     html += renderGroupedNodeRow(n, serverMap);
                 });
-                html += '</div>';
             });
 
             // Render ungrouped
             if (ungrouped.length > 0) {
-                html += '<div class="bls-group">';
-                html += '<div class="bls-group-header">';
-                html += '<span class="bls-group-name">Other Nodes</span>';
-                html += '<span class="bls-group-count text-muted text-sm">' + ungrouped.length + ' node' + (ungrouped.length > 1 ? 's' : '') + '</span>';
-                html += '</div>';
+                html += '<div class="bls-group-header">' +
+                    '<span class="bls-group-name">Other Nodes</span>' +
+                    '<span class="bls-group-count text-muted text-sm">' + ungrouped.length + ' node' + (ungrouped.length > 1 ? 's' : '') + '</span>' +
+                '</div>';
                 ungrouped.forEach(function(n) {
                     html += renderGroupedNodeRow(n, serverMap);
                 });
-                html += '</div>';
             }
 
             grouped.innerHTML = html;
@@ -800,28 +805,67 @@
         function renderGroupedNodeRow(n, serverMap) {
             var nodeName = esc(n.display_name || n.name || n.container_name);
             var serverName = esc(serverMap[n.server_id] || n.server_id || '-');
-            var nodeURL = '/node/' + encodeURIComponent(n.id);
+            var nodeIDJS = escJS(n.id || '');
+            var nodeNameJS = escJS(n.display_name || n.name || n.container_name || '');
+            var nodeURLJS = escJS('/node/' + encodeURIComponent(n.id));
             var meta = n.metadata || {};
             var nonce = meta.klv_nonce;
             var isSyncing = meta.klv_is_syncing;
+            var cpuPct = meta.cpu_percent || 0;
+            var memPct = meta.mem_percent || 0;
+            var memUsed = meta.mem_used || 0;
+            var memLimit = meta.mem_limit || 0;
             var syncHtml = isSyncing != null
                 ? (isSyncing === 0
                     ? '<span class="badge badge-running">synced</span>'
                     : '<span class="badge badge-syncing">syncing</span>')
                 : '<span class="text-muted">-</span>';
-            var role = n.redundancy_level === 0
-                ? '<span class="badge badge-running">Master</span>'
-                : '<span class="badge badge-warning">Fallback</span>';
+            function metricBar(pct, label) {
+                pct = Math.max(0, Math.min(100, pct || 0));
+                var fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
+                return '<div class="server-metric">' +
+                    '<div class="server-metric-fill" style="width:' + fillWidth + '%;background:' + Charts._gaugeColor(pct) + ';"></div>' +
+                    '<span class="server-metric-value">' + esc(label) + '</span>' +
+                '</div>';
+            }
             var indent = n.redundancy_level > 0 ? ' bls-group-fallback' : '';
 
-            return '<div class="bls-group-row' + indent + '" role="link" tabindex="0" onclick="location.href=\'' + esc(nodeURL) + '\'" style="cursor:pointer;">' +
-                '<span class="node-status-dot node-status-dot-' + esc(n.status || 'stopped') + '"></span>' +
-                '<span class="bls-row-name">' + nodeName + '</span>' +
-                '<span class="bls-row-server text-muted">' + serverName + '</span>' +
-                '<span class="bls-row-role">' + role + '</span>' +
-                '<span class="bls-row-nonce node-cell-mono">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</span>' +
-                '<span class="bls-row-sync">' + syncHtml + '</span>' +
-                '<span class="badge badge-' + esc(n.status || 'stopped') + '">' + esc(n.status || 'stopped') + '</span>' +
+            return '<div class="node-row node-row-grid node-row-grid-overview' + indent + '" role="link" tabindex="0" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
+                '<div class="node-cell node-cell-checkbox"></div>' +
+                '<div class="node-cell node-cell-primary" data-label="Node">' +
+                    '<span class="node-status-dot node-status-dot-' + esc(n.status || 'stopped') + '"></span>' +
+                    '<span class="node-row-name">' + nodeName + '</span>' +
+                '</div>' +
+                '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
+                '<div class="node-cell" data-label="Type">' + esc(n.node_type || '-') + '</div>' +
+                '<div class="node-cell" data-label="Role">' +
+                    (n.redundancy_level === 0
+                        ? '<span class="badge badge-running">Master</span>'
+                        : '<span class="badge badge-warning">Fallback</span>') +
+                '</div>' +
+                '<div class="node-cell node-cell-mono" data-label="Version">' + esc(shortVersion(n.docker_image_tag)) + '</div>' +
+                '<div class="node-cell node-cell-mono" data-label="Nonce">' + (nonce != null ? Math.floor(nonce).toLocaleString() : '-') + '</div>' +
+                '<div class="node-cell" data-label="Sync">' + syncHtml + '</div>' +
+                '<div class="node-cell node-cell-metric" data-label="CPU">' + metricBar(cpuPct, cpuPct.toFixed(1) + '%') + '</div>' +
+                '<div class="node-cell node-cell-metric" data-label="Memory">' + metricBar(memPct, Charts.formatBytes(memUsed) + ' / ' + Charts.formatBytes(memLimit)) + '</div>' +
+                '<div class="node-cell node-cell-status" data-label="Status">' +
+                    '<span class="badge badge-' + esc(n.status || 'stopped') + '">' + esc(n.status || 'stopped') + '</span>' +
+                '</div>' +
+                '<div class="node-cell node-cell-actions" data-label="Actions">' +
+                    '<div class="actions-menu-wrap">' +
+                        '<button class="actions-menu-btn" aria-label="Node actions" onclick="toggleNodeActions(event, \'' + nodeIDJS + '\')">...</button>' +
+                        '<div class="actions-dropdown" id="node-actions-' + esc(n.id) + '">' +
+                            '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + nodeURLJS + '\')">Details</button>' +
+                            '<button class="actions-dropdown-item" onclick="renameNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">Rename</button>' +
+                            '<div class="actions-dropdown-divider"></div>' +
+                            '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'start\')">Start</button>' +
+                            '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'stop\')">Stop</button>' +
+                            '<button class="actions-dropdown-item" onclick="runNodeActionFromMenu(event, \'' + nodeIDJS + '\', \'restart\')">Restart</button>' +
+                            '<div class="actions-dropdown-divider"></div>' +
+                            '<button class="actions-dropdown-item danger" onclick="deleteNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">Delete node</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
             '</div>';
         }
 
@@ -1060,6 +1104,22 @@
             event.stopPropagation();
             closeNodeActions();
             deleteNode(id, name);
+            return false;
+        }
+
+        async function renameNodeFromMenu(event, id, currentName) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeNodeActions();
+            var newName = prompt('Rename node:', currentName);
+            if (newName === null || newName === currentName) return;
+            try {
+                await API.request('PATCH', '/api/nodes/' + id, { display_name: newName });
+                showToast('Node renamed.', 'success');
+                await loadData();
+            } catch (e) {
+                showToast('Rename failed: ' + (e.message || e), 'error');
+            }
             return false;
         }
 
@@ -1462,6 +1522,11 @@
             return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
 
+        function shortVersion(v) {
+            if (!v) return '-';
+            return v.replace(/-g[0-9a-f]+$/, '');
+        }
+
         // --- Alerts ---
         let activeAlerts = [];
 
@@ -1667,6 +1732,7 @@
 
         async function loadAgentVersions() {
             agentVersionTable.setData(servers || []);
+            refreshQuickUpdateButton();
         }
 
         // ── GitHub Releases (Dropdown) ──
@@ -1891,105 +1957,105 @@
             }, 5000);
         }
 
+        function refreshQuickUpdateButton() {
+            var btn = document.getElementById('btn-quick-update-all');
+            if (!btn) return;
+            if (!latestReleaseVersion) {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.textContent = 'Update All Agents to Latest';
+                return;
+            }
+            var outdated = servers.filter(function(s) {
+                return s.status === 'online' && s.agent_version && isOlderVersion(s.agent_version, latestReleaseVersion);
+            });
+            if (outdated.length === 0) {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.textContent = 'All Agents up to date';
+            } else {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.textContent = 'Update All Agents to ' + latestReleaseVersion;
+            }
+        }
+
         async function quickUpdateAllAgents() {
             var btn = document.getElementById('btn-quick-update-all');
-            var progress = document.getElementById('quick-update-progress');
-            var statusEl = document.getElementById('quick-update-status');
-            var barEl = document.getElementById('quick-update-bar');
-            var agentsEl = document.getElementById('quick-update-agents');
-
-            // Get latest version from version checker
-            var versionInfo = await API.getJSON('/api/system/version');
-            var targetVersion = versionInfo && versionInfo.latest_version ? versionInfo.latest_version : '';
+            var targetVersion = latestReleaseVersion;
             if (!targetVersion) {
                 showToast('No update version available.', 'error');
                 return;
             }
 
-            var onlineServers = servers.filter(function(s) { return s.status === 'online'; });
-            if (onlineServers.length === 0) {
-                showToast('No online agents found.', 'error');
+            var outdated = servers.filter(function(s) {
+                return s.status === 'online' && s.agent_version && isOlderVersion(s.agent_version, targetVersion);
+            });
+            if (outdated.length === 0) {
+                showToast('All agents are already up to date.', 'info');
                 return;
             }
 
-            var ok = await showConfirm('Update All Agents', 'Download and update <strong>' + onlineServers.length + '</strong> agent(s) to <strong>' + esc(targetVersion) + '</strong>?', 'Update All', 'btn-primary');
+            var ok = await showConfirm('Update All Agents', 'Download and update <strong>' + outdated.length + '</strong> agent(s) to <strong>' + esc(targetVersion) + '</strong>?', 'Update All', 'btn-primary');
             if (!ok) return;
 
             btn.disabled = true;
-            progress.style.display = '';
-            statusEl.textContent = 'Downloading agent binaries...';
-            barEl.style.width = '10%';
-            agentsEl.innerHTML = '';
+            btn.style.opacity = '0.5';
+            btn.textContent = 'Downloading...';
 
             // Step 1: Download binaries
             try {
                 var dlResp = await API.postJSON('/api/agent/download-release-auto', { tag: targetVersion });
                 if (!dlResp || !dlResp.ok) {
-                    statusEl.textContent = 'Download failed.';
-                    btn.disabled = false;
+                    showToast('Download failed.', 'error');
+                    refreshQuickUpdateButton();
                     return;
                 }
             } catch (e) {
-                statusEl.textContent = 'Download error: ' + (e.message || e);
-                btn.disabled = false;
+                showToast('Download error: ' + (e.message || e), 'error');
+                refreshQuickUpdateButton();
                 return;
             }
 
-            barEl.style.width = '20%';
-            statusEl.textContent = 'Updating agents...';
+            btn.textContent = 'Updating...';
 
-            // Step 2: Update each agent
-            var total = onlineServers.length;
+            // Step 2: Update each agent — show progress in table via setAgentStatus
+            outdated.forEach(function(s) { setAgentStatus(s.id, 'Waiting...', 'wait'); });
+
             var okCount = 0;
             var failCount = 0;
 
-            // Render agent list
-            agentsEl.innerHTML = onlineServers.map(function(s) {
-                var name = esc(s.display_name || s.name || s.hostname);
-                return '<div class="text-sm" id="quick-agent-' + esc(s.id) + '" style="padding:2px 0;">' +
-                    '<span class="text-muted">&#x23F3;</span> ' + name +
-                    ' <span class="quick-agent-status text-muted">waiting...</span></div>';
-            }).join('');
+            for (var i = 0; i < outdated.length; i++) {
+                var srv = outdated[i];
+                setAgentStatus(srv.id, 'Updating...', 'updating');
 
-            for (var i = 0; i < onlineServers.length; i++) {
-                var srv = onlineServers[i];
-                var row = document.getElementById('quick-agent-' + srv.id);
-                var statusSpan = row ? row.querySelector('.quick-agent-status') : null;
-                if (statusSpan) statusSpan.innerHTML = '<span style="color:var(--accent);">updating...</span>';
-
-                var sendOk = false;
                 try {
-                    var data = await API.postJSON('/api/agent/update/' + srv.id, { version: targetVersion });
-                    sendOk = data && data.data && data.data.success;
-                } catch (e) {
-                    sendOk = false;
-                }
+                    await API.postJSON('/api/agent/update/' + srv.id, { version: targetVersion });
+                } catch (e) { /* agent restarts, may error */ }
 
-                // Wait for reconnect
-                if (statusSpan) statusSpan.innerHTML = '<span style="color:var(--accent);">restarting...</span>';
+                setAgentStatus(srv.id, 'Restarting...', 'restarting');
                 var reconnected = await waitForAgentVersion(srv.id, targetVersion, 20000);
 
                 if (reconnected) {
-                    if (statusSpan) statusSpan.innerHTML = '<span style="color:var(--status-green);">&#x2714; ' + esc(targetVersion) + '</span>';
+                    setAgentStatus(srv.id, targetVersion, 'ok');
                     okCount++;
                 } else {
-                    if (statusSpan) statusSpan.innerHTML = '<span style="color:var(--status-error);">&#x2716; failed</span>';
+                    setAgentStatus(srv.id, 'Failed', 'fail');
                     failCount++;
                 }
-
-                var pct = 20 + ((i + 1) / total * 80);
-                barEl.style.width = pct.toFixed(0) + '%';
             }
-
-            statusEl.textContent = okCount + ' updated, ' + failCount + ' failed.';
-            btn.disabled = false;
-            btn.textContent = 'Update All Agents to Latest';
 
             if (failCount > 0) showToast(failCount + ' agent(s) failed to update.', 'error');
             else showToast('All ' + okCount + ' agents updated to ' + targetVersion + '.', 'success');
 
             await loadData();
             loadAgentVersions();
+            refreshQuickUpdateButton();
+
+            setTimeout(function() {
+                agentUpdateStatus = {};
+                agentVersionTable.setData(servers || []);
+            }, 5000);
         }
 
         // --- Version Check & Self-Update ---
