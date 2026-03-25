@@ -123,7 +123,10 @@
                 <div class="node-hero-main">
                     <div class="node-hero-copy">
                         <div class="node-hero-eyebrow">Node Overview</div>
-                        <h2 id="node-name">Loading...</h2>
+                        <h2 style="display:flex;align-items:center;gap:8px;">
+                            <span id="node-name">Loading...</span>
+                            <button class="btn btn-sm btn-secondary" id="btn-rename-node" onclick="renameNode()" title="Rename node" style="font-size:14px;padding:2px 8px;display:none;">&#9998;</button>
+                        </h2>
                         <span class="text-sm text-muted node-hero-sub" id="node-server"></span>
                         <div class="node-hero-meta" id="node-hero-meta">
                             <span class="node-chip">Waiting for node data...</span>
@@ -457,6 +460,7 @@
                 : 'Server: -';
             document.getElementById('node-name').textContent = nodeName;
             document.getElementById('page-node-name').textContent = nodeName;
+            document.getElementById('btn-rename-node').style.display = '';
             document.getElementById('node-server').innerHTML = serverHtml;
 
             const badge = document.getElementById('node-status-badge');
@@ -731,6 +735,20 @@
 
         function escAttr(str) {
             return esc(str).replace(/"/g, '&quot;');
+        }
+
+        async function renameNode() {
+            var currentName = node.display_name || node.name || node.container_name;
+            var newName = prompt('Rename node:', currentName);
+            if (newName === null || newName === currentName) return;
+            try {
+                await API.request('PATCH', '/api/nodes/' + nodeId, { display_name: newName });
+                node.display_name = newName;
+                renderNode();
+                showToast('Node renamed.', 'success');
+            } catch (e) {
+                showToast('Rename failed: ' + (e.message || e), 'error');
+            }
         }
 
         async function loadKeyInfo() {
