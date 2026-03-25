@@ -2,12 +2,24 @@
 
 ## [Unreleased]
 
+### 2026-03-25
+- **Install-Script Terminal-Hinweis**: Klare Abschlussmeldung nach Installation — "You can safely close this terminal now."
+- **Server-Nicknames**: Neues `display_name`-Feld für Server (DB-Migration 7). Editierbar auf der Server-Detailseite. Wird überall in der UI bevorzugt angezeigt. PATCH `/api/servers/{id}` Endpoint.
+- **Role-Spalte in Node-Liste**: Neue "Role"-Spalte zeigt Master (grün) oder Fallback (gelb) basierend auf `redundancy_level`.
+- **Gruppierte Node-Ansicht**: Toggle "Flat | Grouped" über der Node-Tabelle. Im Grouped-Modus werden Nodes nach BLS-Key zusammengefasst — Master oben, Fallbacks eingerückt.
+- **Alert-Banner schnelleres Auto-Dismiss**: Poll-Intervall von 30s auf 15s reduziert.
+- **Scrollbar ans Dark-Theme angepasst**: Thumb sichtbarer (Opacity 0.1 → 0.2), dezenter Track-Hintergrund.
+- **Fingerprint/Biometrie Login**: Button-Text "Sign in with Passkey" → "Sign in with Fingerprint / Passkey" mit Fingerprint-Icon. Setup-Text ebenfalls angepasst.
+- **Quick Update All Agents**: One-Click-Button im Agent-Update-Modal — lädt automatisch Binaries herunter und updatet alle verbundenen Agents mit Progress-Anzeige.
+
 ### 2026-03-22
 - **Batch Upgrade Progressbar**: Statt eines einzelnen Batch-Requests werden Nodes jetzt sequentiell einzeln upgraded, mit einer visuellen Progressbar (aktueller Node, X/Y, Prozentzahl). Config-Updates haben eigene Progress-Phase. Erfolg/Fehler wird pro Node angezeigt.
 - **Version-Spalte in Node-Liste**: Neue "Version"-Spalte zeigt den Docker Image Tag (Softwarestand) jeder Node direkt in der Übersichtstabelle. Wird bei schmalen Screens ausgeblendet.
 - **Fix: Klever-Metriken (Nonce/Sync) in Node-Metadata mergen**: `handleNodeMetrics` schreibt jetzt `klv_nonce`, `klv_is_syncing` etc. auch in die Node-Metadata, sodass die Overview-Tabelle sie anzeigen kann. Vorher wurden sie nur in den MetricsStore (Zeitreihen) geschrieben.
 - **Fix: Node metrics poller stops after reconnect**: `runAgentLoop` verwendet jetzt einen loop-spezifischen Context. Vorher teilten sich alte und neue Poller-Goroutines den gleichen top-level Context → nach Reconnect schrieb der alte Poller in einen toten Channel und der neue startete mit leerer Node-Liste.
 - **Fix: Discovery überschreibt Klever-Metriken**: Discovery ersetzte die gesamte Node-Metadata mit nur Docker-Stats, was `klv_nonce`/`klv_is_syncing` aus dem Metrics-Poller löschte. Jetzt werden Docker-Stats in bestehende Metadata gemergt.
+- **Debug: Error-Logging für Node-Metrics Container-Lookup**: Dashboard loggt jetzt explizit wenn `GetByContainerID` für eingehende Node-Metriken fehlschlägt. Hilft bei der Diagnose warum Nodes keine Metriken in der Übersicht anzeigen.
+- **Fix: Node-Metriken bei gleichen Container-Namen auf verschiedenen Servern**: `GetByContainerID` fand ohne Server-Scope immer den ersten Treffer — bei identischen Container-Namen (z.B. `klever-node1` auf Server A und B) landeten Metriken vom falschen Server im falschen Node. Neues `GetByContainerAndServer` mit `WHERE container_name = ? AND server_id = ?`.
 
 ### 2026-03-13
 - **Agent Update Modal Redesign** (v2):
