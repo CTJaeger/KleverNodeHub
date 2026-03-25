@@ -5,12 +5,15 @@
 ### 2026-03-25
 - **Install-Script Terminal-Hinweis**: Klare Abschlussmeldung nach Installation — "You can safely close this terminal now."
 - **Server-Nicknames**: Neues `display_name`-Feld für Server (DB-Migration 7). Editierbar auf der Server-Detailseite. Wird überall in der UI bevorzugt angezeigt. PATCH `/api/servers/{id}` Endpoint.
+- **Node-Rename**: Nodes können über das Actions-Menü (···) umbenannt werden. PATCH `/api/nodes/{id}` Endpoint.
 - **Role-Spalte in Node-Liste**: Neue "Role"-Spalte zeigt Master (grün) oder Fallback (gelb) basierend auf `redundancy_level`.
-- **Gruppierte Node-Ansicht**: Toggle "Flat | Grouped" über der Node-Tabelle. Im Grouped-Modus werden Nodes nach BLS-Key zusammengefasst — Master oben, Fallbacks eingerückt.
+- **Gruppierte Node-Ansicht**: Toggle "Flat | Grouped" über der Node-Tabelle. Im Grouped-Modus werden Nodes nach BLS-Key zusammengefasst — Master oben, Fallbacks eingerückt. Vollständige Tabelle mit allen Spalten (Version, CPU, Memory, Actions).
 - **Alert-Banner schnelleres Auto-Dismiss**: Poll-Intervall von 30s auf 15s reduziert.
 - **Scrollbar ans Dark-Theme angepasst**: Thumb sichtbarer (Opacity 0.1 → 0.2), dezenter Track-Hintergrund.
 - **Fingerprint/Biometrie Login**: Button-Text "Sign in with Passkey" → "Sign in with Fingerprint / Passkey" mit Fingerprint-Icon. Setup-Text ebenfalls angepasst.
-- **Quick Update All Agents**: One-Click-Button im Agent-Update-Modal — lädt automatisch Binaries herunter und updatet alle verbundenen Agents mit Progress-Anzeige.
+- **Quick Update All Agents**: Button im Agent-Update-Modal, zeigt Update-Fortschritt direkt in der Tabelle (Status-Spalte). Deaktiviert wenn alle Agents aktuell sind.
+- **Version gekürzt**: Docker Image Tags werden ohne Git-Hash angezeigt (`v1.7.16-0` statt `v1.7.16-0-gcf9f612c`).
+- **Fix: Nonce Stall False Positives**: Threshold von 15s auf 120s erhöht, DurationSec auf 60s. Kurze Pausen zwischen Epochs lösen keinen Alert mehr aus. Bestehende Regeln werden automatisch migriert.
 
 ### 2026-03-22
 - **Batch Upgrade Progressbar**: Statt eines einzelnen Batch-Requests werden Nodes jetzt sequentiell einzeln upgraded, mit einer visuellen Progressbar (aktueller Node, X/Y, Prozentzahl). Config-Updates haben eigene Progress-Phase. Erfolg/Fehler wird pro Node angezeigt.

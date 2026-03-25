@@ -15,7 +15,7 @@ import (
 const (
 	defaultNodePollInterval  = 15 * time.Second
 	defaultNodePollTimeout   = 5 * time.Second
-	defaultNonceStallTimeout = 15 * time.Second
+	defaultNonceStallTimeout = 120 * time.Second
 )
 
 // NodeMetricsCollector polls /node/status for each discovered Klever node.
