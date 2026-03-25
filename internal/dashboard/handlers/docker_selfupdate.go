@@ -156,14 +156,14 @@ type containerInspect struct {
 	ID     string `json:"Id"`
 	Name   string `json:"Name"`
 	Config struct {
-		Image      string            `json:"Image"`
-		Env        []string          `json:"Env"`
-		Cmd        []string          `json:"Cmd"`
-		Entrypoint []string          `json:"Entrypoint"`
-		Labels     map[string]string `json:"Labels"`
-		ExposedPorts map[string]any  `json:"ExposedPorts"`
+		Image        string            `json:"Image"`
+		Env          []string          `json:"Env"`
+		Cmd          []string          `json:"Cmd"`
+		Entrypoint   []string          `json:"Entrypoint"`
+		Labels       map[string]string `json:"Labels"`
+		ExposedPorts map[string]any    `json:"ExposedPorts"`
 	} `json:"Config"`
-	HostConfig   json.RawMessage `json:"HostConfig"`
+	HostConfig      json.RawMessage `json:"HostConfig"`
 	NetworkSettings struct {
 		Networks map[string]json.RawMessage `json:"Networks"`
 	} `json:"NetworkSettings"`
@@ -203,13 +203,13 @@ func (d *dockerClient) createContainer(name string, old *containerInspect) (stri
 	}
 
 	body := map[string]any{
-		"Image":      old.Config.Image,
-		"Env":        old.Config.Env,
-		"Cmd":        old.Config.Cmd,
-		"Entrypoint": old.Config.Entrypoint,
-		"Labels":     old.Config.Labels,
-		"ExposedPorts": old.Config.ExposedPorts,
-		"HostConfig":   old.HostConfig,
+		"Image":            old.Config.Image,
+		"Env":              old.Config.Env,
+		"Cmd":              old.Config.Cmd,
+		"Entrypoint":       old.Config.Entrypoint,
+		"Labels":           old.Config.Labels,
+		"ExposedPorts":     old.Config.ExposedPorts,
+		"HostConfig":       old.HostConfig,
 		"NetworkingConfig": networkingConfig,
 	}
 
