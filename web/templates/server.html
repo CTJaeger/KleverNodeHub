@@ -105,7 +105,13 @@
                 <div class="server-hero-main">
                     <div class="node-hero-copy">
                         <div class="node-hero-eyebrow">Server Overview</div>
-                        <h2 id="server-name">Loading...</h2>
+                        <h2 id="server-name" style="display:inline;">Loading...</h2>
+                        <button class="btn btn-sm btn-secondary" id="edit-name-btn" onclick="showEditName()" style="vertical-align:middle;margin-left:8px;display:none;" title="Edit display name">&#9998;</button>
+                        <div id="edit-name-form" style="display:none;margin-top:4px;">
+                            <input type="text" id="edit-name-input" class="form-input" style="width:260px;display:inline-block;" placeholder="Display name">
+                            <button class="btn btn-sm btn-primary" onclick="saveDisplayName()">Save</button>
+                            <button class="btn btn-sm btn-secondary" onclick="cancelEditName()">Cancel</button>
+                        </div>
                         <span class="text-sm text-muted node-hero-sub" id="server-info"></span>
                         <div class="node-hero-meta" id="server-hero-meta">
                             <span class="node-chip">Waiting for server data...</span>
@@ -293,9 +299,10 @@
                 return;
             }
 
-            var name = server.name || server.hostname || serverID;
+            var name = server.display_name || server.name || server.hostname || serverID;
             document.getElementById('server-name').textContent = name;
             document.getElementById('page-server-name').textContent = name;
+            document.getElementById('edit-name-btn').style.display = '';
             document.title = 'Klever Node Hub - ' + name;
 
             document.getElementById('server-info').textContent = [
@@ -611,6 +618,34 @@
         window.addEventListener('hashchange', function() {
             switchServerTab(getServerTabFromHash(), false);
         });
+
+        function showEditName() {
+            document.getElementById('edit-name-input').value = server.display_name || '';
+            document.getElementById('edit-name-form').style.display = '';
+            document.getElementById('edit-name-btn').style.display = 'none';
+            document.getElementById('edit-name-input').focus();
+        }
+
+        function cancelEditName() {
+            document.getElementById('edit-name-form').style.display = 'none';
+            document.getElementById('edit-name-btn').style.display = '';
+        }
+
+        async function saveDisplayName() {
+            var newName = document.getElementById('edit-name-input').value.trim();
+            try {
+                var resp = await API.request('PATCH', '/api/servers/' + serverID, { display_name: newName });
+                if (!resp || !resp.ok) throw new Error('Server returned ' + (resp ? resp.status : 'no response'));
+                server.display_name = newName;
+                var name = newName || server.name || server.hostname || serverID;
+                document.getElementById('server-name').textContent = name;
+                document.getElementById('page-server-name').textContent = name;
+                document.title = 'Klever Node Hub - ' + name;
+                cancelEditName();
+            } catch (e) {
+                alert('Failed to save: ' + (e.message || e));
+            }
+        }
     </script>
 </body>
 </html>

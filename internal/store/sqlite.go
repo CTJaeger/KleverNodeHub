@@ -282,4 +282,7 @@ var migrations = []string{
 	ALTER TABLE system_metrics ADD COLUMN mem_used INTEGER DEFAULT 0;
 	ALTER TABLE system_metrics ADD COLUMN disk_total INTEGER DEFAULT 0;
 	ALTER TABLE system_metrics ADD COLUMN disk_used INTEGER DEFAULT 0;`,
+
+	// Migration 7: Add display_name to servers
+	`ALTER TABLE servers ADD COLUMN display_name TEXT DEFAULT '';`,
 }

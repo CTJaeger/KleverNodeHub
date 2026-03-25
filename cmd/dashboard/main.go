@@ -261,6 +261,7 @@ func main() {
 	mux.Handle("POST /api/registration/token", authMw(http.HandlerFunc(regHandler.HandleGenerateToken)))
 	mux.Handle("GET /api/servers", authMw(http.HandlerFunc(serverHandler.HandleList)))
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
+	mux.Handle("PATCH /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleUpdateServer)))
 	mux.Handle("DELETE /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleDelete)))
 	mux.Handle("GET /api/nodes", authMw(http.HandlerFunc(serverHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleGetNode)))
