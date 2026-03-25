@@ -1147,13 +1147,35 @@
                 const data = await API.getJSON('/api/docker/tags');
                 const select = document.getElementById('upgrade-tag');
                 if (data && data.tags) {
-                    data.tags.forEach(tag => {
-                        const opt = document.createElement('option');
-                        const name = typeof tag === 'string' ? tag : tag.name;
+                    var regular = [];
+                    var valOnly = [];
+                    data.tags.forEach(function(tag) {
+                        var name = typeof tag === 'string' ? tag : tag.name;
+                        if (name.startsWith('val-')) {
+                            valOnly.push(name);
+                        } else {
+                            regular.push(name);
+                        }
+                    });
+                    function shortTag(v) { return v.replace(/-g[0-9a-f]+$/, ''); }
+                    regular.forEach(function(name) {
+                        var opt = document.createElement('option');
                         opt.value = name;
-                        opt.textContent = name;
+                        opt.textContent = shortTag(name);
                         select.appendChild(opt);
                     });
+                    if (valOnly.length > 0) {
+                        var sep = document.createElement('option');
+                        sep.disabled = true;
+                        sep.textContent = '── Validator only (no operator) ──';
+                        select.appendChild(sep);
+                        valOnly.forEach(function(name) {
+                            var opt = document.createElement('option');
+                            opt.value = name;
+                            opt.textContent = shortTag(name);
+                            select.appendChild(opt);
+                        });
+                    }
                 }
             } catch (e) { /* ignore */ }
         }
