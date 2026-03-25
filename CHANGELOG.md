@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-03-25
+- **Docker Self-Update**: Dashboard kann sich jetzt auch im Docker-Container selbst updaten, wenn `/var/run/docker.sock` gemountet ist. Flow: eigenen Container erkennen → neues Image pullen → alten Container umbenennen → neuen erstellen → starten → alten stoppen/entfernen. Rollback bei Fehler.
+- **Agent Update Modal Redesign**: Server Agents Tabelle + "Update All" Button oben, Release-Dropdown + manuelle Auswahl unter "Expert Settings" Trennlinie.
 - **Install-Script Terminal-Hinweis**: Klare Abschlussmeldung nach Installation — "You can safely close this terminal now."
 - **Server-Nicknames**: Neues `display_name`-Feld für Server (DB-Migration 7). Editierbar auf der Server-Detailseite. Wird überall in der UI bevorzugt angezeigt. PATCH `/api/servers/{id}` Endpoint.
 - **Node-Rename**: Nodes können über das Actions-Menü (···) umbenannt werden. PATCH `/api/nodes/{id}` Endpoint.
