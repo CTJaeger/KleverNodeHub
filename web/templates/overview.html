@@ -584,6 +584,7 @@
                     '<div class="node-cell node-cell-primary" data-label="Node">' +
                         '<span class="node-status-dot node-status-dot-' + esc(n.status || 'stopped') + '"></span>' +
                         '<span class="node-row-name">' + nodeName + '</span>' +
+                        '<button class="node-rename-btn" onclick="renameNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')" title="Rename">&#9998;</button>' +
                     '</div>' +
                     '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
                     '<div class="node-cell" data-label="Type">' + esc(n.node_type || '-') + '</div>' +
@@ -828,13 +829,12 @@
                     '<span class="server-metric-value">' + esc(label) + '</span>' +
                 '</div>';
             }
-            var indent = n.redundancy_level > 0 ? ' bls-group-fallback' : '';
-
-            return '<div class="node-row node-row-grid node-row-grid-overview' + indent + '" role="link" tabindex="0" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
+            return '<div class="node-row node-row-grid node-row-grid-overview" role="link" tabindex="0" onclick="navigateRow(event, \'' + nodeURLJS + '\')" onkeydown="activateRow(event, \'' + nodeURLJS + '\')">' +
                 '<div class="node-cell node-cell-checkbox"></div>' +
                 '<div class="node-cell node-cell-primary" data-label="Node">' +
                     '<span class="node-status-dot node-status-dot-' + esc(n.status || 'stopped') + '"></span>' +
                     '<span class="node-row-name">' + nodeName + '</span>' +
+                    '<button class="node-rename-btn" onclick="renameNodeFromMenu(event, \'' + nodeIDJS + '\', \'' + nodeNameJS + '\')">&#9998;</button>' +
                 '</div>' +
                 '<div class="node-cell" data-label="Server">' + serverName + '</div>' +
                 '<div class="node-cell" data-label="Type">' + esc(n.node_type || '-') + '</div>' +
@@ -1082,7 +1082,10 @@
         function toggleNodeActions(event, id) {
             event.preventDefault();
             event.stopPropagation();
-            const menu = document.getElementById('node-actions-' + id);
+            // Find dropdown relative to the clicked button (avoids duplicate ID issues between flat/grouped views)
+            var btn = event.currentTarget;
+            var menu = btn.parentElement ? btn.parentElement.querySelector('.actions-dropdown') : null;
+            if (!menu) menu = document.getElementById('node-actions-' + id);
             if (!menu) return false;
             const willOpen = !menu.classList.contains('active');
             closeNodeActions();

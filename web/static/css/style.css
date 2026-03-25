@@ -742,7 +742,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .node-table-head-overview,
 .node-row-grid-overview {
-    grid-template-columns: 28px minmax(140px, 1.7fr) minmax(90px, 1.1fr) 72px 72px 90px 86px 82px minmax(90px, 0.95fr) minmax(120px, 1.15fr) 82px 40px;
+    grid-template-columns: 28px minmax(100px, 1.2fr) minmax(80px, 1fr) 68px 68px 82px 86px 68px minmax(70px, 0.85fr) minmax(110px, 1.1fr) 72px 40px;
 }
 
 .node-table-head-server,
@@ -817,6 +817,27 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     color: var(--text-heading);
     white-space: nowrap;
+}
+
+.node-rename-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.node-row:hover .node-rename-btn,
+.node-row-grid:hover .node-rename-btn {
+    opacity: 0.7;
+}
+
+.node-rename-btn:hover {
+    opacity: 1 !important;
+    color: var(--accent);
     overflow: hidden;
     text-overflow: ellipsis;
 }
