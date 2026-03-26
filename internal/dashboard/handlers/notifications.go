@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/notify"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
+
+// sensitiveKeys lists config keys whose values should be masked in API responses.
+var sensitiveKeys = map[string]bool{
+	"bot_token": true,
+	"app_token": true,
+	"user_key":  true,
+}
 
 // NotificationHandler handles notification configuration API requests.
 type NotificationHandler struct {
@@ -40,6 +48,7 @@ func (h *NotificationHandler) HandleListChannels(w http.ResponseWriter, _ *http.
 	type channelDetail struct {
 		Name   string               `json:"name"`
 		Type   string               `json:"type"`
+		Config map[string]string    `json:"config"`
 		Filter notify.ChannelFilter `json:"filter"`
 	}
 
@@ -48,6 +57,7 @@ func (h *NotificationHandler) HandleListChannels(w http.ResponseWriter, _ *http.
 		details[i] = channelDetail{
 			Name:   ch.Name,
 			Type:   h.getChannelType(ch.Name),
+			Config: h.getMaskedConfig(ch.Name),
 			Filter: ch.Filter,
 		}
 	}
@@ -106,6 +116,18 @@ func (h *NotificationHandler) HandleUpdateChannel(w http.ResponseWriter, r *http
 		h.updateSavedFilter(name, req.Filter)
 		writeJSON(w, http.StatusOK, map[string]any{"success": true})
 		return
+	}
+
+	// Merge masked values back with stored originals so users don't have
+	// to re-enter credentials they didn't change.
+	if saved := h.getSavedConfig(name); saved != nil {
+		for k, v := range req.Config {
+			if isMaskedValue(v) {
+				if orig, ok := saved[k]; ok {
+					req.Config[k] = orig
+				}
+			}
+		}
 	}
 
 	h.manager.RemoveChannel(name)
@@ -271,6 +293,42 @@ func (h *NotificationHandler) getChannelType(name string) string {
 		return ""
 	}
 	return req.Type
+}
+
+// getSavedConfig returns the stored config for a channel.
+func (h *NotificationHandler) getSavedConfig(name string) map[string]string {
+	key := "notify_ch_" + name
+	data, err := h.settings.Get(key)
+	if err != nil || data == "" {
+		return nil
+	}
+	var req channelConfigRequest
+	if err := json.Unmarshal([]byte(data), &req); err != nil {
+		return nil
+	}
+	return req.Config
+}
+
+// getMaskedConfig returns config with sensitive values partially masked.
+func (h *NotificationHandler) getMaskedConfig(name string) map[string]string {
+	cfg := h.getSavedConfig(name)
+	if cfg == nil {
+		return nil
+	}
+	masked := make(map[string]string, len(cfg))
+	for k, v := range cfg {
+		if sensitiveKeys[k] && len(v) > 4 {
+			masked[k] = v[:4] + strings.Repeat("•", len(v)-4)
+		} else {
+			masked[k] = v
+		}
+	}
+	return masked
+}
+
+// isMaskedValue returns true if the value looks like a masked placeholder.
+func isMaskedValue(v string) bool {
+	return strings.Contains(v, "••••")
 }
 
 // LoadSavedChannels loads previously saved notification channels from settings.
