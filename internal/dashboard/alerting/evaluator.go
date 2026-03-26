@@ -357,7 +357,17 @@ func (e *Evaluator) evaluateThreshold(rule *store.AlertRule, stateKey, nodeID, s
 }
 
 func (e *Evaluator) evaluateStall(rule *store.AlertRule, stateKey, nodeID, serverID, nodeName string, from, to int64, now time.Time) {
-	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, from, to)
+	// Use a wider lookback for stall detection: at least 3x threshold so we can
+	// find the last real value change even when it happened long ago.
+	stallLookback := int64(rule.Threshold) * 3
+	if stallLookback < 300 {
+		stallLookback = 300 // minimum 5 minutes
+	}
+	stallFrom := to - stallLookback
+	if stallFrom < from {
+		stallFrom = from
+	}
+	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, stallFrom, to)
 	source := fmt.Sprintf("node:%s", nodeName)
 
 	// No data at all — if threshold > 0, treat as stalled (no metrics arriving)

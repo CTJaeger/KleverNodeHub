@@ -333,6 +333,12 @@
                         </div>
                     </div>
                     <div id="config-editor-wrap" class="hidden">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <input type="text" id="config-search" class="form-input" placeholder="Search parameter..." style="flex:1;font-size:0.8rem;padding:4px 8px;" oninput="searchConfig()">
+                            <span id="config-search-count" class="text-sm text-muted"></span>
+                            <button class="btn btn-sm btn-ghost" onclick="searchConfigNext()" title="Next match" style="padding:2px 6px;">&darr;</button>
+                            <button class="btn btn-sm btn-ghost" onclick="searchConfigPrev()" title="Previous match" style="padding:2px 6px;">&uarr;</button>
+                        </div>
                         <textarea id="config-editor" class="node-code-editor" spellcheck="false"></textarea>
                         <div class="node-toolbar node-toolbar-secondary mt-8">
                             <select id="config-backup-select" class="form-input node-inline-select node-inline-select-wide">
@@ -1014,13 +1020,17 @@
                 .replace(/\b(DEBUG)\b/g, '<span style="color:#6b7280;">$1</span>');
         }
 
+        function stripAnsi(str) {
+            return str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\[stdout\]\s?/g, '').replace(/\[stderr\]\s?/g, '');
+        }
+
         function downloadLogs() {
             if (!logData || logData.length === 0) return;
             let text = '';
             for (const line of logData) {
+                var msg = stripAnsi(line.message || '');
                 if (line.timestamp) text += line.timestamp + ' ';
-                text += '[' + (line.stream || 'stdout') + '] ';
-                text += (line.message || '') + '\n';
+                text += msg + '\n';
             }
             const blob = new Blob([text], { type: 'text/plain' });
             const a = document.createElement('a');
@@ -1045,6 +1055,64 @@
                     });
                 }
             } catch (e) { /* ignore */ }
+        }
+
+        var configSearchMatches = [];
+        var configSearchIdx = -1;
+
+        function searchConfig() {
+            var query = document.getElementById('config-search').value.toLowerCase();
+            var editor = document.getElementById('config-editor');
+            var countEl = document.getElementById('config-search-count');
+            configSearchMatches = [];
+            configSearchIdx = -1;
+
+            if (!query || query.length < 2) {
+                countEl.textContent = '';
+                return;
+            }
+
+            var text = editor.value.toLowerCase();
+            var pos = 0;
+            while ((pos = text.indexOf(query, pos)) !== -1) {
+                configSearchMatches.push(pos);
+                pos += query.length;
+            }
+
+            if (configSearchMatches.length === 0) {
+                countEl.textContent = 'No matches';
+            } else {
+                configSearchIdx = 0;
+                countEl.textContent = '1/' + configSearchMatches.length;
+                jumpToConfigMatch();
+            }
+        }
+
+        function jumpToConfigMatch() {
+            var editor = document.getElementById('config-editor');
+            var query = document.getElementById('config-search').value;
+            if (configSearchIdx < 0 || configSearchIdx >= configSearchMatches.length) return;
+            var pos = configSearchMatches[configSearchIdx];
+            editor.focus();
+            editor.setSelectionRange(pos, pos + query.length);
+            // Scroll to selection — calculate line position
+            var textBefore = editor.value.substring(0, pos);
+            var lineNum = textBefore.split('\n').length;
+            var lineHeight = parseInt(getComputedStyle(editor).lineHeight) || 16;
+            editor.scrollTop = Math.max(0, (lineNum - 3) * lineHeight);
+            document.getElementById('config-search-count').textContent = (configSearchIdx + 1) + '/' + configSearchMatches.length;
+        }
+
+        function searchConfigNext() {
+            if (configSearchMatches.length === 0) return;
+            configSearchIdx = (configSearchIdx + 1) % configSearchMatches.length;
+            jumpToConfigMatch();
+        }
+
+        function searchConfigPrev() {
+            if (configSearchMatches.length === 0) return;
+            configSearchIdx = (configSearchIdx - 1 + configSearchMatches.length) % configSearchMatches.length;
+            jumpToConfigMatch();
         }
 
         async function loadConfigFile() {
@@ -1096,12 +1164,17 @@
             const content = document.getElementById('config-editor').value;
             if (!fileName) return;
 
-            const result = await API.request('PUT', '/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: false });
-            if (result && result.success) {
-                showResult('Config saved: ' + fileName, false);
-                loadConfigBackups(fileName);
-            } else {
-                showResult('Save failed: ' + (result?.error || 'Unknown error'), true);
+            try {
+                var resp = await API.put('/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: false });
+                var data = resp ? await resp.json() : null;
+                if (data && data.success) {
+                    showResult('Config saved: ' + fileName, false);
+                    loadConfigBackups(fileName);
+                } else {
+                    showResult('Save failed: ' + (data?.error || 'Unknown error'), true);
+                }
+            } catch (err) {
+                showResult('Save failed: ' + err.message, true);
             }
         }
 
@@ -1110,13 +1183,18 @@
             const content = document.getElementById('config-editor').value;
             if (!fileName) return;
 
-            const result = await API.request('PUT', '/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: true });
-            if (result && result.success) {
-                showResult('Config saved and container restarted', false);
-                loadConfigBackups(fileName);
-                setTimeout(loadNode, 2000);
-            } else {
-                showResult('Save failed: ' + (result?.error || 'Unknown error'), true);
+            try {
+                var resp = await API.put('/api/nodes/' + nodeId + '/config/' + encodeURIComponent(fileName), { content: content, restart: true });
+                var data = resp ? await resp.json() : null;
+                if (data && data.success) {
+                    showResult('Config saved and container restarted', false);
+                    loadConfigBackups(fileName);
+                    setTimeout(loadNode, 2000);
+                } else {
+                    showResult('Save failed: ' + (data?.error || 'Unknown error'), true);
+                }
+            } catch (err) {
+                showResult('Save failed: ' + err.message, true);
             }
         }
 
