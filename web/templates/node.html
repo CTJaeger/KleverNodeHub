@@ -1084,35 +1084,38 @@
             } else {
                 configSearchIdx = 0;
                 countEl.textContent = '1/' + configSearchMatches.length;
-                jumpToConfigMatch();
+                jumpToConfigMatch(false);
             }
         }
 
-        function jumpToConfigMatch() {
+        function jumpToConfigMatch(focusEditor) {
             var editor = document.getElementById('config-editor');
             var query = document.getElementById('config-search').value;
             if (configSearchIdx < 0 || configSearchIdx >= configSearchMatches.length) return;
             var pos = configSearchMatches[configSearchIdx];
-            editor.focus();
-            editor.setSelectionRange(pos, pos + query.length);
-            // Scroll to selection — calculate line position
+            // Scroll to match
             var textBefore = editor.value.substring(0, pos);
             var lineNum = textBefore.split('\n').length;
             var lineHeight = parseInt(getComputedStyle(editor).lineHeight) || 16;
             editor.scrollTop = Math.max(0, (lineNum - 3) * lineHeight);
+            // Only focus + select when explicitly navigating (not while typing)
+            if (focusEditor) {
+                editor.focus();
+                editor.setSelectionRange(pos, pos + query.length);
+            }
             document.getElementById('config-search-count').textContent = (configSearchIdx + 1) + '/' + configSearchMatches.length;
         }
 
         function searchConfigNext() {
             if (configSearchMatches.length === 0) return;
             configSearchIdx = (configSearchIdx + 1) % configSearchMatches.length;
-            jumpToConfigMatch();
+            jumpToConfigMatch(true);
         }
 
         function searchConfigPrev() {
             if (configSearchMatches.length === 0) return;
             configSearchIdx = (configSearchIdx - 1 + configSearchMatches.length) % configSearchMatches.length;
-            jumpToConfigMatch();
+            jumpToConfigMatch(true);
         }
 
         async function loadConfigFile() {
