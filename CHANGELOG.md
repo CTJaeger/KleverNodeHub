@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-03-26
+- **Fix: Nonce Stall Alert feuerte nicht**: Lookback war nur 2 Minuten — bei Threshold 120s wurde der letzte echte Nonce-Wechsel nie gefunden. Jetzt 3x Threshold (min. 5 Min) als Lookback.
+- **Fix: Config Save "Unknown error"**: Falsches API-Response-Parsing (API.request statt API.put + JSON). Speichern und Speichern & Restart funktionieren jetzt korrekt.
+- **Fix: Config Backups nicht sichtbar**: Listing zeigte nur Version-Backups (Ordner), nicht Editor-Backups (.bak-Dateien). Beide Typen werden jetzt angezeigt.
+- **Log Download bereinigt**: ANSI-Farbcodes und `[stdout]`/`[stderr]` Prefix werden beim Download gestrippt.
+- **Config-Suche**: Neues Suchfeld im Config-Editor mit Match-Counter und Vor/Zurück-Navigation.
+
 ### 2026-03-25
 - **Docker Self-Update**: Dashboard kann sich jetzt auch im Docker-Container selbst updaten, wenn `/var/run/docker.sock` gemountet ist. Flow: eigenen Container erkennen → neues Image pullen → alten Container umbenennen → neuen erstellen → starten → alten stoppen/entfernen. Rollback bei Fehler.
 - **Agent Update Modal Redesign**: Server Agents Tabelle + "Update All" Button oben, Release-Dropdown + manuelle Auswahl unter "Expert Settings" Trennlinie.
