@@ -691,7 +691,10 @@
 
             const running = nodes.filter(n => n.status === 'running').length;
             const stopped = nodes.filter(n => n.status === 'stopped').length;
-            const syncing = nodes.filter(n => n.status === 'syncing').length;
+            const syncing = nodes.filter(function(n) {
+                var meta = n.metadata || {};
+                return n.status === 'running' && (meta.klv_is_syncing === 1 || meta.klv_is_syncing === true);
+            }).length;
             document.getElementById('stat-running').textContent = running;
             document.getElementById('stat-stopped').textContent = stopped;
             document.getElementById('stat-syncing').textContent = syncing;

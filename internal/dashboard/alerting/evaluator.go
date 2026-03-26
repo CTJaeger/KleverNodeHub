@@ -172,6 +172,17 @@ func (e *Evaluator) migrateRules() {
 		}
 	}
 
+	// Migrate sync-lag metric name from camelCase to snake_case (matches actual Klever API field)
+	syncRule, err := e.alertStore.GetRule("builtin-sync-lag")
+	if err == nil && syncRule.MetricName == "klv_isSyncing" {
+		syncRule.MetricName = "klv_is_syncing"
+		if err := e.alertStore.UpdateRule(syncRule); err != nil {
+			log.Printf("alert evaluator: migrate sync-lag metric name: %v", err)
+		} else {
+			log.Println("alert evaluator: migrated sync-lag metric name klv_isSyncing → klv_is_syncing")
+		}
+	}
+
 	// Ensure any missing builtin rules are created
 	for _, rule := range DefaultRules() {
 		if !rule.Builtin {

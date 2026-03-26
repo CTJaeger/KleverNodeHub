@@ -103,7 +103,7 @@ func DefaultRules() []store.AlertRule {
 			ID:          "builtin-sync-lag",
 			Name:        "Sync Lag",
 			Enabled:     true,
-			MetricName:  "klv_isSyncing",
+			MetricName:  "klv_is_syncing",
 			Condition:   "eq",
 			Threshold:   1,
 			DurationSec: 1800,
