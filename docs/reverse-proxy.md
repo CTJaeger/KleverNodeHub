@@ -8,7 +8,9 @@ To get a trusted HTTPS connection, place a reverse proxy in front of the dashboa
 
 - A domain or subdomain pointing to your server (A record or CNAME)
 - Port 80 and 443 open on your firewall
-- [Certbot](https://certbot.eff.org/) installed (for Let's Encrypt)
+- [Certbot](https://certbot.eff.org/) installed with the plugin for your web server:
+  - Apache: `sudo apt install certbot python3-certbot-apache`
+  - Nginx: `sudo apt install certbot python3-certbot-nginx`
 
 ## Docker: Bind to localhost only
 
@@ -69,16 +71,19 @@ Create `/etc/apache2/sites-available/klever-node-hub.conf`:
     SSLProxyCheckPeerCN off
     SSLProxyCheckPeerName off
 
+    # Forward client IP for rate limiting and lockout
+    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"
+    RequestHeader set X-Forwarded-Proto "https"
+
     # WebSocket support (required for live metrics and log streaming)
+    # mod_proxy_wstunnel handles the upgrade automatically
     RewriteEngine On
     RewriteCond %{HTTP:Upgrade} websocket [NC]
-    RewriteRule ^/(.*)$ wss://127.0.0.1:9443/$1 [P,L]
+    RewriteRule ^/(.*)$ https://127.0.0.1:9443/$1 [P,L]
 
     # All other requests
     ProxyPass / https://127.0.0.1:9443/
     ProxyPassReverse / https://127.0.0.1:9443/
-
-    RequestHeader set X-Forwarded-Proto "https"
 </VirtualHost>
 ```
 
@@ -88,6 +93,14 @@ Create `/etc/apache2/sites-available/klever-node-hub.conf`:
 sudo a2ensite klever-node-hub.conf
 sudo apache2ctl configtest
 sudo systemctl reload apache2
+```
+
+### 5. Certificate renewal
+
+Certbot sets up automatic renewal by default. Verify with:
+
+```bash
+sudo certbot renew --dry-run
 ```
 
 ---
@@ -113,11 +126,12 @@ server {
 }
 
 server {
-    listen 443 ssl;
+    listen 443 ssl http2;
     server_name your-domain.example.com;
 
     ssl_certificate     /etc/letsencrypt/live/your-domain.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/your-domain.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
 
     location / {
         proxy_pass https://127.0.0.1:9443;
@@ -132,6 +146,10 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # Keep WebSocket connections alive (default 60s kills idle connections)
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
     }
 }
 ```
@@ -144,11 +162,19 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+### 4. Certificate renewal
+
+Certbot sets up automatic renewal by default. Verify with:
+
+```bash
+sudo certbot renew --dry-run
+```
+
 ---
 
 ## Option 3: Caddy (automatic Let's Encrypt)
 
-[Caddy](https://caddyserver.com/) automatically obtains and renews Let's Encrypt certificates with zero configuration.
+[Caddy](https://caddyserver.com/) automatically obtains and renews Let's Encrypt certificates — no certbot or manual renewal needed.
 
 ### Using Docker Compose
 
@@ -202,13 +228,3 @@ docker compose up -d
 2. Confirm the padlock icon shows a valid certificate (not self-signed)
 3. On mobile, you should now see the **"Add to Home Screen"** or install prompt for the PWA
 4. Check that live metrics update in real-time (confirms WebSocket proxying works)
-
-## Certificate renewal
-
-Certbot sets up automatic renewal by default. Verify with:
-
-```bash
-sudo certbot renew --dry-run
-```
-
-For Caddy, renewal is fully automatic — no action needed.
