@@ -437,6 +437,13 @@
             document.getElementById('ch-name').disabled = true;
             document.getElementById('ch-type').value = ch.type || 'telegram';
             updateChannelFields();
+            // Pre-fill config fields with stored (possibly masked) values
+            if (ch.config) {
+                document.querySelectorAll('.ch-config').forEach(el => {
+                    const val = ch.config[el.dataset.key];
+                    if (val) el.value = val;
+                });
+            }
             // Set severity checkboxes
             document.querySelectorAll('.ch-sev').forEach(c => {
                 c.checked = (ch.filter.severities || []).includes(c.value);
