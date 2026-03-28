@@ -375,9 +375,6 @@ func (e *Evaluator) evaluateStall(rule *store.AlertRule, stateKey, nodeID, serve
 		stallLookback = 300 // minimum 5 minutes
 	}
 	stallFrom := to - stallLookback
-	if stallFrom < from {
-		stallFrom = from
-	}
 	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, stallFrom, to)
 	source := fmt.Sprintf("node:%s", nodeName)
 
