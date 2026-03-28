@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-03-28
+- **Fix: Nonce Stall Alert wirkungslos**: Der 3x-Lookback wurde durch Clamping auf das globale 2-Min-Fenster sofort wieder aufgehoben. Clamping entfernt — Stall-Detection schaut jetzt tatsächlich 6+ Minuten zurück.
+- **Globale Alert-Badge in Sidebar**: Roter Badge mit Anzahl aktiver Alerts am "Alerts"-Link — sichtbar auf JEDER Seite (Overview, Node, Server, Alerts, Settings). Pulsiert bei Critical Alerts. Pollt alle 15s.
+- **Config-Suchfeld auf 50% Breite**: Suchfeld nimmt nicht mehr die volle Zeile ein.
+- **PR #48 gemergt**: Flat/Grouped Toggle wird per localStorage persistiert.
+- **PR #49 gemergt**: Maskierte Credentials beim Editieren von Notification-Channels (Secrets verlassen nie den Backend unmasked).
+
 ### 2026-03-26
 - **Fix: Nonce Stall Alert feuerte nicht**: Lookback war nur 2 Minuten — bei Threshold 120s wurde der letzte echte Nonce-Wechsel nie gefunden. Jetzt 3x Threshold (min. 5 Min) als Lookback.
 - **Fix: Config Save "Unknown error"**: Falsches API-Response-Parsing (API.request statt API.put + JSON). Speichern und Speichern & Restart funktionieren jetzt korrekt.
