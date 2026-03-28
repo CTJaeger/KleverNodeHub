@@ -716,10 +716,16 @@
             renderNodes();
         }
 
-        var nodeViewMode = 'flat';
+        var nodeViewMode = localStorage.getItem('nodeViewMode') || 'flat';
+        // Sync toggle buttons with persisted state
+        if (nodeViewMode === 'grouped') {
+            document.getElementById('view-flat-btn').classList.remove('active');
+            document.getElementById('view-grouped-btn').classList.add('active');
+        }
 
         function setNodeView(mode) {
             nodeViewMode = mode;
+            localStorage.setItem('nodeViewMode', mode);
             document.getElementById('view-flat-btn').classList.toggle('active', mode === 'flat');
             document.getElementById('view-grouped-btn').classList.toggle('active', mode === 'grouped');
             renderNodes();
