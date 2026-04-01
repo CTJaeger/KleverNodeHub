@@ -133,6 +133,8 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeKeyBackups(msg.Payload, result)
 	case "agent.update":
 		err = e.executeAgentUpdate(msg.Payload, result)
+	case "server.benchmark":
+		err = e.executeBenchmark(ctx, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -612,6 +614,21 @@ func (e *Executor) executeConfigVersionRestore(payload any, result *models.Comma
 	}
 
 	result.Output = "restored config from version backup: " + backupName
+	return nil
+}
+
+func (e *Executor) executeBenchmark(ctx context.Context, result *models.CommandResult) error {
+	// Use a longer context for benchmark (up to 5 minutes)
+	benchCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	benchResult, err := e.docker.RunBenchmark(benchCtx)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(benchResult)
+	result.Output = string(jsonBytes)
 	return nil
 }
 
