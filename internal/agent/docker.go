@@ -232,7 +232,8 @@ func (d *DockerClient) DiscoverNodes(ctx context.Context) ([]DiscoveredNode, err
 		}
 
 		// Skip benchmark containers — they use the same image but aren't nodes
-		if cj.Config.Labels["purpose"] == "benchmark" {
+		containerName := strings.TrimPrefix(cj.Name, "/")
+		if cj.Config.Labels["purpose"] == "benchmark" || containerName == "klever-benchmark-run" {
 			continue
 		}
 
