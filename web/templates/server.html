@@ -701,16 +701,32 @@
             document.getElementById('benchmark-status-text').textContent = 'Running benchmark... This may take 1–3 minutes.';
 
             try {
-                var data = await API.postJSON('/api/servers/' + serverID + '/benchmark', {});
-                if (data.ok && data.data && data.data.tests) {
-                    renderBenchmarkResults(data.data);
+                // Use raw fetch with AbortController — benchmark can take several minutes
+                var controller = new AbortController();
+                var timeoutId = setTimeout(function() { controller.abort(); }, 7 * 60 * 1000); // 7 min
+                var fetchOpts = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: '{}',
+                    signal: controller.signal
+                };
+                if (API.accessToken) {
+                    fetchOpts.headers['Authorization'] = 'Bearer ' + API.accessToken;
+                }
+                var resp = await fetch('/api/servers/' + serverID + '/benchmark', fetchOpts);
+                clearTimeout(timeoutId);
+                var data = await resp.json();
+                if (resp.ok && data && data.tests) {
+                    renderBenchmarkResults(data);
                 } else {
-                    var errMsg = (data.data && data.data.error) || 'Unknown error';
+                    var errMsg = (data && data.error) || 'Unknown error';
                     document.getElementById('benchmark-status-text').textContent = 'Benchmark failed: ' + errMsg;
                     document.getElementById('benchmark-status').querySelector('.alert').className = 'alert alert-error';
                 }
             } catch (e) {
-                document.getElementById('benchmark-status-text').textContent = 'Benchmark failed: ' + (e.message || e);
+                var msg = e.name === 'AbortError' ? 'Benchmark timed out (>7 min)' : (e.message || e);
+                document.getElementById('benchmark-status-text').textContent = 'Benchmark failed: ' + msg;
                 document.getElementById('benchmark-status').querySelector('.alert').className = 'alert alert-error';
             } finally {
                 benchmarkRunning = false;
