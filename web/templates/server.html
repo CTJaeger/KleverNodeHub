@@ -150,6 +150,7 @@
                 <div class="tabs node-tabs">
                     <button class="tab node-tab active" type="button" data-tab="overview" onclick="switchServerTab('overview')">Overview</button>
                     <button class="tab node-tab" type="button" data-tab="nodes" onclick="switchServerTab('nodes')">Nodes</button>
+                    <button class="tab node-tab" type="button" data-tab="benchmark" onclick="switchServerTab('benchmark')">Benchmark</button>
                 </div>
             </div>
 
@@ -229,6 +230,39 @@
                         <div id="nodes-list">
                             <div class="data-table-count">Loading...</div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="server-tab-benchmark" class="node-tab-panel">
+                <div class="card mb-16">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <h3>Hardware Benchmark</h3>
+                        <button class="btn btn-sm btn-primary" id="btn-run-benchmark" onclick="runBenchmark()">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            Run Benchmark
+                        </button>
+                    </div>
+                    <p class="text-sm text-muted mb-16">Runs the official Klever benchmark tool to test Disk I/O, Network, CPU, Memory, and KV Store performance. Takes 1–3 minutes.</p>
+
+                    <div id="benchmark-status" class="hidden" style="margin-bottom:16px;">
+                        <div class="alert alert-warning">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <span id="benchmark-status-text">Running benchmark...</span>
+                        </div>
+                    </div>
+
+                    <div id="benchmark-results" class="hidden">
+                        <div id="benchmark-overall" style="margin-bottom:16px;"></div>
+                        <div id="benchmark-tests" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;"></div>
+                        <details style="margin-top:16px;">
+                            <summary class="text-sm text-muted" style="cursor:pointer;">Raw Output</summary>
+                            <pre id="benchmark-raw" style="margin-top:8px;padding:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;color:var(--text-secondary);"></pre>
+                        </details>
+                    </div>
+
+                    <div id="benchmark-empty" class="text-sm text-muted" style="padding:24px 0;text-align:center;">
+                        No benchmark results yet. Click "Run Benchmark" to start.
                     </div>
                 </div>
             </div>
@@ -474,16 +508,18 @@
 
         function getServerTabFromHash() {
             var value = (window.location.hash || '').replace(/^#/, '');
-            return value === 'nodes' ? 'nodes' : 'overview';
+            if (value === 'nodes' || value === 'benchmark') return value;
+            return 'overview';
         }
 
         function switchServerTab(name, updateHash) {
             if (updateHash === undefined) updateHash = true;
-            activeServerTab = name === 'nodes' ? 'nodes' : 'overview';
+            var validTabs = ['overview', 'nodes', 'benchmark'];
+            activeServerTab = validTabs.indexOf(name) >= 0 ? name : 'overview';
             document.querySelectorAll('.node-tab[data-tab]').forEach(function(tab) {
                 tab.classList.toggle('active', tab.getAttribute('data-tab') === activeServerTab);
             });
-            document.querySelectorAll('#server-tab-overview, #server-tab-nodes').forEach(function(panel) {
+            document.querySelectorAll('#server-tab-overview, #server-tab-nodes, #server-tab-benchmark').forEach(function(panel) {
                 panel.classList.toggle('active', panel.id === 'server-tab-' + activeServerTab);
             });
             syncServerSearchState();
@@ -646,6 +682,75 @@
             } catch (e) {
                 alert('Failed to save: ' + (e.message || e));
             }
+        }
+
+        // ── Benchmark ──
+        var benchmarkRunning = false;
+
+        async function runBenchmark() {
+            if (benchmarkRunning) return;
+            benchmarkRunning = true;
+
+            var btn = document.getElementById('btn-run-benchmark');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+
+            document.getElementById('benchmark-empty').classList.add('hidden');
+            document.getElementById('benchmark-results').classList.add('hidden');
+            document.getElementById('benchmark-status').classList.remove('hidden');
+            document.getElementById('benchmark-status-text').textContent = 'Running benchmark... This may take 1–3 minutes.';
+
+            try {
+                var data = await API.postJSON('/api/servers/' + serverID + '/benchmark', {});
+                if (data.ok && data.data && data.data.tests) {
+                    renderBenchmarkResults(data.data);
+                } else {
+                    var errMsg = (data.data && data.data.error) || 'Unknown error';
+                    document.getElementById('benchmark-status-text').textContent = 'Benchmark failed: ' + errMsg;
+                    document.getElementById('benchmark-status').querySelector('.alert').className = 'alert alert-error';
+                }
+            } catch (e) {
+                document.getElementById('benchmark-status-text').textContent = 'Benchmark failed: ' + (e.message || e);
+                document.getElementById('benchmark-status').querySelector('.alert').className = 'alert alert-error';
+            } finally {
+                benchmarkRunning = false;
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Benchmark';
+            }
+        }
+
+        function renderBenchmarkResults(result) {
+            document.getElementById('benchmark-status').classList.add('hidden');
+            document.getElementById('benchmark-empty').classList.add('hidden');
+            document.getElementById('benchmark-results').classList.remove('hidden');
+
+            // Overall badge
+            var overallEl = document.getElementById('benchmark-overall');
+            var overallColor = result.overall === 'PASS' ? '#22c55e' : result.overall === 'WARN' ? '#f59e0b' : '#ef4444';
+            var passed = result.tests.filter(function(t) { return t.status === 'PASS'; }).length;
+            overallEl.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">' +
+                '<span style="display:inline-block;padding:6px 16px;border-radius:8px;background:' + overallColor + '20;color:' + overallColor + ';font-weight:700;font-size:1.1rem;">' + result.overall + '</span>' +
+                '<span class="text-muted">' + passed + '/' + result.tests.length + ' tests passed</span>' +
+                (result.timestamp ? '<span class="text-muted text-sm" style="margin-left:auto;">' + new Date(result.timestamp * 1000).toLocaleString() + '</span>' : '') +
+                '</div>';
+
+            // Test cards
+            var testsEl = document.getElementById('benchmark-tests');
+            testsEl.innerHTML = result.tests.map(function(t) {
+                var color = t.status === 'PASS' ? '#22c55e' : t.status === 'WARN' ? '#f59e0b' : '#ef4444';
+                var icon = t.status === 'PASS' ? '&#10003;' : t.status === 'WARN' ? '&#9888;' : '&#10007;';
+                return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                        '<span style="color:' + color + ';font-weight:700;font-size:1.1rem;">' + icon + '</span>' +
+                        '<span style="font-weight:600;color:var(--text-primary);">' + esc(t.name) + '</span>' +
+                        '<span style="margin-left:auto;padding:2px 8px;border-radius:4px;background:' + color + '18;color:' + color + ';font-size:11px;font-weight:700;">' + t.status + '</span>' +
+                    '</div>' +
+                    '<div class="text-sm text-muted">' + esc(t.details) + '</div>' +
+                '</div>';
+            }).join('');
+
+            // Raw output
+            document.getElementById('benchmark-raw').textContent = result.raw_output || '';
         }
     </script>
     <script>
