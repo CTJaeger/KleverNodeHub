@@ -86,8 +86,9 @@ type containerJSON struct {
 	ID    string `json:"Id"`
 	Name  string `json:"Name"`
 	State struct {
-		Status  string `json:"Status"` // "running", "exited", etc.
-		Running bool   `json:"Running"`
+		Status   string `json:"Status"` // "running", "exited", etc.
+		Running  bool   `json:"Running"`
+		ExitCode int    `json:"ExitCode"`
 	} `json:"State"`
 	Config struct {
 		Image  string            `json:"Image"`
