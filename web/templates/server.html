@@ -270,6 +270,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/charts.js"></script>
+    <script src="/static/js/ws.js"></script>
     <script>
         var serverID = window.location.pathname.split('/').pop();
         var server = null;
@@ -684,6 +685,21 @@
         // ── Benchmark ──
         var benchmarkRunning = false;
 
+        // WebSocket progress listener
+        WS.connect();
+        WS.on('benchmark.progress', function(data) {
+            if (!benchmarkRunning) return;
+            if (!data || !data.payload) return;
+            var p = data.payload;
+            var statusEl = document.getElementById('benchmark-status-text');
+            if (statusEl && p.status) {
+                var pct = p.total > 0 ? Math.round(p.step / p.total * 100) : 0;
+                statusEl.innerHTML = '<strong>Step ' + p.step + '/' + p.total + '</strong> — ' + esc(p.status) +
+                    '<div style="height:4px;background:var(--bg-input);border-radius:2px;margin-top:8px;overflow:hidden;">' +
+                    '<div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:2px;transition:width 0.3s;"></div></div>';
+            }
+        });
+
         async function runBenchmark() {
             if (benchmarkRunning) return;
             benchmarkRunning = true;
@@ -714,7 +730,7 @@
                 var resp = await fetch('/api/servers/' + serverID + '/benchmark', fetchOpts);
                 clearTimeout(timeoutId);
                 var data = await resp.json();
-                if (resp.ok && data && data.tests) {
+                if (resp.ok && data && data.sections) {
                     renderBenchmarkResults(data);
                 } else {
                     var errMsg = (data && data.error) || 'Unknown error';

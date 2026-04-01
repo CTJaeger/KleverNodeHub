@@ -155,6 +155,12 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 		case "command.result":
 			h.handleCommandResult(&msg)
 
+		case "benchmark.progress":
+			h.hub.BroadcastToBrowsers("benchmark.progress", map[string]any{
+				"server_id": serverID,
+				"payload":   msg.Payload,
+			})
+
 		default:
 			log.Printf("unknown action from %s: %s", serverID, msg.Action)
 		}
