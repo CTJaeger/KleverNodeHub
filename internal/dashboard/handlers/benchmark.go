@@ -29,6 +29,11 @@ func NewBenchmarkHandler(hub *ws.Hub, serverStore *store.ServerStore) *Benchmark
 // HandleRunBenchmark starts a benchmark on a server's agent.
 // POST /api/servers/{id}/benchmark
 func (h *BenchmarkHandler) HandleRunBenchmark(w http.ResponseWriter, r *http.Request) {
+	// Extend the HTTP write deadline — benchmark takes 1-5 minutes,
+	// far longer than the server's default 30s WriteTimeout.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(benchmarkTimeout + 30*time.Second))
+
 	serverID := r.PathValue("id")
 	if serverID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing server ID"})
