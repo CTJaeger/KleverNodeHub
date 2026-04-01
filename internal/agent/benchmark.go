@@ -17,46 +17,51 @@ import (
 
 // BenchmarkResult holds the parsed results of a server hardware benchmark.
 type BenchmarkResult struct {
-	Timestamp int64           `json:"timestamp"`
-	Overall   string          `json:"overall"` // "PASS", "WARN", "FAIL"
-	Tests     []BenchmarkTest `json:"tests"`
-	RawOutput string          `json:"raw_output"`
+	Timestamp int64              `json:"timestamp"`
+	Score     int                `json:"score"`     // 0-1000
+	MaxScore  int                `json:"max_score"` // 1000
+	Grade     string             `json:"grade"`     // "A", "B", "C", etc.
+	Verdict   string             `json:"verdict"`   // "Excellent — production-ready..."
+	Sections  []BenchmarkSection `json:"sections"`
+	RawOutput string             `json:"raw_output"`
 }
 
-// BenchmarkTest is a single benchmark test category.
-type BenchmarkTest struct {
-	Name    string `json:"name"`    // "Disk I/O", "Network", "CPU", "Memory", "KV Store"
-	Status  string `json:"status"`  // "PASS", "WARN", "FAIL"
-	Details string `json:"details"` // "459 MB/s write, 6029 random IOPS (NVMe performing well)"
+// BenchmarkSection is one category in the benchmark report.
+type BenchmarkSection struct {
+	Name     string  `json:"name"`      // "GOROUTINE SCALABILITY", "DISK I/O", etc.
+	Status   string  `json:"status"`    // "PASS", "WARN", "FAIL"
+	Score    int     `json:"score"`     // section score
+	MaxScore int     `json:"max_score"` // section max
+	Percent  float64 `json:"percent"`   // score percentage
 }
 
-const benchmarkContainerName = "klever-benchmark-run"
+const (
+	benchmarkContainerName = "klever-benchmark-run"
+	benchmarkImageTag      = "v1.7.16-0-gcf9f612c" // first build with benchmark binary
+)
 
 // RunBenchmark runs the klever-go benchmark tool in a one-shot Docker container.
-// Steps: create benchmark dir → create container → start → wait → read logs → cleanup.
 func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, error) {
 	benchDir := "/tmp/klever-benchmark"
 
-	// 1. Create benchmark directory with correct ownership
-	if err := os.MkdirAll(benchDir, 0755); err != nil {
+	// 1. Create benchmark directory
+	if err := os.MkdirAll(benchDir, 0777); err != nil {
 		return nil, fmt.Errorf("create benchmark dir: %w", err)
 	}
-	if err := os.Chmod(benchDir, 0777); err != nil {
-		return nil, fmt.Errorf("chmod benchmark dir: %w", err)
-	}
 
-	// 2. Remove leftover container from previous run (if any)
+	// 2. Remove leftover container from previous run
 	_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
 
-	// 3. Pull latest klever-go image
-	if err := d.PullImage(ctx, kleverImage+":latest"); err != nil {
+	// 3. Pull the benchmark image
+	benchImage := kleverImage + ":" + benchmarkImageTag
+	if err := d.PullImage(ctx, benchImage); err != nil {
 		return nil, fmt.Errorf("pull benchmark image: %w", err)
 	}
 
 	// 4. Create one-shot benchmark container
+	// Entrypoint overrides the image's entrypoint.sh
 	body := containerCreateBody{
-		Image:      kleverImage + ":latest",
-		User:       "999:999",
+		Image:      benchImage,
 		Entrypoint: []string{"/usr/local/bin/benchmark"},
 		Cmd:        []string{"--disk-dir", "/opt/klever-blockchain/benchmark"},
 		HostConfig: hostConfigBody{
@@ -107,7 +112,7 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 		return nil, fmt.Errorf("start benchmark container: %w", err)
 	}
 
-	// 6. Wait for container to finish (poll status every 2s, max 5 min)
+	// 6. Wait for container to finish (poll status, max 5 min)
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
@@ -139,11 +144,8 @@ func (d *DockerClient) waitForExit(ctx context.Context, containerName string) er
 		if err != nil {
 			return fmt.Errorf("get status: %w", err)
 		}
-		if strings.Contains(status, "exited") || strings.Contains(status, "dead") || strings.Contains(status, "created") {
-			// "created" after running means it finished (some Docker versions)
-			if !strings.Contains(status, "running") {
-				return nil
-			}
+		if strings.Contains(status, "exited") || strings.Contains(status, "dead") {
+			return nil
 		}
 
 		select {
@@ -187,17 +189,13 @@ func (d *DockerClient) readContainerLogs(ctx context.Context, containerName stri
 		return "", fmt.Errorf("read logs: %w", err)
 	}
 
-	// Docker multiplexed stream: strip 8-byte headers from each frame
 	return stripDockerLogHeaders(raw), nil
 }
 
-// stripDockerLogHeaders removes the 8-byte multiplexed stream headers
-// that Docker prepends to each log line when TTY is disabled.
+// stripDockerLogHeaders removes the 8-byte multiplexed stream headers.
 func stripDockerLogHeaders(data []byte) string {
 	var out strings.Builder
 	for len(data) >= 8 {
-		// Bytes 0: stream type (1=stdout, 2=stderr)
-		// Bytes 4-7: big-endian uint32 frame size
 		frameSize := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
 		data = data[8:]
 		if frameSize > len(data) {
@@ -206,60 +204,97 @@ func stripDockerLogHeaders(data []byte) string {
 		out.Write(data[:frameSize])
 		data = data[frameSize:]
 	}
-	// If no frames were found (TTY mode), return raw
 	if out.Len() == 0 {
 		return string(data)
 	}
 	return out.String()
 }
 
-// parseBenchmarkOutput parses the text output of the klever benchmark tool.
-var benchLinePattern = regexp.MustCompile(`(?i)^\s*-?\s*([\w\s/]+?):\s*(PASS|WARN|FAIL)\s*[—–-]\s*(.+)$`)
+// --- Parsing ---
+
+var (
+	scorePattern   = regexp.MustCompile(`SCORE\s*:\s*(\d+)\s*/\s*(\d+)\s+Grade:\s*(\S+)\s+(.+)`)
+	sectionPattern = regexp.MustCompile(`(?i)^\s*([\w\s/()]+?)\s+(\d+)\s*/\s*(\d+)\s+\[`)
+)
 
 func parseBenchmarkOutput(raw string) *BenchmarkResult {
 	result := &BenchmarkResult{
 		Timestamp: time.Now().Unix(),
-		Overall:   "PASS",
 		RawOutput: raw,
+		MaxScore:  1000,
 	}
 
+	// Parse SCORE line
+	if m := scorePattern.FindStringSubmatch(raw); m != nil {
+		result.Score, _ = strconv.Atoi(m[1])
+		result.MaxScore, _ = strconv.Atoi(m[2])
+		result.Grade = m[3]
+		result.Verdict = strings.TrimSpace(m[4])
+	}
+
+	// Parse section scores from the summary block at the bottom
 	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		m := benchLinePattern.FindStringSubmatch(line)
+		m := sectionPattern.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-
-		test := BenchmarkTest{
-			Name:    strings.TrimSpace(m[1]),
-			Status:  strings.ToUpper(m[2]),
-			Details: strings.TrimSpace(m[3]),
+		score, _ := strconv.Atoi(m[2])
+		maxScore, _ := strconv.Atoi(m[3])
+		var pct float64
+		if maxScore > 0 {
+			pct = float64(score) / float64(maxScore) * 100
 		}
-		result.Tests = append(result.Tests, test)
 
-		// Overall = worst status
-		if test.Status == "FAIL" {
-			result.Overall = "FAIL"
-		} else if test.Status == "WARN" && result.Overall != "FAIL" {
-			result.Overall = "WARN"
-		}
+		// Determine status from the section headers in the report
+		name := strings.TrimSpace(m[1])
+		status := sectionStatus(raw, name)
+
+		result.Sections = append(result.Sections, BenchmarkSection{
+			Name:     name,
+			Status:   status,
+			Score:    score,
+			MaxScore: maxScore,
+			Percent:  pct,
+		})
 	}
 
 	return result
 }
 
-// FormatBenchmarkScore returns a human-readable score from benchmark results.
-func FormatBenchmarkScore(r *BenchmarkResult) string {
-	if len(r.Tests) == 0 {
-		return "No results"
+// sectionStatus finds the PASS/WARN/FAIL status for a section from the full report.
+func sectionStatus(raw, sectionName string) string {
+	// Map summary names to header names in the report
+	headerNames := map[string][]string{
+		"Goroutine (CPU)": {"GOROUTINE"},
+		"Disk I/O":        {"DISK I/O"},
+		"Network":         {"NETWORK"},
+		"KV Store":        {"KV STORE"},
+		"Memory":          {"MEMORY"},
+		"BigNum / FPU":    {"BIG NUMBER"},
 	}
 
-	passed := 0
-	for _, t := range r.Tests {
-		if t.Status == "PASS" {
-			passed++
+	patterns, ok := headerNames[sectionName]
+	if !ok {
+		patterns = []string{strings.ToUpper(sectionName)}
+	}
+
+	for _, pat := range patterns {
+		idx := strings.Index(strings.ToUpper(raw), pat)
+		if idx < 0 {
+			continue
+		}
+		// Look for [OK] PASS, [!!] WARN, [XX] FAIL near the header
+		snippet := raw[idx:min(idx+200, len(raw))]
+		if strings.Contains(snippet, "FAIL") {
+			return "FAIL"
+		}
+		if strings.Contains(snippet, "WARN") {
+			return "WARN"
+		}
+		if strings.Contains(snippet, "PASS") {
+			return "PASS"
 		}
 	}
-	return strconv.Itoa(passed) + "/" + strconv.Itoa(len(r.Tests)) + " passed"
+	return "PASS"
 }

@@ -90,9 +90,10 @@ type containerJSON struct {
 		Running bool   `json:"Running"`
 	} `json:"State"`
 	Config struct {
-		Image string   `json:"Image"`
-		Cmd   []string `json:"Cmd"`
-		Tty   bool     `json:"Tty"`
+		Image  string            `json:"Image"`
+		Cmd    []string          `json:"Cmd"`
+		Tty    bool              `json:"Tty"`
+		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	HostConfig struct {
 		Binds []string `json:"Binds"` // "host:container[:opts]"
@@ -227,6 +228,11 @@ func (d *DockerClient) DiscoverNodes(ctx context.Context) ([]DiscoveredNode, err
 		cj, err := d.InspectContainer(ctx, id)
 		if err != nil {
 			continue // Skip containers we can't inspect
+		}
+
+		// Skip benchmark containers — they use the same image but aren't nodes
+		if cj.Config.Labels["purpose"] == "benchmark" {
+			continue
 		}
 
 		node := parseContainerToNode(cj)
