@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-04-01
+- **Server Hardware Benchmark**: Neuer "Benchmark"-Tab auf der Server-Detailseite. Startet den offiziellen Klever Benchmark-Tool in einem Docker-Container. Testet Disk I/O, Network, CPU, Memory, KV Store mit PASS/WARN/FAIL. Ergebnis als farbcodierte Cards.
+
 ### 2026-03-28
 - **Fix: Nonce Stall Alert wirkungslos**: Der 3x-Lookback wurde durch Clamping auf das globale 2-Min-Fenster sofort wieder aufgehoben. Clamping entfernt — Stall-Detection schaut jetzt tatsächlich 6+ Minuten zurück.
 - **Globale Alert-Badge in Sidebar**: Roter Badge mit Anzahl aktiver Alerts am "Alerts"-Link — sichtbar auf JEDER Seite (Overview, Node, Server, Alerts, Settings). Pulsiert bei Critical Alerts. Pollt alle 15s.
