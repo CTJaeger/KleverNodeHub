@@ -44,10 +44,11 @@ const (
 func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, error) {
 	benchDir := "/tmp/klever-benchmark"
 
-	// 1. Create benchmark directory
+	// 1. Create benchmark directory with permissions for container user (UID 999)
 	if err := os.MkdirAll(benchDir, 0777); err != nil {
 		return nil, fmt.Errorf("create benchmark dir: %w", err)
 	}
+	_ = os.Chown(benchDir, 999, 999)
 
 	// 2. Remove leftover container from previous run
 	_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
@@ -118,33 +119,51 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 
 	if err := d.waitForExit(waitCtx, benchmarkContainerName); err != nil {
 		_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
+		_ = os.RemoveAll(benchDir)
 		return nil, fmt.Errorf("benchmark did not finish: %w", err)
 	}
 
-	// 7. Read logs
-	rawOutput, err := d.readContainerLogs(ctx, benchmarkContainerName)
-	if err != nil {
+	// 7. Check exit code
+	cj, err := d.InspectContainer(ctx, benchmarkContainerName)
+	if err == nil && cj.State.ExitCode != 0 {
+		// Read logs for error details
+		errOutput, _ := d.readContainerLogs(ctx, benchmarkContainerName)
 		_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
-		return nil, fmt.Errorf("read benchmark logs: %w", err)
+		_ = os.RemoveAll(benchDir)
+		// Extract last meaningful line as error message
+		errMsg := lastNonEmptyLine(errOutput)
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("exit code %d", cj.State.ExitCode)
+		}
+		return nil, fmt.Errorf("benchmark failed: %s", errMsg)
 	}
 
-	// 8. Cleanup
+	// 8. Read logs
+	rawOutput, logErr := d.readContainerLogs(ctx, benchmarkContainerName)
+	if logErr != nil {
+		_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
+		_ = os.RemoveAll(benchDir)
+		return nil, fmt.Errorf("read benchmark logs: %w", logErr)
+	}
+
+	// 9. Cleanup
 	_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
 	_ = os.RemoveAll(benchDir)
 
-	// 9. Parse results
+	// 10. Parse results
 	result := parseBenchmarkOutput(rawOutput)
 	return result, nil
 }
 
-// waitForExit polls container status until it exits or the context times out.
+// waitForExit polls container status until it stops running or the context times out.
 func (d *DockerClient) waitForExit(ctx context.Context, containerName string) error {
 	for {
 		status, err := d.GetContainerStatus(ctx, containerName)
 		if err != nil {
 			return fmt.Errorf("get status: %w", err)
 		}
-		if strings.Contains(status, "exited") || strings.Contains(status, "dead") {
+		// GetContainerStatus returns "running" or "stopped"
+		if status != "running" {
 			return nil
 		}
 
@@ -208,6 +227,18 @@ func stripDockerLogHeaders(data []byte) string {
 		return string(data)
 	}
 	return out.String()
+}
+
+// lastNonEmptyLine returns the last non-empty line from text.
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 // --- Parsing ---
