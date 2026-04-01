@@ -40,11 +40,20 @@ const (
 	benchmarkImageTag      = "v1.7.16-0-gcf9f612c" // first build with benchmark binary
 )
 
+// BenchmarkProgress is called during benchmark execution to report progress.
+type BenchmarkProgress func(step, total int, status string)
+
 // RunBenchmark runs the klever-go benchmark tool in a one-shot Docker container.
-func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, error) {
+func (d *DockerClient) RunBenchmark(ctx context.Context, onProgress BenchmarkProgress) (*BenchmarkResult, error) {
 	benchDir := "/tmp/klever-benchmark"
+	report := func(step int, status string) {
+		if onProgress != nil {
+			onProgress(step, 8, status)
+		}
+	}
 
 	// 1. Create benchmark directory with permissions for container user (UID 999)
+	report(1, "Preparing benchmark directory...")
 	if err := os.MkdirAll(benchDir, 0777); err != nil {
 		return nil, fmt.Errorf("create benchmark dir: %w", err)
 	}
@@ -54,6 +63,7 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 	_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
 
 	// 3. Pull the benchmark image
+	report(2, "Pulling benchmark image...")
 	benchImage := kleverImage + ":" + benchmarkImageTag
 	if err := d.PullImage(ctx, benchImage); err != nil {
 		return nil, fmt.Errorf("pull benchmark image: %w", err)
@@ -108,12 +118,16 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 	}
 
 	// 5. Start the container
+	report(3, "Starting benchmark container...")
 	if err := d.StartContainer(ctx, benchmarkContainerName); err != nil {
 		_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
 		return nil, fmt.Errorf("start benchmark container: %w", err)
 	}
 
-	// 6. Wait for container to finish (poll status, max 5 min)
+	// 6. Stream logs to detect progress while waiting for exit
+	report(4, "Running benchmarks...")
+	go d.streamBenchmarkProgress(ctx, benchmarkContainerName, onProgress)
+
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
@@ -124,6 +138,7 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 	}
 
 	// 7. Check exit code
+	report(7, "Reading results...")
 	cj, err := d.InspectContainer(ctx, benchmarkContainerName)
 	if err == nil && cj.State.ExitCode != 0 {
 		// Read logs for error details
@@ -147,12 +162,77 @@ func (d *DockerClient) RunBenchmark(ctx context.Context) (*BenchmarkResult, erro
 	}
 
 	// 9. Cleanup
+	report(8, "Cleaning up...")
 	_ = d.RemoveContainer(ctx, benchmarkContainerName, true)
 	_ = os.RemoveAll(benchDir)
 
 	// 10. Parse results
 	result := parseBenchmarkOutput(rawOutput)
 	return result, nil
+}
+
+// streamBenchmarkProgress follows the container logs and sends progress events
+// for each "Running..." line the benchmark outputs.
+func (d *DockerClient) streamBenchmarkProgress(ctx context.Context, containerName string, onProgress BenchmarkProgress) {
+	if onProgress == nil {
+		return
+	}
+
+	params := url.Values{
+		"stdout": {"true"},
+		"stderr": {"true"},
+		"follow": {"true"},
+		"tail":   {"0"},
+	}
+
+	u := fmt.Sprintf("http://localhost/%s/containers/%s/logs?%s",
+		d.apiVersion, url.PathEscape(containerName), params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Map benchmark test names to step numbers
+	testSteps := []struct {
+		keyword string
+		step    int
+		name    string
+	}{
+		{"network benchmark", 4, "Running network benchmark..."},
+		{"KV store benchmark", 4, "Running KV store benchmark..."},
+		{"goroutine scalability", 5, "Running CPU scalability benchmark..."},
+		{"disk I/O benchmark", 5, "Running disk I/O benchmark..."},
+		{"memory benchmark", 6, "Running memory benchmark..."},
+		{"big-number benchmark", 6, "Running big-number / FPU benchmark..."},
+	}
+
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			chunk := string(buf[:n])
+			// Strip Docker multiplex headers (8-byte prefix per frame)
+			cleaned := stripDockerLogHeaders(buf[:n])
+			if cleaned != "" {
+				chunk = cleaned
+			}
+			for _, ts := range testSteps {
+				if strings.Contains(strings.ToLower(chunk), strings.ToLower(ts.keyword)) {
+					onProgress(ts.step, 8, ts.name)
+				}
+			}
+		}
+		if readErr != nil {
+			return
+		}
+	}
 }
 
 // waitForExit polls container status until it stops running or the context times out.
