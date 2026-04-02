@@ -688,8 +688,8 @@ h1, h2, h3, h4, h5, h6 {
 
 .server-cell-server {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
 }
 
