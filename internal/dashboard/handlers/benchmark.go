@@ -76,5 +76,5 @@ func (h *BenchmarkHandler) HandleRunBenchmark(w http.ResponseWriter, r *http.Req
 	// cmdResult.Output is the JSON-encoded BenchmarkResult
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, cmdResult.Output)
+	_, _ = fmt.Fprint(w, cmdResult.Output)
 }
