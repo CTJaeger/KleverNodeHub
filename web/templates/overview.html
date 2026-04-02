@@ -494,8 +494,8 @@
                 }
                 return '<div class="server-row server-row-grid" role="link" tabindex="0" aria-label="' + label + '" onclick="navigateRow(event, \'' + serverURLJS + '\')" onkeydown="activateRow(event, \'' + serverURLJS + '\')">' +
                     '<div class="server-cell server-cell-server" data-label="Server">' +
-                        '<span class="server-row-name">' + serverName + '</span>' +
-                        (subtitle ? '<span class="server-row-sub-inline">' + esc(subtitle) + '</span>' : '') +
+                        '<div class="server-row-name">' + serverName + '</div>' +
+                        (subtitle ? '<div class="server-row-sub">' + esc(subtitle) + '</div>' : '') +
                     '</div>' +
                     '<div class="server-cell" data-label="Host">' + esc(server.hostname) + '</div>' +
                     '<div class="server-cell" data-label="Agent">' + esc(server.agent_version || '-') + '</div>' +
