@@ -132,6 +132,10 @@
                             <label class="form-label">Context lines</label>
                             <input type="number" id="context-lines" class="form-input" value="30" min="0" max="200" style="width:100px;">
                         </div>
+                        <div>
+                            <label class="form-label">Log lines to scan</label>
+                            <input type="number" id="tail-lines" class="form-input" value="10000" min="100" max="100000" step="1000" style="width:130px;" title="How far back to scan in container logs (max 100000)">
+                        </div>
                     </div>
                 </div>
 
@@ -214,6 +218,7 @@
         }
         var slots = slotsRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
         var contextLines = parseInt(document.getElementById('context-lines').value, 10) || 30;
+        var tailLines = parseInt(document.getElementById('tail-lines').value, 10) || 10000;
         var nodeIDs = [];
         document.querySelectorAll('.si-node-cb:checked').forEach(function(cb) {
             nodeIDs.push(cb.getAttribute('data-node-id'));
@@ -241,6 +246,7 @@
                 body: JSON.stringify({
                     slots: slots,
                     context: contextLines,
+                    tail: tailLines,
                     node_ids: nodeIDs
                 })
             });

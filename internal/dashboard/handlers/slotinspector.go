@@ -31,6 +31,7 @@ func NewSlotInspectorHandler(hub *ws.Hub, nodeStore *store.NodeStore) *SlotInspe
 type slotInspectRequest struct {
 	Slots   []string `json:"slots"`
 	Context int      `json:"context"`
+	Tail    int      `json:"tail"`
 	NodeIDs []string `json:"node_ids"`
 }
 
@@ -70,6 +71,13 @@ func (h *SlotInspectorHandler) HandleInspect(w http.ResponseWriter, r *http.Requ
 	context := req.Context
 	if context <= 0 || context > 200 {
 		context = 30
+	}
+	tail := req.Tail
+	if tail <= 0 {
+		tail = 10000
+	}
+	if tail > 100000 {
+		tail = 100000
 	}
 
 	// Compile patterns for each slot
@@ -111,14 +119,14 @@ func (h *SlotInspectorHandler) HandleInspect(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 
-		// Fetch a large tail of logs (10000 lines) so we have enough context.
+		// Fetch logs (tail configurable from the frontend, capped at 100000).
 		msg := &models.Message{
 			ID:     fmt.Sprintf("cmd-slotinspect-logs-%d-%s", time.Now().UnixNano(), node.ID),
 			Type:   "command",
 			Action: "node.logs",
 			Payload: map[string]any{
 				"container_name": node.ContainerName,
-				"tail":           float64(10000),
+				"tail":           float64(tail),
 			},
 			Timestamp: time.Now().Unix(),
 		}

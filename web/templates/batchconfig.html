@@ -200,9 +200,10 @@
 
     <script src="/static/js/api.js"></script>
     <script>
-    // Initialize API token
+    // Initialize API token, then auto-load configs from agents
     (async function() {
         await API.refresh();
+        loadParameters();
     })();
 
     var parameters = [];

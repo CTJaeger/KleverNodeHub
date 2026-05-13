@@ -24,8 +24,8 @@ func (d *DockerClient) FetchLogs(ctx context.Context, containerName string, tail
 	if tail <= 0 {
 		tail = 100
 	}
-	if tail > 5000 {
-		tail = 5000
+	if tail > 100000 {
+		tail = 100000
 	}
 
 	// Check if the container uses TTY mode (raw output, no multiplexed headers)
