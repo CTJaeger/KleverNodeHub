@@ -6,7 +6,12 @@
 
 (function() {
     var BANNER_ID = 'agent-update-banner';
-    var dismissedKey = 'agent-update-dismissed';
+    // Dismiss state is in-memory only. Closing the X hides the banner for
+    // the current page-session but never persists across reloads. Wipe any
+    // legacy sessionStorage entry from older builds so previously-stuck
+    // users recover after this update.
+    try { sessionStorage.removeItem('agent-update-dismissed'); } catch (e) {}
+    var dismissed = false;
     var DEBUG = false; // flip in DevTools: window.kleverAgentUpdateDebug = true
 
     function log() {
@@ -56,11 +61,11 @@
             '</svg>' +
             '<span id="' + BANNER_ID + '-text"></span>' +
             '<button class="agent-update-banner-btn" id="' + BANNER_ID + '-btn">Update all agents</button>' +
-            '<button class="update-banner-dismiss" id="' + BANNER_ID + '-dismiss" title="Dismiss for this session">&times;</button>';
+            '<button class="update-banner-dismiss" id="' + BANNER_ID + '-dismiss" title="Dismiss until next reload / login">&times;</button>';
         pageHeader.parentNode.insertBefore(banner, pageHeader.nextSibling);
         document.getElementById(BANNER_ID + '-btn').addEventListener('click', updateAllAgents);
         document.getElementById(BANNER_ID + '-dismiss').addEventListener('click', function() {
-            sessionStorage.setItem(dismissedKey, '1');
+            dismissed = true;
             banner.classList.add('hidden');
         });
         return banner;
@@ -77,8 +82,8 @@
     }
 
     async function checkAgentVersions() {
-        if (sessionStorage.getItem(dismissedKey)) {
-            log('dismissed for this session — skipping');
+        if (dismissed) {
+            log('dismissed for this page session — skipping');
             return;
         }
 
