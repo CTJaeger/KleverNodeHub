@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Slot Inspector</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/img/icon-192.png">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Management</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#add-server" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                            Add Server
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                            <span id="sidebar-alert-badge" class="sidebar-alert-badge"></span>
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#agent-update" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Agent Update
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Tools</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/batchconfig" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h13M10 18h10"/><circle cx="3" cy="6" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="9" cy="18" r="1"/></svg>
+                            Batch Config
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/slotinspector" class="sidebar-nav-link active">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                            Slot Inspector
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <div style="padding-top:10px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--text-muted);line-height:1.6;">
+                    <a href="https://github.com/CTJaeger/KleverNodeHub" target="_blank" rel="noopener" style="color:var(--text-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                        KleverNodeHub
+                    </a>
+                    <div>&copy; 2025 CryptoJaeger &middot; MIT License</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Slot Inspector</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <span class="page-header-title">Slot Inspector</span>
+                    <span class="page-header-sub">Fetch slot-specific logs across all nodes</span>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <div class="card mb-16">
+                    <div class="card-header"><h3>1. Slot number(s)</h3></div>
+                    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                        <div style="flex:1;min-width:240px;">
+                            <label class="form-label">Slot number(s) — comma-separated for multiple</label>
+                            <input type="text" id="slot-input" class="form-input" placeholder="e.g. 30500707 or 30500707,30500708,30500715">
+                        </div>
+                        <div>
+                            <label class="form-label">Context lines</label>
+                            <input type="number" id="context-lines" class="form-input" value="30" min="0" max="200" style="width:100px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-16">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                        <h3>2. Target nodes</h3>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-sm btn-ghost" onclick="siSelectAll(true)">Select all</button>
+                            <button class="btn btn-sm btn-ghost" onclick="siSelectAll(false)">None</button>
+                        </div>
+                    </div>
+                    <div id="si-node-list" style="border:1px solid var(--border);border-radius:8px;max-height:400px;overflow-y:auto;">
+                        <div class="text-sm text-muted" style="padding:16px;text-align:center;">Loading nodes...</div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+                    <button class="btn btn-primary" onclick="inspectSlot()" id="si-run-btn">Inspect</button>
+                    <button class="btn btn-secondary" onclick="copyAllResults()" id="si-copy-btn" style="display:none;">Copy all results</button>
+                    <span id="si-status" class="text-sm text-muted"></span>
+                </div>
+
+                <div id="si-results"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+    (async function() {
+        await API.refresh();
+        loadNodes();
+    })();
+
+    var allNodes = [];
+    var lastResults = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    async function loadNodes() {
+        try {
+            var data = await API.getJSON('/api/nodes');
+            allNodes = (data && data.nodes) || [];
+            renderNodeList();
+        } catch (e) {
+            document.getElementById('si-node-list').innerHTML =
+                '<div class="text-sm text-muted" style="padding:16px;text-align:center;color:var(--error);">Failed to load nodes.</div>';
+        }
+    }
+
+    function renderNodeList() {
+        var list = document.getElementById('si-node-list');
+        if (allNodes.length === 0) {
+            list.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No nodes available.</div>';
+            return;
+        }
+        var html = allNodes.map(function(n) {
+            return '<label class="si-node-row" style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;">' +
+                '<input type="checkbox" class="si-node-cb" data-node-id="' + esc(n.id) + '" checked style="width:16px;height:16px;cursor:pointer;">' +
+                '<span style="flex:1;color:var(--text-primary);font-size:13px;">' + esc(n.display_name || n.container_name) + '</span>' +
+                '<span class="text-sm text-muted">' + esc(n.status) + '</span>' +
+                '</label>';
+        }).join('');
+        list.innerHTML = html;
+    }
+
+    function siSelectAll(state) {
+        document.querySelectorAll('.si-node-cb').forEach(function(cb) { cb.checked = state; });
+    }
+
+    async function inspectSlot() {
+        var slotsRaw = document.getElementById('slot-input').value.trim();
+        if (!slotsRaw) {
+            alert('Please enter at least one slot number.');
+            return;
+        }
+        var slots = slotsRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        var contextLines = parseInt(document.getElementById('context-lines').value, 10) || 30;
+        var nodeIDs = [];
+        document.querySelectorAll('.si-node-cb:checked').forEach(function(cb) {
+            nodeIDs.push(cb.getAttribute('data-node-id'));
+        });
+        if (nodeIDs.length === 0) {
+            alert('No nodes selected.');
+            return;
+        }
+
+        var btn = document.getElementById('si-run-btn');
+        btn.disabled = true;
+        btn.textContent = 'Inspecting...';
+        document.getElementById('si-status').textContent = 'Fetching logs from ' + nodeIDs.length + ' nodes...';
+        document.getElementById('si-results').innerHTML = '';
+        document.getElementById('si-copy-btn').style.display = 'none';
+
+        try {
+            var resp = await fetch('/api/slot-inspect', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': API.accessToken ? 'Bearer ' + API.accessToken : ''
+                },
+                body: JSON.stringify({
+                    slots: slots,
+                    context: contextLines,
+                    node_ids: nodeIDs
+                })
+            });
+            var data = await resp.json();
+            lastResults = data.results || [];
+            renderResults();
+            document.getElementById('si-status').textContent = 'Done. ' + lastResults.length + ' nodes processed.';
+            document.getElementById('si-copy-btn').style.display = '';
+        } catch (e) {
+            document.getElementById('si-status').innerHTML =
+                '<span style="color:var(--error);">Failed: ' + esc(e.message || e) + '</span>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Inspect';
+        }
+    }
+
+    function renderResults() {
+        var html = lastResults.map(function(r) {
+            var nodeName = esc(r.node_name || r.node_id);
+            var icon = r.error ? '&#10007;' : '&#10003;';
+            var color = r.error ? '#ef4444' : '#22c55e';
+            var body = '';
+            if (r.error) {
+                body = '<div style="padding:12px;color:var(--error);font-size:12px;">' + esc(r.error) + '</div>';
+            } else if (!r.lines || r.lines.length === 0) {
+                body = '<div style="padding:12px;color:var(--text-muted);font-size:12px;">No matches in recent logs.</div>';
+            } else {
+                body = '<pre style="margin:0;padding:14px;background:#0a0e14;border-top:1px solid var(--border);font-family:\'JetBrains Mono\',monospace;font-size:11.5px;line-height:1.5;overflow-x:auto;white-space:pre;color:#c5cdd9;max-height:400px;overflow-y:auto;">' +
+                    esc(r.lines.join('\n')) + '</pre>';
+            }
+            var timingTable = '';
+            if (r.timings && r.timings.length > 0) {
+                timingTable = '<div style="padding:10px 14px;background:var(--bg-input);border-top:1px solid var(--border);">' +
+                    '<div class="text-sm text-muted" style="margin-bottom:6px;">Validator times (parsed)</div>' +
+                    r.timings.map(function(t) {
+                        return '<div style="display:flex;gap:12px;font-size:12px;color:var(--text-secondary);">' +
+                            '<span>slot=' + esc(t.slot) + '</span>' +
+                            '<span>' + esc(t.time_ms) + 'ms</span>' +
+                            (t.lower_bound ? '<span class="text-muted">lower=' + esc(t.lower_bound) + 'ms</span>' : '') +
+                            '</div>';
+                    }).join('') +
+                    '</div>';
+            }
+            return '<div class="card mb-16" style="overflow:hidden;">' +
+                '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-tertiary);">' +
+                    '<span style="color:' + color + ';font-weight:700;">' + icon + '</span>' +
+                    '<strong style="flex:1;color:var(--text-primary);">' + nodeName + '</strong>' +
+                    '<button class="btn btn-sm btn-ghost" onclick="copyResult(\'' + esc(r.node_id) + '\')">Copy</button>' +
+                '</div>' +
+                body +
+                timingTable +
+                '</div>';
+        }).join('');
+        document.getElementById('si-results').innerHTML = html;
+    }
+
+    function copyResult(nodeID) {
+        var r = lastResults.find(function(x) { return x.node_id === nodeID; });
+        if (!r) return;
+        var text = '## ' + (r.node_name || r.node_id) + '\n```\n' + (r.lines || []).join('\n') + '\n```';
+        navigator.clipboard.writeText(text);
+    }
+
+    function copyAllResults() {
+        var text = lastResults.map(function(r) {
+            return '## ' + (r.node_name || r.node_id) + '\n```\n' + (r.lines || []).join('\n') + '\n```';
+        }).join('\n\n');
+        navigator.clipboard.writeText(text);
+        var btn = document.getElementById('si-copy-btn');
+        var orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = orig; }, 2000);
+    }
+    </script>
+    <script>
+    (function() {
+        function updateSidebarAlertBadge(alerts) {
+            var badge = document.getElementById('sidebar-alert-badge');
+            if (!badge) return;
+            var count = alerts ? alerts.length : 0;
+            if (count === 0) {
+                badge.classList.remove('visible', 'pulse');
+                badge.textContent = '';
+                return;
+            }
+            badge.textContent = count;
+            badge.classList.add('visible');
+            var hasCritical = alerts.some(function(a) { return a.severity === 'critical'; });
+            if (hasCritical) { badge.classList.add('pulse'); } else { badge.classList.remove('pulse'); }
+        }
+        async function pollAlerts() {
+            try {
+                var data = await API.getJSON('/api/alerts');
+                if (data && data.alerts) updateSidebarAlertBadge(data.alerts);
+            } catch(e) {}
+        }
+        pollAlerts();
+        setInterval(pollAlerts, 15000);
+    })();
+
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebar-overlay').classList.toggle('open');
+    }
+    </script>
+</body>
+</html>

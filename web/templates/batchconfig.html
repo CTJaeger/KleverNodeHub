@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Batch Config</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/img/icon-192.png">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Management</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#add-server" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                            Add Server
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                            <span id="sidebar-alert-badge" class="sidebar-alert-badge"></span>
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#agent-update" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Agent Update
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Tools</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/batchconfig" class="sidebar-nav-link active">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h13M10 18h10"/><circle cx="3" cy="6" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="9" cy="18" r="1"/></svg>
+                            Batch Config
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/slotinspector" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                            Slot Inspector
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <div style="padding-top:10px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--text-muted);line-height:1.6;">
+                    <a href="https://github.com/CTJaeger/KleverNodeHub" target="_blank" rel="noopener" style="color:var(--text-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                        KleverNodeHub
+                    </a>
+                    <div>&copy; 2025 CryptoJaeger &middot; MIT License</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Batch Config</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h13M10 18h10"/><circle cx="3" cy="6" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="9" cy="18" r="1"/></svg>
+                    <span class="page-header-title">Batch Config</span>
+                    <span class="page-header-sub">Change one parameter across multiple nodes</span>
+                </div>
+                <div class="page-header-right">
+                    <button class="page-header-icon-btn" onclick="loadParameters()" title="Reload from agents">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <!-- Step 1: File selection -->
+                <div class="card mb-16">
+                    <div class="card-header"><h3>1. Select config file</h3></div>
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                        <select id="config-file-select" class="form-input" style="flex:0 1 320px;" onchange="loadParameters()">
+                            <option value="config.yaml">config.yaml</option>
+                            <option value="config_p2p.yaml">config_p2p.yaml</option>
+                            <option value="config_api.yaml">config_api.yaml</option>
+                            <option value="enableEpochs.yaml">enableEpochs.yaml</option>
+                            <option value="economics.yaml">economics.yaml</option>
+                            <option value="gas.yaml">gas.yaml</option>
+                            <option value="genesis.yaml">genesis.yaml</option>
+                            <option value="nodesSetup.yaml">nodesSetup.yaml</option>
+                            <option value="prefs.yaml">prefs.yaml</option>
+                            <option value="systemSmartContractsConfig.yaml">systemSmartContractsConfig.yaml</option>
+                        </select>
+                        <span id="bc-loading-status" class="text-sm text-muted">Click Reload to fetch configs from all agents.</span>
+                    </div>
+                </div>
+
+                <!-- Step 2: Parameter selection -->
+                <div class="card mb-16">
+                    <div class="card-header"><h3>2. Select parameter</h3></div>
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                        <input type="text" id="param-search" class="form-input" placeholder="Search parameter..." style="flex:1;min-width:240px;" oninput="filterParameters()" disabled>
+                        <span id="param-count" class="text-sm text-muted"></span>
+                    </div>
+                    <div id="param-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);">
+                        <div class="text-sm text-muted" style="padding:16px;text-align:center;">No parameters loaded yet.</div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Apply -->
+                <div class="card mb-16" id="bc-apply-card" style="display:none;">
+                    <div class="card-header"><h3>3. Apply</h3></div>
+                    <div style="margin-bottom:12px;">
+                        <span class="text-sm text-muted">Selected parameter:</span>
+                        <code id="bc-selected-key" style="margin-left:8px;color:var(--accent);font-weight:600;"></code>
+                    </div>
+                    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                        <div style="flex:1;min-width:220px;">
+                            <label class="form-label">New value</label>
+                            <input type="text" id="bc-new-value" class="form-input" placeholder="e.g. 100">
+                        </div>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                            <input type="checkbox" id="bc-restart-after" style="width:16px;height:16px;cursor:pointer;">
+                            Restart after apply
+                        </label>
+                    </div>
+
+                    <div style="margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <span class="text-sm" style="font-weight:600;color:var(--text-secondary);">Target nodes</span>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(true)">Select all</button>
+                                <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(false)">None</button>
+                            </div>
+                        </div>
+                        <div id="bc-node-list" style="border:1px solid var(--border);border-radius:8px;max-height:300px;overflow-y:auto;"></div>
+                    </div>
+
+                    <div style="display:flex;gap:12px;align-items:center;">
+                        <button class="btn btn-primary" onclick="applyBatchConfig()" id="bc-apply-btn">Apply</button>
+                        <span id="bc-apply-status" class="text-sm text-muted"></span>
+                    </div>
+
+                    <div id="bc-result-list" style="margin-top:16px;"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+    // Initialize API token
+    (async function() {
+        await API.refresh();
+    })();
+
+    var parameters = [];
+    var allNodes = [];
+    var filteredParameters = [];
+    var selectedKey = '';
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    async function loadParameters() {
+        var file = document.getElementById('config-file-select').value;
+        document.getElementById('bc-loading-status').textContent = 'Loading configs from agents...';
+        document.getElementById('param-search').disabled = true;
+        document.getElementById('bc-apply-card').style.display = 'none';
+        document.getElementById('param-list').innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">Fetching configs...</div>';
+
+        try {
+            var resp = await fetch('/api/batch-config/parameters?file=' + encodeURIComponent(file), {
+                credentials: 'same-origin',
+                headers: API.accessToken ? { 'Authorization': 'Bearer ' + API.accessToken } : {}
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            parameters = data.parameters || [];
+            allNodes = data.nodes || [];
+            filteredParameters = parameters.slice();
+            document.getElementById('bc-loading-status').textContent =
+                'Loaded ' + parameters.length + ' parameters from ' + allNodes.length + ' nodes.';
+            document.getElementById('param-search').disabled = false;
+            renderParameters();
+        } catch (e) {
+            document.getElementById('bc-loading-status').innerHTML =
+                '<span style="color:var(--error);">Failed: ' + esc(e.message || e) + '</span>';
+            document.getElementById('param-list').innerHTML =
+                '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No data.</div>';
+        }
+    }
+
+    function filterParameters() {
+        var q = document.getElementById('param-search').value.trim().toLowerCase();
+        if (!q) {
+            filteredParameters = parameters.slice();
+        } else {
+            filteredParameters = parameters.filter(function(p) {
+                return p.key.toLowerCase().indexOf(q) >= 0;
+            });
+        }
+        renderParameters();
+    }
+
+    function renderParameters() {
+        var list = document.getElementById('param-list');
+        document.getElementById('param-count').textContent = filteredParameters.length + ' / ' + parameters.length + ' params';
+        if (filteredParameters.length === 0) {
+            list.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No matches.</div>';
+            return;
+        }
+        var html = filteredParameters.slice(0, 200).map(function(p) {
+            // Compute current value summary (most-common value)
+            var values = {};
+            p.values.forEach(function(v) {
+                values[v.value] = (values[v.value] || 0) + 1;
+            });
+            var summary = Object.keys(values).map(function(v) {
+                return esc(v) + ' (' + values[v] + ')';
+            }).join(', ');
+            return '<div class="bc-param-row" onclick="selectParameter(\'' + esc(p.key).replace(/'/g, "\\'") + '\')" ' +
+                'style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px;' +
+                (selectedKey === p.key ? 'background:var(--accent-muted);' : '') + '">' +
+                '<code style="font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + esc(p.key) + '</code>' +
+                '<span class="text-sm text-muted" style="white-space:nowrap;">' + summary + '</span>' +
+                '</div>';
+        }).join('');
+        list.innerHTML = html;
+    }
+
+    function selectParameter(key) {
+        selectedKey = key;
+        renderParameters();
+        document.getElementById('bc-selected-key').textContent = key;
+        document.getElementById('bc-apply-card').style.display = '';
+        var param = parameters.find(function(p) { return p.key === key; });
+        renderNodeList(param);
+    }
+
+    function renderNodeList(param) {
+        var list = document.getElementById('bc-node-list');
+        var html = param.values.map(function(v) {
+            var node = allNodes.find(function(n) { return n.node_id === v.node_id; }) || {};
+            return '<label class="bc-node-row" style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;">' +
+                '<input type="checkbox" class="bc-node-cb" data-node-id="' + esc(v.node_id) + '" data-server-id="' + esc(v.server_id) + '" data-container="' + esc(v.container_name) + '" checked style="width:16px;height:16px;cursor:pointer;">' +
+                '<span style="flex:1;color:var(--text-primary);font-size:13px;">' + esc(node.display_name || v.container_name) + '</span>' +
+                '<span class="text-sm text-muted">' + esc(node.server_name || '') + '</span>' +
+                '<code style="font-size:12px;color:var(--accent);min-width:60px;text-align:right;">' + esc(v.value) + '</code>' +
+                '</label>';
+        }).join('');
+        list.innerHTML = html;
+    }
+
+    function bcSelectAll(state) {
+        document.querySelectorAll('.bc-node-cb').forEach(function(cb) { cb.checked = state; });
+    }
+
+    async function applyBatchConfig() {
+        var newValue = document.getElementById('bc-new-value').value.trim();
+        if (!newValue) {
+            alert('Please enter a new value.');
+            return;
+        }
+        var restartAfter = document.getElementById('bc-restart-after').checked;
+        var targets = [];
+        document.querySelectorAll('.bc-node-cb:checked').forEach(function(cb) {
+            targets.push({
+                node_id: cb.getAttribute('data-node-id'),
+                server_id: cb.getAttribute('data-server-id'),
+                container_name: cb.getAttribute('data-container')
+            });
+        });
+        if (targets.length === 0) {
+            alert('No target nodes selected.');
+            return;
+        }
+
+        var btn = document.getElementById('bc-apply-btn');
+        btn.disabled = true;
+        btn.textContent = 'Applying...';
+        document.getElementById('bc-apply-status').textContent = 'Working on ' + targets.length + ' nodes...';
+        document.getElementById('bc-result-list').innerHTML = '';
+
+        try {
+            var resp = await fetch('/api/batch-config/apply', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': API.accessToken ? 'Bearer ' + API.accessToken : ''
+                },
+                body: JSON.stringify({
+                    file: document.getElementById('config-file-select').value,
+                    key: selectedKey,
+                    value: newValue,
+                    restart_after: restartAfter,
+                    targets: targets
+                })
+            });
+            var data = await resp.json();
+            renderResults(data.results || []);
+            document.getElementById('bc-apply-status').textContent = 'Done.';
+        } catch (e) {
+            document.getElementById('bc-apply-status').innerHTML =
+                '<span style="color:var(--error);">Failed: ' + esc(e.message || e) + '</span>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+        }
+    }
+
+    function renderResults(results) {
+        var html = results.map(function(r) {
+            var icon = r.success ? '&#10003;' : '&#10007;';
+            var color = r.success ? '#22c55e' : '#ef4444';
+            return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">' +
+                '<span style="color:' + color + ';font-weight:700;">' + icon + '</span>' +
+                '<span style="flex:1;font-size:13px;color:var(--text-primary);">' + esc(r.node_id) + '</span>' +
+                '<span class="text-sm" style="color:' + color + ';">' + esc(r.message || (r.success ? 'OK' : 'failed')) + '</span>' +
+                '</div>';
+        }).join('');
+        document.getElementById('bc-result-list').innerHTML = html;
+    }
+    </script>
+    <script>
+    (function() {
+        function updateSidebarAlertBadge(alerts) {
+            var badge = document.getElementById('sidebar-alert-badge');
+            if (!badge) return;
+            var count = alerts ? alerts.length : 0;
+            if (count === 0) {
+                badge.classList.remove('visible', 'pulse');
+                badge.textContent = '';
+                return;
+            }
+            badge.textContent = count;
+            badge.classList.add('visible');
+            var hasCritical = alerts.some(function(a) { return a.severity === 'critical'; });
+            if (hasCritical) { badge.classList.add('pulse'); } else { badge.classList.remove('pulse'); }
+        }
+        async function pollAlerts() {
+            try {
+                var data = await API.getJSON('/api/alerts');
+                if (data && data.alerts) updateSidebarAlertBadge(data.alerts);
+            } catch(e) {}
+        }
+        pollAlerts();
+        setInterval(pollAlerts, 15000);
+    })();
+
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebar-overlay').classList.toggle('open');
+    }
+    </script>
+</body>
+</html>
