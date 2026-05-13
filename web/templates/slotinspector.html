@@ -154,8 +154,17 @@
 
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
                     <button class="btn btn-primary" onclick="inspectSlot()" id="si-run-btn">Inspect</button>
-                    <button class="btn btn-secondary" onclick="copyAllResults()" id="si-copy-btn" style="display:none;">Copy all results</button>
                     <span id="si-status" class="text-sm text-muted"></span>
+                </div>
+
+                <div id="si-results-toolbar" class="hidden" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;">
+                    <span class="text-sm" style="color:var(--text-secondary);">
+                        <strong id="si-results-summary"></strong>
+                    </span>
+                    <button class="btn btn-primary" onclick="copyAllResults()" id="si-copy-btn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy all results
+                    </button>
                 </div>
 
                 <div id="si-results"></div>
@@ -164,6 +173,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/agent-update-check.js"></script>
     <script>
     (async function() {
         await API.refresh();
@@ -197,10 +207,14 @@
             return;
         }
         var html = allNodes.map(function(n) {
+            var isMaster = (n.redundancy_level || 0) === 0;
+            var roleColor = isMaster ? '#22c55e' : '#f59e0b';
+            var roleLabel = isMaster ? 'Master' : 'Fallback';
             return '<label class="si-node-row" style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;">' +
                 '<input type="checkbox" class="si-node-cb" data-node-id="' + esc(n.id) + '" checked style="width:16px;height:16px;cursor:pointer;">' +
                 '<span style="flex:1;color:var(--text-primary);font-size:13px;">' + esc(n.display_name || n.container_name) + '</span>' +
-                '<span class="text-sm text-muted">' + esc(n.status) + '</span>' +
+                '<span style="padding:2px 8px;border-radius:4px;background:' + roleColor + '20;color:' + roleColor + ';font-size:11px;font-weight:700;">' + roleLabel + '</span>' +
+                '<span class="text-sm text-muted" style="min-width:60px;text-align:right;">' + esc(n.status) + '</span>' +
                 '</label>';
         }).join('');
         list.innerHTML = html;
@@ -233,7 +247,7 @@
         btn.textContent = 'Inspecting...';
         document.getElementById('si-status').textContent = 'Fetching logs from ' + nodeIDs.length + ' nodes...';
         document.getElementById('si-results').innerHTML = '';
-        document.getElementById('si-copy-btn').style.display = 'none';
+        document.getElementById('si-results-toolbar').classList.add('hidden');
 
         try {
             var resp = await fetch('/api/slot-inspect', {
@@ -254,7 +268,10 @@
             lastResults = data.results || [];
             renderResults();
             document.getElementById('si-status').textContent = 'Done. ' + lastResults.length + ' nodes processed.';
-            document.getElementById('si-copy-btn').style.display = '';
+            var withMatches = lastResults.filter(function(r) { return r.lines && r.lines.length > 0; }).length;
+            document.getElementById('si-results-summary').textContent =
+                lastResults.length + ' nodes scanned · ' + withMatches + ' with matches';
+            document.getElementById('si-results-toolbar').classList.remove('hidden');
         } catch (e) {
             document.getElementById('si-status').innerHTML =
                 '<span style="color:var(--error);">Failed: ' + esc(e.message || e) + '</span>';
@@ -313,13 +330,21 @@
 
     function copyAllResults() {
         var text = lastResults.map(function(r) {
-            return '## ' + (r.node_name || r.node_id) + '\n```\n' + (r.lines || []).join('\n') + '\n```';
+            var header = '## ' + (r.node_name || r.node_id);
+            if (r.error) {
+                return header + '\n_error: ' + r.error + '_';
+            }
+            if (!r.lines || r.lines.length === 0) {
+                return header + '\n_no matches_';
+            }
+            return header + '\n```\n' + r.lines.join('\n') + '\n```';
         }).join('\n\n');
-        navigator.clipboard.writeText(text);
-        var btn = document.getElementById('si-copy-btn');
-        var orig = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(function() { btn.textContent = orig; }, 2000);
+        navigator.clipboard.writeText(text).then(function() {
+            var btn = document.getElementById('si-copy-btn');
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg>Copied!';
+            setTimeout(function() { btn.innerHTML = orig; }, 2000);
+        });
     }
     </script>
     <script>

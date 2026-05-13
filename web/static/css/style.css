@@ -971,6 +971,44 @@ h1, h2, h3, h4, h5, h6 {
     line-height: 1;
 }
 
+.agent-update-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    background: var(--bg-card);
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius);
+    margin: 0 24px 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.agent-update-banner.hidden {
+    display: none;
+}
+
+.agent-update-banner-btn {
+    margin-left: auto;
+    padding: 5px 14px;
+    background: #f59e0b;
+    color: #251400;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.agent-update-banner-btn:hover {
+    opacity: 0.9;
+}
+
+.agent-update-banner-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .batch-action-bar {
     display: flex;
     align-items: center;
