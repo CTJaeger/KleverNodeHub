@@ -97,26 +97,49 @@
 
     async function updateAllAgents() {
         var btn = document.getElementById(BANNER_ID + '-btn');
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Updating...';
+        var setBtn = function(text, disabled) {
+            if (!btn) return;
+            btn.textContent = text;
+            btn.disabled = !!disabled;
+        };
+
+        // Determine the target version from the dashboard's own version.
+        var sysResp = await fetchJSON('/api/system/version');
+        var target = sysResp && sysResp.version;
+        if (!target) {
+            setBtn('Retry', false);
+            return;
         }
+
+        setBtn('Downloading...', true);
+
+        // Step 1: ensure the agent binary is in the hub's update store.
+        // If a release-driven install never uploaded one, the hub pulls
+        // the binary from the matching GitHub release automatically.
         try {
-            var resp = await API.post('/api/agent/update/all', {});
-            if (resp && resp.ok) {
-                if (btn) btn.textContent = 'Update sent';
-                setTimeout(checkAgentVersions, 8000);
-            } else {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Retry';
-                }
+            var dlResp = await API.post('/api/agent/download-release-auto', { tag: target });
+            if (!dlResp || !dlResp.ok) {
+                setBtn('Download failed', false);
+                return;
             }
         } catch (e) {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = 'Retry';
+            setBtn('Download failed', false);
+            return;
+        }
+
+        // Step 2: trigger the bulk agent update.
+        setBtn('Updating...', true);
+        try {
+            var resp = await API.post('/api/agent/update/all', { version: target });
+            if (resp && resp.ok) {
+                setBtn('Update sent', true);
+                // Agents restart — give them time before re-checking versions.
+                setTimeout(checkAgentVersions, 15000);
+            } else {
+                setBtn('Retry', false);
             }
+        } catch (e) {
+            setBtn('Retry', false);
         }
     }
 
