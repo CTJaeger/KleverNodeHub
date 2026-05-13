@@ -1,10 +1,18 @@
 // Klever Node Hub - Agent Update Check
-// Polls /api/agent/version and /api/servers, shows a banner if any agent
-// is running an older version than the dashboard.
+// Compares each online agent's version against the running dashboard's
+// own version (/api/system/version) and renders a top-of-page banner if
+// any agent is older. Exposes window.kleverAgentUpdateCheck() so other
+// scripts (manualUpdateCheck) can trigger a re-check.
 
 (function() {
     var BANNER_ID = 'agent-update-banner';
     var dismissedKey = 'agent-update-dismissed';
+    var DEBUG = false; // flip in DevTools: window.kleverAgentUpdateDebug = true
+
+    function log() {
+        if (!DEBUG && !window.kleverAgentUpdateDebug) return;
+        try { console.log.apply(console, ['[agent-update]'].concat([].slice.call(arguments))); } catch (e) {}
+    }
 
     function parseVersion(v) {
         if (!v) return null;
@@ -34,7 +42,10 @@
         var banner = document.getElementById(BANNER_ID);
         if (banner) return banner;
         var pageHeader = document.querySelector('.page-header');
-        if (!pageHeader) return null;
+        if (!pageHeader) {
+            log('no .page-header found — cannot mount banner');
+            return null;
+        }
         banner = document.createElement('div');
         banner.id = BANNER_ID;
         banner.className = 'agent-update-banner hidden';
@@ -60,26 +71,37 @@
             var data = await API.getJSON(path);
             return data;
         } catch (e) {
+            log('fetch failed', path, e);
             return null;
         }
     }
 
     async function checkAgentVersions() {
-        if (sessionStorage.getItem(dismissedKey)) return;
+        if (sessionStorage.getItem(dismissedKey)) {
+            log('dismissed for this session — skipping');
+            return;
+        }
 
-        // Compare each agent's version against the dashboard's own version.
-        // The dashboard and agent are released together, so any agent older
-        // than the running dashboard counts as outdated.
         var sysResp = await fetchJSON('/api/system/version');
         var srvResp = await fetchJSON('/api/servers');
-        if (!sysResp || !sysResp.version || !srvResp || !srvResp.servers) return;
+        if (!sysResp || !sysResp.version) {
+            log('no dashboard version available', sysResp);
+            return;
+        }
+        if (!srvResp || !srvResp.servers) {
+            log('no servers list available', srvResp);
+            return;
+        }
 
         var latest = sysResp.version;
-        var outdated = srvResp.servers.filter(function(s) {
-            return s.status === 'online' &&
-                   s.agent_version &&
-                   compareVersions(s.agent_version, latest) < 0;
+        var onlineServers = srvResp.servers.filter(function(s) { return s.status === 'online'; });
+        var outdated = onlineServers.filter(function(s) {
+            if (!s.agent_version) return false;
+            return compareVersions(s.agent_version, latest) < 0;
         });
+
+        log('dashboard=' + latest, 'online=' + onlineServers.length, 'outdated=' + outdated.length,
+            'agents=' + onlineServers.map(function(s) { return (s.name || s.id) + ':' + (s.agent_version || '?'); }).join(','));
 
         var banner = ensureBanner();
         if (!banner) return;
@@ -88,10 +110,16 @@
             return;
         }
 
-        var total = srvResp.servers.filter(function(s) { return s.status === 'online'; }).length;
-        var text = outdated.length + ' of ' + total + ' agent' + (total === 1 ? '' : 's') +
-                   ' running outdated version — latest is ' + esc(latest);
-        document.getElementById(BANNER_ID + '-text').innerHTML = esc(text);
+        var text = outdated.length + ' of ' + onlineServers.length + ' agent' +
+                   (onlineServers.length === 1 ? '' : 's') +
+                   ' running outdated version — latest is ' + latest;
+        document.getElementById(BANNER_ID + '-text').textContent = text;
+        // Reset button label/state in case a previous update attempt left it changed.
+        var btn = document.getElementById(BANNER_ID + '-btn');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Update all agents';
+        }
         banner.classList.remove('hidden');
     }
 
@@ -103,7 +131,6 @@
             btn.disabled = !!disabled;
         };
 
-        // Determine the target version from the dashboard's own version.
         var sysResp = await fetchJSON('/api/system/version');
         var target = sysResp && sysResp.version;
         if (!target) {
@@ -112,10 +139,6 @@
         }
 
         setBtn('Downloading...', true);
-
-        // Step 1: ensure the agent binary is in the hub's update store.
-        // If a release-driven install never uploaded one, the hub pulls
-        // the binary from the matching GitHub release automatically.
         try {
             var dlResp = await API.post('/api/agent/download-release-auto', { tag: target });
             if (!dlResp || !dlResp.ok) {
@@ -127,13 +150,11 @@
             return;
         }
 
-        // Step 2: trigger the bulk agent update.
         setBtn('Updating...', true);
         try {
             var resp = await API.post('/api/agent/update/all', { version: target });
             if (resp && resp.ok) {
                 setBtn('Update sent', true);
-                // Agents restart — give them time before re-checking versions.
                 setTimeout(checkAgentVersions, 15000);
             } else {
                 setBtn('Retry', false);
@@ -147,6 +168,9 @@
         checkAgentVersions();
         setInterval(checkAgentVersions, 60000);
     }
+
+    // Expose for manual triggers (e.g. the "Check for updates" button)
+    window.kleverAgentUpdateCheck = checkAgentVersions;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start);

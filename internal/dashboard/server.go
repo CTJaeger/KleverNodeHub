@@ -49,7 +49,16 @@ func (s *Server) SetupRoutes() error {
 	if err != nil {
 		return fmt.Errorf("load static assets: %w", err)
 	}
-	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	// Static assets are served with Cache-Control: no-cache so browsers
+	// revalidate on every request. Without this, our embedded JS/CSS gets
+	// pinned to whatever the user first loaded — features like the agent
+	// update banner appear to break after a dashboard upgrade because the
+	// browser keeps serving the old script.
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	s.mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	// PWA: serve manifest and service worker from root scope
 	s.mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, _ *http.Request) {

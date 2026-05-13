@@ -2138,6 +2138,10 @@
             btn.style.opacity = '';
             btn.disabled = false;
             await checkForUpdates();
+            // Also re-check agent versions so the banner updates without waiting for the 60s poll
+            if (typeof window.kleverAgentUpdateCheck === 'function') {
+                window.kleverAgentUpdateCheck();
+            }
         }
 
         async function checkForUpdates() {
