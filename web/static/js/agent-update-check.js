@@ -67,11 +67,14 @@
     async function checkAgentVersions() {
         if (sessionStorage.getItem(dismissedKey)) return;
 
-        var verResp = await fetchJSON('/api/agent/version');
+        // Compare each agent's version against the dashboard's own version.
+        // The dashboard and agent are released together, so any agent older
+        // than the running dashboard counts as outdated.
+        var sysResp = await fetchJSON('/api/system/version');
         var srvResp = await fetchJSON('/api/servers');
-        if (!verResp || !verResp.latest_version || !srvResp || !srvResp.servers) return;
+        if (!sysResp || !sysResp.version || !srvResp || !srvResp.servers) return;
 
-        var latest = verResp.latest_version;
+        var latest = sysResp.version;
         var outdated = srvResp.servers.filter(function(s) {
             return s.status === 'online' &&
                    s.agent_version &&
