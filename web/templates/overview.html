@@ -536,6 +536,7 @@
                             '<button class="actions-menu-btn" aria-label="Server actions" onclick="toggleServerActions(event, \'' + serverIDJS + '\')">...</button>' +
                             '<div class="actions-dropdown" id="server-actions-' + esc(server.id) + '">' +
                                 '<button class="actions-dropdown-item" onclick="openDetailsFromMenu(event, \'' + serverURLJS + '\')">Details</button>' +
+                                '<button class="actions-dropdown-item" onclick="restartAgentFromMenu(event, \'' + serverIDJS + '\', \'' + serverNameJS + '\')">Restart Agent</button>' +
                                 '<button class="actions-dropdown-item danger" onclick="deleteServerFromMenu(event, \'' + serverIDJS + '\', \'' + serverNameJS + '\')">Delete server</button>' +
                             '</div>' +
                         '</div>' +
@@ -1149,6 +1150,32 @@
             closeServerActions();
             deleteServer(id, name);
             return false;
+        }
+
+        async function restartAgentFromMenu(event, id, name) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeServerActions();
+            var ok = await showConfirm(
+                'Restart Agent',
+                'Restart the agent on <strong>' + esc(name) + '</strong>?<br><br>The agent will reconnect within a few seconds. Running nodes are not affected.',
+                'Restart',
+                'btn-primary'
+            );
+            if (!ok) return;
+            showToast('Restarting agent on "' + name + '"...', 'info');
+            try {
+                var resp = await API.post('/api/agent/restart/' + id);
+                if (!resp) return; // auth refresh failed → API redirected to /login
+                var data = await resp.json();
+                if (resp.ok && data.success) {
+                    showToast('Agent on "' + name + '" is restarting.', 'success');
+                } else {
+                    showToast('Restart failed: ' + (data.error || data.message || 'unknown error'), 'error');
+                }
+            } catch (e) {
+                showToast('Restart error: ' + (e.message || e), 'error');
+            }
         }
 
         function deleteNodeFromMenu(event, id, name) {

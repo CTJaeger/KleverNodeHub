@@ -13,6 +13,7 @@ func TestValidateCommand_Allowed(t *testing.T) {
 		{"node.stop", "klever-backup"},
 		{"node.restart", "my_node.v2"},
 		{"node.status", "node-1"},
+		{"agent.restart", ""},
 	}
 
 	for _, tt := range tests {

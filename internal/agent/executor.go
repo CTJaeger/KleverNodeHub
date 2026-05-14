@@ -137,6 +137,10 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeKeyBackups(msg.Payload, result)
 	case "agent.update":
 		err = e.executeAgentUpdate(msg.Payload, result)
+	case "agent.restart":
+		// Nothing to do here — the main loop re-execs the agent after this
+		// returns a successful result. We just need to ack.
+		result.Output = "restarting"
 	case "server.benchmark":
 		err = e.executeBenchmark(ctx, result)
 	case "node.discovery":
