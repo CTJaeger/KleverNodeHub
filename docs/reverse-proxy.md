@@ -4,6 +4,8 @@ The dashboard uses a self-signed TLS certificate (from its internal CA for mTLS 
 
 To get a trusted HTTPS connection, place a reverse proxy in front of the dashboard that terminates TLS with a Let's Encrypt certificate.
 
+> **Run the reverse proxy on a standalone host.** Don't co-locate it with validator nodes or an agent. Ports 80/443, the mTLS pass-through to the dashboard, and the agent's direct connection to port 9443 collide too easily on a shared host.
+
 ## Prerequisites
 
 - A domain or subdomain pointing to your server (A record or CNAME)
@@ -12,9 +14,23 @@ To get a trusted HTTPS connection, place a reverse proxy in front of the dashboa
   - Apache: `sudo apt install certbot python3-certbot-apache`
   - Nginx: `sudo apt install certbot python3-certbot-nginx`
 
-## Docker: Bind to localhost only
+## Agents connect directly to port 9443
 
-When using a reverse proxy, the dashboard should only be reachable through the proxy — not directly from the internet:
+Agents authenticate to the dashboard with **mTLS client certificates** on the `/ws/agent` endpoint. A reverse proxy terminates TLS and strips those client certificates, so **agents must connect directly to port 9443 — not through the proxy**.
+
+```
+Browsers ──HTTPS:443─▶ Reverse Proxy ──HTTPS:9443─▶ Dashboard
+Agents   ──mTLS:9443────────────────────────────────▶ Dashboard
+```
+
+This has two consequences for how you expose the dashboard:
+
+- **Port 9443 must be reachable by every agent.** If any agent runs on a different host than the dashboard, that agent needs network reach to port 9443.
+- **The `127.0.0.1:9443` Docker binding shown below only works if every agent runs on the same host as the dashboard.** For remote agents, bind 9443 to a LAN address (e.g. `-p 10.0.0.5:9443:9443`) or the public interface — restricted to agent IPs via firewall — instead of `127.0.0.1`.
+
+## Docker: Bind to localhost only (all agents local)
+
+If the dashboard and **all** agents run on the same host, bind 9443 to `127.0.0.1` so it is only reachable through the proxy from the outside:
 
 ```bash
 docker run -d \
@@ -28,6 +44,8 @@ docker run -d \
 > **Important:** The `--domain` flag must match the domain you use in the reverse proxy config. It sets the WebAuthn Relying Party ID for Passkey authentication.
 
 If running the dashboard as a binary (not Docker), it already listens on `127.0.0.1:9443` by default when you use `--addr 127.0.0.1:9443`.
+
+If you have **remote agents**, replace `127.0.0.1` with a LAN or public address that those agents can reach (and firewall-restrict it to agent source IPs). Browsers still go through the proxy on 443.
 
 ---
 
