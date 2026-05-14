@@ -4,8 +4,6 @@ The dashboard uses a self-signed TLS certificate (from its internal CA for mTLS 
 
 To get a trusted HTTPS connection, place a reverse proxy in front of the dashboard that terminates TLS with a Let's Encrypt certificate.
 
-> **Run the reverse proxy on a standalone host.** Don't co-locate it with validator nodes or an agent. Ports 80/443, the mTLS pass-through to the dashboard, and the agent's direct connection to port 9443 collide too easily on a shared host.
-
 ## Prerequisites
 
 - A domain or subdomain pointing to your server (A record or CNAME)
