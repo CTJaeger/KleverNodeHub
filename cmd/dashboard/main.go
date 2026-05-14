@@ -330,6 +330,7 @@ func main() {
 	mux.Handle("GET /api/agent/version", authMw(http.HandlerFunc(updateHandler.HandleLatestVersion)))
 	mux.Handle("POST /api/agent/update/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleUpdateAgent)))
 	mux.Handle("POST /api/agent/update/all", authMw(http.HandlerFunc(updateHandler.HandleUpdateAll)))
+	mux.Handle("POST /api/agent/restart/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleRestartAgent)))
 	mux.Handle("GET /api/agent/releases", authMw(http.HandlerFunc(updateHandler.HandleGitHubReleases)))
 	mux.Handle("POST /api/agent/download-release", authMw(http.HandlerFunc(updateHandler.HandleDownloadFromRelease)))
 	mux.Handle("POST /api/agent/download-release-auto", authMw(http.HandlerFunc(updateHandler.HandleDownloadReleaseAuto)))

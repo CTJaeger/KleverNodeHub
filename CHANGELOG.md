@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-05-14
+- **Restart Agent vom Dashboard**: Neuer Menü-Eintrag "Restart Agent" im Server-Actions-Dropdown (`···`-Button) auf der Overview-Seite. Schickt einen `agent.restart`-Command über die bestehende WebSocket-Verbindung; Agent acknowledged, dann re-exec'd via `syscall.Exec` (Unix) / `exec.Command`+exit (Windows). Systemd `Restart=always` (bzw. Docker-Restart-Policy) bringt den Prozess wieder hoch und die WebSocket reconnected automatisch. Nutzt denselben `restartAgent()`-Pfad wie der erprobte Auto-Restart nach `agent.update`. Laufende Klever-Nodes sind nicht betroffen — nur der Agent-Prozess wird neu gestartet. Neuer Endpoint `POST /api/agent/restart/{server_id}`, Whitelist um `agent.restart` erweitert.
+
 ### 2026-04-01
 - **Server Hardware Benchmark**: Neuer "Benchmark"-Tab auf der Server-Detailseite. Startet den offiziellen Klever Benchmark-Tool in einem Docker-Container. Testet Disk I/O, Network, CPU, Memory, KV Store mit PASS/WARN/FAIL. Ergebnis als farbcodierte Cards.
 

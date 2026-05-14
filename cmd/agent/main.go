@@ -300,8 +300,8 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					default:
 					}
 				}
-				// Self-restart after successful agent update
-				if m.Action == "agent.update" && result.Success {
+				// Self-restart after a successful agent update or an explicit restart command.
+				if (m.Action == "agent.update" || m.Action == "agent.restart") && result.Success {
 					time.Sleep(500 * time.Millisecond) // let response be sent
 					restartAgent()
 				}

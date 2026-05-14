@@ -175,6 +175,47 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// HandleRestartAgent handles POST /api/agent/restart/{server_id}
+// Sends a restart command to the agent over WebSocket. The agent acknowledges
+// the command and then re-execs itself; systemd (or Docker --restart) brings
+// it back up and the WebSocket reconnects on its own.
+func (h *UpdateHandler) HandleRestartAgent(w http.ResponseWriter, r *http.Request) {
+	serverID := r.PathValue("server_id")
+	if serverID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "server_id required"})
+		return
+	}
+
+	if !h.hub.IsConnected(serverID) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent is not connected"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:        fmt.Sprintf("restart-%d", time.Now().UnixNano()),
+		Type:      "command",
+		Action:    "agent.restart",
+		Timestamp: time.Now().Unix(),
+	}
+
+	// Short timeout — the agent acks before re-execing, so we expect a quick reply.
+	result, err := h.hub.SendCommand(serverID, msg, 10*time.Second)
+	if err != nil {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": fmt.Sprintf("restart failed: %v", err)})
+		return
+	}
+
+	if result.Error != "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": result.Error})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "agent restarting",
+	})
+}
+
 // HandleUpdateAll handles POST /api/agent/update/all
 // Sequentially updates all connected agents.
 // Optional body: { "version": "v0.3.4" } to send a specific version.
