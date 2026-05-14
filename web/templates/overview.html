@@ -2166,12 +2166,19 @@
                     } else {
                         document.getElementById('update-link').style.display = 'none';
                     }
-                    if (data.is_docker) {
-                        // Docker: show pull command, hide update button
-                        document.getElementById('update-btn').style.display = 'none';
-                        const hint = document.getElementById('update-docker-hint');
-                        hint.textContent = 'docker pull ctjaeger/klever-node-hub:' + data.latest_version;
+                    const btn = document.getElementById('update-btn');
+                    const hint = document.getElementById('update-docker-hint');
+                    btn.dataset.dockerMode = data.is_docker ? '1' : '';
+                    if (data.is_docker && !data.docker_self_update_available) {
+                        // Docker without socket mount: show pull hint, hide update button
+                        btn.style.display = 'none';
+                        hint.textContent = 'docker pull ctjaeger/klever-node-hub:' + data.latest_version
+                            + '  (mount /var/run/docker.sock to enable one-click updates)';
                         hint.classList.remove('hidden');
+                    } else {
+                        // Binary, or Docker with socket mount: show update button
+                        btn.style.display = '';
+                        hint.classList.add('hidden');
                     }
                     if (!sessionStorage.getItem('update-dismissed-' + data.latest_version)) {
                         banner.classList.remove('hidden');
@@ -2187,16 +2194,21 @@
         }
 
         async function selfUpdate() {
-            if (!confirm('This will download and install the latest version. The dashboard will restart. Continue?')) return;
             const btn = document.getElementById('update-btn');
+            const dockerMode = btn.dataset.dockerMode === '1';
+            const msg = dockerMode
+                ? 'This will pull the new Docker image and recreate this container. The dashboard will be unavailable for a few seconds. Continue?'
+                : 'This will download and install the latest version. The dashboard will restart. Continue?';
+            if (!confirm(msg)) return;
             btn.disabled = true;
             btn.textContent = 'Updating...';
             try {
                 const resp = await API.post('/api/system/update');
                 const data = await resp.json();
                 if (data.success) {
-                    btn.textContent = 'Restarting...';
-                    setTimeout(() => location.reload(), 3000);
+                    btn.textContent = dockerMode ? 'Pulling image...' : 'Restarting...';
+                    // Docker pull + recreate is slower than a binary restart.
+                    setTimeout(() => location.reload(), dockerMode ? 15000 : 3000);
                 } else {
                     alert('Update failed: ' + (data.message || data.error));
                     btn.disabled = false;
