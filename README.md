@@ -139,10 +139,13 @@ Or use Docker:
 docker run -d \
   -p 9443:9443 \
   -v klever-data:/root/.klever-node-hub \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   --name klever-node-hub \
   ctjaeger/klever-node-hub:latest \
   --domain your-server.example.com
 ```
+
+> **One-click updates:** Mounting `/var/run/docker.sock` lets the dashboard pull a new image and recreate its own container when you click **Update Now** in the update banner. Leave the mount off if you'd rather update manually with `docker pull` + `docker run` — the dashboard will then just show the `docker pull` command instead of the button. The socket grants root-equivalent control of the Docker daemon, so only mount it if you trust the dashboard accordingly.
 
 On first access (`https://your-server:9443`), a setup wizard will guide you through setting a password and optionally registering a Passkey. Recovery codes are printed to the log on first run.
 
