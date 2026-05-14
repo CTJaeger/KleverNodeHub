@@ -62,6 +62,7 @@ func main() {
 	nodeStore := store.NewNodeStore(db)
 	settingsStore := store.NewSettingsStore(db)
 	metricsStore := store.NewMetricsStore(db)
+	versionHistoryStore := store.NewVersionHistoryStore(db)
 
 	// --- Certificate Authority ---
 	caDir := filepath.Join(*dataDir, "ca")
@@ -150,16 +151,22 @@ func main() {
 		log.Printf("reset server status: %v", err)
 	}
 	hub := ws.NewHub(serverStore, nodeStore)
-	hub.StartHealthCheck(60 * time.Second)
+	// Heartbeat timeout is read live from settings on every health-check tick,
+	// so changing it on the Settings page takes effect without a restart.
+	hub.StartHealthCheck(settingsStore.HeartbeatTimeout)
 
 	// --- Handlers ---
 	authHandler := handlers.NewAuthHandler(jwtMgr, webauthnMgr, recoveryMgr, passwordMgr, loginLimiter, kleverMgr)
 	nodeHandler := handlers.NewNodeHandler(hub, nodeStore)
 	serverHandler := handlers.NewServerHandler(serverStore, nodeStore, metricsStore)
+	benchmarkHandler := handlers.NewBenchmarkHandler(hub, serverStore)
 	metricsHandler := handlers.NewMetricsHandler(metricsStore)
 	tagCache := dashboard.NewTagCache()
 	dockerHandler := handlers.NewDockerHandler(hub, nodeStore, tagCache)
 	configHandler := handlers.NewConfigHandler(hub, nodeStore)
+	batchConfigHandler := handlers.NewBatchConfigHandler(hub, nodeStore)
+	slotInspectorHandler := handlers.NewSlotInspectorHandler(hub, nodeStore)
+	performanceHandler := handlers.NewPerformanceHandler(versionHistoryStore, metricsStore, nodeStore)
 	logHandler := handlers.NewLogHandler(hub, nodeStore)
 	keyHandler := handlers.NewKeyHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
@@ -182,9 +189,11 @@ func main() {
 	// Note: we do NOT resolve all firing alerts on startup.
 	// The evaluator will naturally resolve them if conditions clear,
 	// and dedup prevents duplicate alerts from being created.
-	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifyManager)
+	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifyManager)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
+	regressionDetector := alerting.NewRegressionDetector(versionHistoryStore, metricsStore, nodeStore, alertStore, notifyManager)
+	regressionDetector.Start()
 	updateStore := dashboard.NewUpdateStore(*dataDir)
 	versionChecker := dashboard.NewVersionChecker("CTJaeger", "KleverNodeHub")
 	versionChecker.Start()
@@ -243,7 +252,7 @@ func main() {
 	geoResolver := dashboard.NewGeoIPResolver()
 
 	// WebSocket endpoint for agents (authenticated via mTLS cert, not JWT)
-	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore, geoResolver)
+	wsHandler := ws.NewAgentHandler(hub, serverStore, nodeStore, metricsStore, versionHistoryStore, geoResolver)
 	mux.HandleFunc("GET /ws/agent", wsHandler.HandleUpgrade)
 
 	// WebSocket endpoint for browser clients (authenticated via JWT cookie)
@@ -279,7 +288,12 @@ func main() {
 	mux.Handle("GET /api/nodes/{id}/config/version-backups", authMw(http.HandlerFunc(dockerHandler.HandleConfigVersionBackups)))
 	mux.Handle("POST /api/nodes/{id}/config/version-restore", authMw(http.HandlerFunc(dockerHandler.HandleConfigVersionRestore)))
 	mux.Handle("GET /api/nodes/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleNodeMetrics)))
+	mux.Handle("GET /api/nodes/{id}/performance", authMw(http.HandlerFunc(performanceHandler.HandleNodePerformance)))
 	mux.Handle("GET /api/servers/{id}/metrics", authMw(http.HandlerFunc(metricsHandler.HandleServerMetrics)))
+	mux.Handle("POST /api/servers/{id}/benchmark", authMw(http.HandlerFunc(benchmarkHandler.HandleRunBenchmark)))
+	mux.Handle("GET /api/batch-config/parameters", authMw(http.HandlerFunc(batchConfigHandler.HandleListParameters)))
+	mux.Handle("POST /api/batch-config/apply", authMw(http.HandlerFunc(batchConfigHandler.HandleApply)))
+	mux.Handle("POST /api/slot-inspect", authMw(http.HandlerFunc(slotInspectorHandler.HandleInspect)))
 	mux.Handle("POST /api/nodes/provision", authMw(http.HandlerFunc(provisionHandler.HandleProvision)))
 	mux.Handle("GET /api/nodes/{id}/config", authMw(http.HandlerFunc(configHandler.HandleListFiles)))
 	mux.Handle("GET /api/nodes/{id}/config/{filename}", authMw(http.HandlerFunc(configHandler.HandleReadFile)))

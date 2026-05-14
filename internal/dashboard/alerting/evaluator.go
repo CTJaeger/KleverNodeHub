@@ -35,16 +35,17 @@ var systemMetrics = map[string]bool{
 
 // Evaluator evaluates alert rules against current metrics.
 type Evaluator struct {
-	mu           sync.Mutex
-	alertStore   *store.AlertStore
-	metricsStore *store.MetricsStore
-	nodeStore    *store.NodeStore
-	serverStore  *store.ServerStore
-	notifier     *notify.Manager
-	states       map[string]*AlertState
-	cancel       context.CancelFunc
-	interval     time.Duration
-	idCounter    int64
+	mu            sync.Mutex
+	alertStore    *store.AlertStore
+	metricsStore  *store.MetricsStore
+	nodeStore     *store.NodeStore
+	serverStore   *store.ServerStore
+	settingsStore *store.SettingsStore
+	notifier      *notify.Manager
+	states        map[string]*AlertState
+	cancel        context.CancelFunc
+	interval      time.Duration
+	idCounter     int64
 }
 
 // NewEvaluator creates a new alert evaluator.
@@ -53,16 +54,18 @@ func NewEvaluator(
 	metricsStore *store.MetricsStore,
 	nodeStore *store.NodeStore,
 	serverStore *store.ServerStore,
+	settingsStore *store.SettingsStore,
 	notifier *notify.Manager,
 ) *Evaluator {
 	return &Evaluator{
-		alertStore:   alertStore,
-		metricsStore: metricsStore,
-		nodeStore:    nodeStore,
-		serverStore:  serverStore,
-		notifier:     notifier,
-		states:       make(map[string]*AlertState),
-		interval:     15 * time.Second,
+		alertStore:    alertStore,
+		metricsStore:  metricsStore,
+		nodeStore:     nodeStore,
+		serverStore:   serverStore,
+		settingsStore: settingsStore,
+		notifier:      notifier,
+		states:        make(map[string]*AlertState),
+		interval:      15 * time.Second,
 	}
 }
 
@@ -169,6 +172,17 @@ func (e *Evaluator) migrateRules() {
 			log.Printf("alert evaluator: migrate nonce-stall rule: %v", err)
 		} else {
 			log.Println("alert evaluator: migrated nonce-stall threshold 15s → 120s")
+		}
+	}
+
+	// Migrate sync-lag metric name from camelCase to snake_case (matches actual Klever API field)
+	syncRule, err := e.alertStore.GetRule("builtin-sync-lag")
+	if err == nil && syncRule.MetricName == "klv_isSyncing" {
+		syncRule.MetricName = "klv_is_syncing"
+		if err := e.alertStore.UpdateRule(syncRule); err != nil {
+			log.Printf("alert evaluator: migrate sync-lag metric name: %v", err)
+		} else {
+			log.Println("alert evaluator: migrated sync-lag metric name klv_isSyncing → klv_is_syncing")
 		}
 	}
 
@@ -305,6 +319,15 @@ func (e *Evaluator) evaluateSystemRule(rule *store.AlertRule, servers []models.S
 }
 
 func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []models.Server, now time.Time) {
+	// The Agent Offline threshold comes from the heartbeat_timeout_sec
+	// setting (single source of truth, shared with the hub health check),
+	// not the rule's static threshold. Falls back to the rule threshold if
+	// the settings store is unavailable.
+	thresholdSec := rule.Threshold
+	if e.settingsStore != nil {
+		thresholdSec = e.settingsStore.HeartbeatTimeout().Seconds()
+	}
+
 	for i := range servers {
 		srv := &servers[i]
 
@@ -316,7 +339,7 @@ func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []model
 		stateKey := fmt.Sprintf("%s:server:%s", rule.ID, srv.ID)
 
 		staleSec := float64(now.Unix() - srv.LastHeartbeat)
-		breached := staleSec > rule.Threshold
+		breached := staleSec > thresholdSec
 		source := fmt.Sprintf("server:%s (%s)", srv.Name, srv.Hostname)
 		e.processResult(rule, stateKey, "", srv.ID, source, staleSec, breached, now)
 	}
@@ -357,7 +380,14 @@ func (e *Evaluator) evaluateThreshold(rule *store.AlertRule, stateKey, nodeID, s
 }
 
 func (e *Evaluator) evaluateStall(rule *store.AlertRule, stateKey, nodeID, serverID, nodeName string, from, to int64, now time.Time) {
-	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, from, to)
+	// Use a wider lookback for stall detection: at least 3x threshold so we can
+	// find the last real value change even when it happened long ago.
+	stallLookback := int64(rule.Threshold) * 3
+	if stallLookback < 300 {
+		stallLookback = 300 // minimum 5 minutes
+	}
+	stallFrom := to - stallLookback
+	points, err := e.metricsStore.QueryRecent(nodeID, rule.MetricName, stallFrom, to)
 	source := fmt.Sprintf("node:%s", nodeName)
 
 	// No data at all — if threshold > 0, treat as stalled (no metrics arriving)

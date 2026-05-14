@@ -180,6 +180,9 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	// Result channel for async command execution
 	resultCh := make(chan *models.Message, 16)
 
+	// Progress events channel — used by long-running commands (benchmark)
+	progressCh := make(chan *models.Message, 16)
+
 	// Discovery trigger channel (e.g. after provisioning)
 	discoverNow := make(chan struct{}, 1)
 
@@ -240,6 +243,11 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					log.Printf("send stall alert: %v", err)
 					return
 				}
+			case msg := <-progressCh:
+				if err := writeMessage(loopCtx, conn, msg); err != nil {
+					log.Printf("send progress: %v", err)
+					return
+				}
 			case msg := <-resultCh:
 				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send result: %v", err)
@@ -263,6 +271,20 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		}
 
 		if msg.Type == "command" {
+			// Set progress callback for this command — sends events to dashboard
+			executor.OnProgress = func(action string, payload map[string]any) {
+				progressMsg := &models.Message{
+					ID:        fmt.Sprintf("progress-%d", time.Now().UnixNano()),
+					Type:      "event",
+					Action:    action,
+					Payload:   payload,
+					Timestamp: time.Now().Unix(),
+				}
+				select {
+				case progressCh <- progressMsg:
+				default:
+				}
+			}
 			// Execute command asynchronously
 			go func(m models.Message) {
 				result := executor.Execute(&m)

@@ -22,9 +22,13 @@ const (
 	defaultStopTimeout    = 30 // seconds for graceful stop
 )
 
+// ProgressFunc is called to send progress events during long-running commands.
+type ProgressFunc func(action string, payload map[string]any)
+
 // Executor handles incoming commands from the dashboard.
 type Executor struct {
-	docker *DockerClient
+	docker     *DockerClient
+	OnProgress ProgressFunc
 }
 
 // NewExecutor creates a new command executor.
@@ -133,6 +137,8 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		err = e.executeKeyBackups(msg.Payload, result)
 	case "agent.update":
 		err = e.executeAgentUpdate(msg.Payload, result)
+	case "server.benchmark":
+		err = e.executeBenchmark(ctx, result)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -612,6 +618,33 @@ func (e *Executor) executeConfigVersionRestore(payload any, result *models.Comma
 	}
 
 	result.Output = "restored config from version backup: " + backupName
+	return nil
+}
+
+func (e *Executor) executeBenchmark(ctx context.Context, result *models.CommandResult) error {
+	// Use a longer context for benchmark (up to 5 minutes)
+	benchCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Pass progress callback to stream status updates
+	var progressFn func(step, total int, status string)
+	if e.OnProgress != nil {
+		progressFn = func(step, total int, status string) {
+			e.OnProgress("benchmark.progress", map[string]any{
+				"step":   step,
+				"total":  total,
+				"status": status,
+			})
+		}
+	}
+
+	benchResult, err := e.docker.RunBenchmark(benchCtx, progressFn)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(benchResult)
+	result.Output = string(jsonBytes)
 	return nil
 }
 
