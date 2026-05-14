@@ -223,8 +223,10 @@ func (h *Hub) ConnectedCount() int {
 }
 
 // StartHealthCheck starts the background heartbeat monitor.
-// Marks agents as offline if no heartbeat received within timeout.
-func (h *Hub) StartHealthCheck(timeout time.Duration) {
+// Marks agents as offline if no heartbeat received within the timeout.
+// timeoutFn is called on every tick so the timeout can be changed at
+// runtime (e.g. from the Settings page) without restarting the dashboard.
+func (h *Hub) StartHealthCheck(timeoutFn func() time.Duration) {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -232,7 +234,7 @@ func (h *Hub) StartHealthCheck(timeout time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				h.checkHeartbeats(timeout)
+				h.checkHeartbeats(timeoutFn())
 			case <-h.stopCh:
 				return
 			}

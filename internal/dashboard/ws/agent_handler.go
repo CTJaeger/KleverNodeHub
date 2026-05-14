@@ -21,16 +21,18 @@ type AgentHandler struct {
 	serverStore  *store.ServerStore
 	nodeStore    *store.NodeStore
 	metricsStore *store.MetricsStore
+	versionStore *store.VersionHistoryStore
 	geoResolver  *dashboard.GeoIPResolver
 }
 
 // NewAgentHandler creates a new WebSocket handler for agent connections.
-func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore, geoResolver *dashboard.GeoIPResolver) *AgentHandler {
+func NewAgentHandler(hub *Hub, serverStore *store.ServerStore, nodeStore *store.NodeStore, metricsStore *store.MetricsStore, versionStore *store.VersionHistoryStore, geoResolver *dashboard.GeoIPResolver) *AgentHandler {
 	return &AgentHandler{
 		hub:          hub,
 		serverStore:  serverStore,
 		nodeStore:    nodeStore,
 		metricsStore: metricsStore,
+		versionStore: versionStore,
 		geoResolver:  geoResolver,
 	}
 }
@@ -200,10 +202,12 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 			"mem_percent": discovered.MemPercent,
 		}
 
+		var nodeID string
 		found := false
 		for i := range existing {
 			if existing[i].ContainerName == discovered.ContainerName {
 				found = true
+				nodeID = existing[i].ID
 				existing[i].Status = discovered.Status
 				existing[i].DockerImageTag = discovered.DockerImageTag
 				existing[i].RestAPIPort = discovered.RestAPIPort
@@ -229,9 +233,10 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 			if discovered.RedundancyLevel > 0 {
 				nodeType = "observer"
 			}
+			nodeID = fmt.Sprintf("node-%s-%d", discovered.ContainerName, time.Now().UnixNano())
 			log.Printf("discovery: new node %q (container: %s) on server %s", discovered.DisplayName, discovered.ContainerName, serverID)
 			if err := h.nodeStore.Create(&models.Node{
-				ID:              fmt.Sprintf("node-%s-%d", discovered.ContainerName, time.Now().UnixNano()),
+				ID:              nodeID,
 				ServerID:        serverID,
 				Name:            discovered.DisplayName,
 				ContainerName:   discovered.ContainerName,
@@ -247,6 +252,17 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 				CreatedAt:       time.Now().Unix(),
 			}); err != nil {
 				log.Printf("discovery: failed to create node %q: %v", discovered.ContainerName, err)
+				nodeID = ""
+			}
+		}
+
+		// Track version changes for the performance-regression detector.
+		if nodeID != "" && discovered.DockerImageTag != "" && h.versionStore != nil {
+			changed, err := h.versionStore.RecordVersion(nodeID, serverID, discovered.DockerImageTag, time.Now().Unix())
+			if err != nil {
+				log.Printf("discovery: record version history for %q: %v", discovered.ContainerName, err)
+			} else if changed {
+				log.Printf("discovery: node %q version is now %s", discovered.ContainerName, discovered.DockerImageTag)
 			}
 		}
 	}

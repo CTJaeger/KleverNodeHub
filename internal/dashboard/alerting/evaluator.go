@@ -35,16 +35,17 @@ var systemMetrics = map[string]bool{
 
 // Evaluator evaluates alert rules against current metrics.
 type Evaluator struct {
-	mu           sync.Mutex
-	alertStore   *store.AlertStore
-	metricsStore *store.MetricsStore
-	nodeStore    *store.NodeStore
-	serverStore  *store.ServerStore
-	notifier     *notify.Manager
-	states       map[string]*AlertState
-	cancel       context.CancelFunc
-	interval     time.Duration
-	idCounter    int64
+	mu            sync.Mutex
+	alertStore    *store.AlertStore
+	metricsStore  *store.MetricsStore
+	nodeStore     *store.NodeStore
+	serverStore   *store.ServerStore
+	settingsStore *store.SettingsStore
+	notifier      *notify.Manager
+	states        map[string]*AlertState
+	cancel        context.CancelFunc
+	interval      time.Duration
+	idCounter     int64
 }
 
 // NewEvaluator creates a new alert evaluator.
@@ -53,16 +54,18 @@ func NewEvaluator(
 	metricsStore *store.MetricsStore,
 	nodeStore *store.NodeStore,
 	serverStore *store.ServerStore,
+	settingsStore *store.SettingsStore,
 	notifier *notify.Manager,
 ) *Evaluator {
 	return &Evaluator{
-		alertStore:   alertStore,
-		metricsStore: metricsStore,
-		nodeStore:    nodeStore,
-		serverStore:  serverStore,
-		notifier:     notifier,
-		states:       make(map[string]*AlertState),
-		interval:     15 * time.Second,
+		alertStore:    alertStore,
+		metricsStore:  metricsStore,
+		nodeStore:     nodeStore,
+		serverStore:   serverStore,
+		settingsStore: settingsStore,
+		notifier:      notifier,
+		states:        make(map[string]*AlertState),
+		interval:      15 * time.Second,
 	}
 }
 
@@ -316,6 +319,15 @@ func (e *Evaluator) evaluateSystemRule(rule *store.AlertRule, servers []models.S
 }
 
 func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []models.Server, now time.Time) {
+	// The Agent Offline threshold comes from the heartbeat_timeout_sec
+	// setting (single source of truth, shared with the hub health check),
+	// not the rule's static threshold. Falls back to the rule threshold if
+	// the settings store is unavailable.
+	thresholdSec := rule.Threshold
+	if e.settingsStore != nil {
+		thresholdSec = e.settingsStore.HeartbeatTimeout().Seconds()
+	}
+
 	for i := range servers {
 		srv := &servers[i]
 
@@ -327,7 +339,7 @@ func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []model
 		stateKey := fmt.Sprintf("%s:server:%s", rule.ID, srv.ID)
 
 		staleSec := float64(now.Unix() - srv.LastHeartbeat)
-		breached := staleSec > rule.Threshold
+		breached := staleSec > thresholdSec
 		source := fmt.Sprintf("server:%s (%s)", srv.Name, srv.Hostname)
 		e.processResult(rule, stateKey, "", srv.ID, source, staleSec, breached, now)
 	}

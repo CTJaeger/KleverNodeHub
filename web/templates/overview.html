@@ -176,7 +176,7 @@
                 <div id="alert-banner" class="hidden mb-16"></div>
 
             <!-- Stats Summary -->
-            <div class="stats-grid">
+            <div class="stats-grid" id="overview-stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-header">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
@@ -224,7 +224,7 @@
             </div>
 
             <!-- Resources Panel -->
-            <div class="card" style="margin-bottom:20px;">
+            <div class="card" style="margin-bottom:20px;" id="overview-resources-panel">
                 <div class="stat-card-header">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     <span>Resources</span>
@@ -704,7 +704,6 @@
             }
             const syncText = 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             document.getElementById('sync-time').textContent = syncText;
-            document.getElementById('top-shell-status').textContent = syncText;
             renderServers();
             updateStats();
         }
@@ -919,6 +918,13 @@
                 table.page = 1;
                 table.applyFilters();
             });
+            // Search mode: hide the stat cards and resources panel so the
+            // server/node tables move directly under the search field.
+            var searching = overviewSearchQuery.trim() !== '';
+            var statsGrid = document.getElementById('overview-stats-grid');
+            var resourcesPanel = document.getElementById('overview-resources-panel');
+            if (statsGrid) statsGrid.style.display = searching ? 'none' : '';
+            if (resourcesPanel) resourcesPanel.style.display = searching ? 'none' : '';
         }
 
         function createResourceBar(percent) {

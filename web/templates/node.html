@@ -298,6 +298,12 @@
                     </div>
                 </div>
 
+                <!-- Version Performance (passive report — no alarms) -->
+                <div class="card mb-16" id="node-performance-card" style="display:none;">
+                    <div class="card-header"><h3>Version Performance</h3></div>
+                    <div id="node-performance-body" class="text-sm text-muted">Loading...</div>
+                </div>
+
                 <!-- Time-Series Charts -->
                 <div class="card mb-16">
                     <div class="card-header">
@@ -462,6 +468,7 @@
             await loadNode();
             await loadMetrics();
             loadConfigBackups();
+            loadPerformance();
 
             setInterval(async () => {
                 await loadNode();
@@ -482,6 +489,52 @@
             if (!data) return;
             node = data;
             renderNode();
+        }
+
+        // Passive version-performance report — never alarms, just shows the
+        // block-processing median before vs. after the last version change.
+        async function loadPerformance() {
+            const card = document.getElementById('node-performance-card');
+            const body = document.getElementById('node-performance-body');
+            if (!card || !body) return;
+            let data;
+            try {
+                data = await API.getJSON('/api/nodes/' + nodeId + '/performance');
+            } catch (e) {
+                card.style.display = 'none';
+                return;
+            }
+            if (!data || !data.available) {
+                // Nothing meaningful to show yet — keep the card hidden.
+                card.style.display = 'none';
+                return;
+            }
+
+            const pct = data.pct_change;
+            let color = 'var(--text-secondary)';
+            let arrow = '';
+            if (pct > 5) { color = '#ef4444'; arrow = '▲ '; }
+            else if (pct < -5) { color = '#22c55e'; arrow = '▼ '; }
+
+            const fromVer = data.previous_version
+                ? esc(data.previous_version) + ' → ' + esc(data.version)
+                : esc(data.version);
+            const changedAt = data.changed_at
+                ? new Date(data.changed_at * 1000).toLocaleString()
+                : '';
+
+            body.innerHTML =
+                '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
+                    '<span style="font-size:1.4rem;font-weight:700;color:' + color + ';">' +
+                        arrow + (pct > 0 ? '+' : '') + pct + '%</span>' +
+                    '<span class="text-muted">block processing median after upgrade</span>' +
+                '</div>' +
+                '<div class="text-sm text-muted" style="margin-top:6px;">' +
+                    'Baseline ' + data.baseline_ms + 'ms → now ' + data.current_ms + 'ms' +
+                    ' &middot; ' + fromVer +
+                    (changedAt ? ' &middot; changed ' + esc(changedAt) : '') +
+                '</div>';
+            card.style.display = '';
         }
 
         function renderNode() {
@@ -544,10 +597,12 @@
                 fetchMetric('klv_mem_load_percent', from, now),
             ]);
 
-            // Update status header from latest metrics
+            // Update status header from latest metrics.
+            // Nonce is shown in full (with thousands separators), not abbreviated —
+            // operators want the exact block number, not "30.5M".
             if (nonceData && nonceData.length > 0) {
                 const latest = nonceData[nonceData.length - 1];
-                document.getElementById('ns-nonce').textContent = Charts._formatNumber(latest.value);
+                document.getElementById('ns-nonce').textContent = Math.round(latest.value).toLocaleString();
             }
 
             // Try to get epoch, peers, consensus from latest data
@@ -557,7 +612,7 @@
             }
             updateStatusFromLatest('klv_consensus_state', 'ns-consensus', from, now);
 
-            const latestNonce = nonceData && nonceData.length > 0 ? Charts._formatNumber(nonceData[nonceData.length - 1].value) : '-';
+            const latestNonce = nonceData && nonceData.length > 0 ? Math.round(nonceData[nonceData.length - 1].value).toLocaleString() : '-';
             const latestPeers = peersData && peersData.length > 0 ? Math.round(peersData[peersData.length - 1].value).toLocaleString() : '-';
             const latestCPU = cpuData && cpuData.length > 0 ? cpuData[cpuData.length - 1].value.toFixed(1) + '%' : '-';
             const latestMem = memData && memData.length > 0 ? memData[memData.length - 1].value.toFixed(1) + '%' : '-';
@@ -661,7 +716,7 @@
                 // Use a rough estimate for the highest nonce
                 const pct = 99; // will be refined when we have klv_probable_highest_nonce
                 document.getElementById('sync-bar').style.width = pct + '%';
-                document.getElementById('sync-text').textContent = 'Block ' + Charts._formatNumber(current);
+                document.getElementById('sync-text').textContent = 'Block ' + Math.round(current).toLocaleString();
             } else {
                 section.style.display = 'none';
             }

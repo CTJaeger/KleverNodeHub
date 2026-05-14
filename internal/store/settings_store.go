@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 )
 
 // SettingsStore handles key-value settings persistence.
@@ -12,6 +14,36 @@ type SettingsStore struct {
 // NewSettingsStore creates a new SettingsStore.
 func NewSettingsStore(db *DB) *SettingsStore {
 	return &SettingsStore{db: db}
+}
+
+// heartbeatTimeoutDefault is used when the heartbeat_timeout_sec setting
+// is unset or invalid.
+const heartbeatTimeoutDefault = 120 * time.Second
+
+// HeartbeatTimeout reads the agent heartbeat timeout from settings. It is
+// the single source of truth for "how long without a heartbeat before an
+// agent counts as offline" — used by both the hub health check and the
+// Agent Offline alert rule. Falls back to the default when missing or
+// unparseable, and clamps to [30s, 600s] to match the Settings UI bounds.
+func (s *SettingsStore) HeartbeatTimeout() time.Duration {
+	if s == nil {
+		return heartbeatTimeoutDefault
+	}
+	raw, err := s.Get("heartbeat_timeout_sec")
+	if err != nil || raw == "" {
+		return heartbeatTimeoutDefault
+	}
+	sec, err := strconv.Atoi(raw)
+	if err != nil || sec <= 0 {
+		return heartbeatTimeoutDefault
+	}
+	if sec < 30 {
+		sec = 30
+	}
+	if sec > 600 {
+		sec = 600
+	}
+	return time.Duration(sec) * time.Second
 }
 
 // Get retrieves a setting value by key. Returns empty string if not found.

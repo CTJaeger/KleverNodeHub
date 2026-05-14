@@ -285,4 +285,19 @@ var migrations = []string{
 
 	// Migration 7: Add display_name to servers
 	`ALTER TABLE servers ADD COLUMN display_name TEXT DEFAULT '';`,
+
+	// Migration 8: Node version history — tracks every observed version
+	// change per node so the regression detector can compare block
+	// processing performance before/after an upgrade. `evaluated` marks
+	// whether the regression detector has already judged this change
+	// (so each version change is alerted on at most once).
+	`CREATE TABLE IF NOT EXISTS node_version_history (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		node_id     TEXT NOT NULL,
+		server_id   TEXT NOT NULL,
+		version     TEXT NOT NULL,
+		detected_at INTEGER NOT NULL,
+		evaluated   INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX IF NOT EXISTS idx_node_version_history_node ON node_version_history(node_id, detected_at);`,
 }
