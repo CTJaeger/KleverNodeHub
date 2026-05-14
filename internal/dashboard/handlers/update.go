@@ -206,6 +206,15 @@ func (h *UpdateHandler) HandleRestartAgent(w http.ResponseWriter, r *http.Reques
 	}
 
 	if result.Error != "" {
+		// An agent predating this feature rejects agent.restart at the
+		// command whitelist. Translate that into a clear "update the agent"
+		// message instead of leaking the raw validation error.
+		if strings.Contains(result.Error, "command not allowed") {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "this agent version does not support restart — update the agent first",
+			})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": result.Error})
 		return
 	}
