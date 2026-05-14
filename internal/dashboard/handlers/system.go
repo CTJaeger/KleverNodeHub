@@ -30,6 +30,7 @@ func NewSystemHandler(vc *dashboard.VersionChecker) *SystemHandler {
 // GET /api/system/version
 func (h *SystemHandler) HandleVersionInfo(w http.ResponseWriter, _ *http.Request) {
 	info := version.Get()
+	inDocker := isRunningInDocker()
 	result := map[string]any{
 		"version":    info.Version,
 		"git_commit": info.GitCommit,
@@ -38,7 +39,12 @@ func (h *SystemHandler) HandleVersionInfo(w http.ResponseWriter, _ *http.Request
 		"os":         info.OS,
 		"arch":       info.Arch,
 		"uptime":     version.Uptime().String(),
-		"is_docker":  isRunningInDocker(),
+		"is_docker":  inDocker,
+	}
+	// Only meaningful inside Docker — true when /var/run/docker.sock is mounted,
+	// which lets the dashboard pull a new image and recreate its own container.
+	if inDocker {
+		result["docker_self_update_available"] = dockerSelfUpdateAvailable()
 	}
 
 	latest := h.versionChecker.Latest()

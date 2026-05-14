@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-05-14
+- **Docker Self-Update im Dashboard sichtbar**: Update-Banner zeigt jetzt auch im Docker-Betrieb den "Update Now"-Button, sofern `/var/run/docker.sock` gemountet ist — der Backend-Flow existierte bereits seit 2026-03-25, war im UI aber unkonditional ausgeblendet. Ohne Socket-Mount weiterhin der `docker pull`-Hinweis (jetzt mit Zusatz, wie One-Click-Updates aktiviert werden). Confirm-Dialog und Reload-Delay (15s statt 3s) für Docker-Mode angepasst, weil Image-Pull + Container-Recreate länger dauert als Binary-Restart. `GET /api/system/version` liefert dafür neues Feld `docker_self_update_available`. README-Docker-Run-Beispiel ergänzt um Socket-Mount + Sicherheitshinweis (Root-equivalent control).
+
 ### 2026-04-01
 - **Server Hardware Benchmark**: Neuer "Benchmark"-Tab auf der Server-Detailseite. Startet den offiziellen Klever Benchmark-Tool in einem Docker-Container. Testet Disk I/O, Network, CPU, Memory, KV Store mit PASS/WARN/FAIL. Ergebnis als farbcodierte Cards.
 
