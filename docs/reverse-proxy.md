@@ -43,7 +43,7 @@ docker run -d \
 
 > **Important:** The `--domain` flag must match the domain you use in the reverse proxy config. It sets the WebAuthn Relying Party ID for Passkey authentication.
 
-If running the dashboard as a binary (not Docker), it already listens on `127.0.0.1:9443` by default when you use `--addr 127.0.0.1:9443`.
+If running the dashboard as a binary (not Docker), pass `--addr 127.0.0.1:9443` so it only listens on localhost behind the proxy.
 
 If you have **remote agents**, replace `127.0.0.1` with a LAN or public address that those agents can reach (and firewall-restrict it to agent source IPs). Browsers still go through the proxy on 443.
 
@@ -79,6 +79,7 @@ Create `/etc/apache2/sites-available/klever-node-hub.conf`:
     ServerName your-domain.example.com
 
     SSLEngine on
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
     SSLCertificateFile    /etc/letsencrypt/live/your-domain.example.com/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/your-domain.example.com/privkey.pem
 
@@ -89,8 +90,8 @@ Create `/etc/apache2/sites-available/klever-node-hub.conf`:
     SSLProxyCheckPeerCN off
     SSLProxyCheckPeerName off
 
-    # Forward client IP for rate limiting and lockout
-    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"
+    # Forward client protocol. mod_proxy_http adds X-Forwarded-For
+    # automatically, which the dashboard uses for rate limiting and lockout.
     RequestHeader set X-Forwarded-Proto "https"
 
     # WebSocket support (required for live metrics and log streaming)
