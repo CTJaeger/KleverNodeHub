@@ -146,18 +146,18 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(123, 146, 191, 0.25);
     border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: rgba(123, 146, 191, 0.4);
 }
 
 /* Firefox */
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.03);
+    scrollbar-color: rgba(123, 146, 191, 0.25) rgba(255, 255, 255, 0.03);
 }
 
 /* ==========================================================================
@@ -320,6 +320,32 @@ h1, h2, h3, h4, h5, h6 {
 .sidebar-nav-link.active svg {
     opacity: 1;
     color: #251400;
+}
+
+/* Sidebar alert badge */
+.sidebar-alert-badge {
+    display: none;
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+}
+.sidebar-alert-badge.visible {
+    display: inline-block;
+}
+.sidebar-alert-badge.pulse {
+    animation: badge-pulse 2s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
 }
 
 /* Sidebar footer */
@@ -662,8 +688,8 @@ h1, h2, h3, h4, h5, h6 {
 
 .server-cell-server {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
 }
 
@@ -681,6 +707,15 @@ h1, h2, h3, h4, h5, h6 {
     min-width: 0;
     font-size: 12px;
     color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.server-row-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -934,6 +969,44 @@ h1, h2, h3, h4, h5, h6 {
     cursor: pointer;
     padding: 0 4px;
     line-height: 1;
+}
+
+.agent-update-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    background: var(--bg-card);
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius);
+    margin: 0 24px 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.agent-update-banner.hidden {
+    display: none;
+}
+
+.agent-update-banner-btn {
+    margin-left: auto;
+    padding: 5px 14px;
+    background: #f59e0b;
+    color: #251400;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.agent-update-banner-btn:hover {
+    opacity: 0.9;
+}
+
+.agent-update-banner-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .batch-action-bar {
@@ -3071,6 +3144,20 @@ textarea.form-input {
     .page-header-status {
         display: none;
     }
+}
+
+/* ==========================================================================
+   Responsive: Mobile compact stat cards
+   ========================================================================== */
+
+@media (max-width: 767px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat-card-header { font-size: 10px; padding: 7px 10px; gap: 6px; }
+    .stat-card-header svg { width: 14px; height: 14px; }
+    .stat-card-body { padding: 10px 10px 8px; }
+    .stat-card-label { font-size: 9.5px; }
+    .stat-card-value { font-size: 20px; }
+    .stat-card-sub { font-size: 11px; }
 }
 
 /* ==========================================================================

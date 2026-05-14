@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### 2026-04-01
+- **Server Hardware Benchmark**: Neuer "Benchmark"-Tab auf der Server-Detailseite. Startet den offiziellen Klever Benchmark-Tool in einem Docker-Container. Testet Disk I/O, Network, CPU, Memory, KV Store mit PASS/WARN/FAIL. Ergebnis als farbcodierte Cards.
+
+### 2026-03-28
+- **Fix: Nonce Stall Alert wirkungslos**: Der 3x-Lookback wurde durch Clamping auf das globale 2-Min-Fenster sofort wieder aufgehoben. Clamping entfernt — Stall-Detection schaut jetzt tatsächlich 6+ Minuten zurück.
+- **Globale Alert-Badge in Sidebar**: Roter Badge mit Anzahl aktiver Alerts am "Alerts"-Link — sichtbar auf JEDER Seite (Overview, Node, Server, Alerts, Settings). Pulsiert bei Critical Alerts. Pollt alle 15s.
+- **Config-Suchfeld auf 50% Breite**: Suchfeld nimmt nicht mehr die volle Zeile ein.
+- **PR #48 gemergt**: Flat/Grouped Toggle wird per localStorage persistiert.
+- **PR #49 gemergt**: Maskierte Credentials beim Editieren von Notification-Channels (Secrets verlassen nie den Backend unmasked).
+
+### 2026-03-26
+- **Fix: Nonce Stall Alert feuerte nicht**: Lookback war nur 2 Minuten — bei Threshold 120s wurde der letzte echte Nonce-Wechsel nie gefunden. Jetzt 3x Threshold (min. 5 Min) als Lookback.
+- **Fix: Config Save "Unknown error"**: Falsches API-Response-Parsing (API.request statt API.put + JSON). Speichern und Speichern & Restart funktionieren jetzt korrekt.
+- **Fix: Config Backups nicht sichtbar**: Listing zeigte nur Version-Backups (Ordner), nicht Editor-Backups (.bak-Dateien). Beide Typen werden jetzt angezeigt.
+- **Log Download bereinigt**: ANSI-Farbcodes und `[stdout]`/`[stderr]` Prefix werden beim Download gestrippt.
+- **Config-Suche**: Neues Suchfeld im Config-Editor mit Match-Counter und Vor/Zurück-Navigation.
+
 ### 2026-03-25
 - **Docker Self-Update**: Dashboard kann sich jetzt auch im Docker-Container selbst updaten, wenn `/var/run/docker.sock` gemountet ist. Flow: eigenen Container erkennen → neues Image pullen → alten Container umbenennen → neuen erstellen → starten → alten stoppen/entfernen. Rollback bei Fehler.
 - **Agent Update Modal Redesign**: Server Agents Tabelle + "Update All" Button oben, Release-Dropdown + manuelle Auswahl unter "Expert Settings" Trennlinie.

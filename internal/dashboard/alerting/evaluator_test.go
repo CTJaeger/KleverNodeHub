@@ -11,7 +11,7 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
 
-func setupTestDB(t *testing.T) (*store.AlertStore, *store.MetricsStore, *store.NodeStore, *store.ServerStore, func()) {
+func setupTestDB(t *testing.T) (*store.AlertStore, *store.MetricsStore, *store.NodeStore, *store.ServerStore, *store.SettingsStore, func()) {
 	t.Helper()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
@@ -24,6 +24,7 @@ func setupTestDB(t *testing.T) (*store.AlertStore, *store.MetricsStore, *store.N
 		store.NewMetricsStore(db),
 		store.NewNodeStore(db),
 		store.NewServerStore(db),
+		store.NewSettingsStore(db),
 		func() { _ = db.Close(); _ = os.RemoveAll(dir) }
 }
 
@@ -84,11 +85,11 @@ func TestFormatAlertMessage_AllConditions(t *testing.T) {
 }
 
 func TestEvaluatorEnsureDefaults(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	// First call should create defaults
 	eval.EnsureDefaults()
@@ -110,7 +111,7 @@ func TestEvaluatorEnsureDefaults(t *testing.T) {
 }
 
 func TestEvaluatorThresholdAlert(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	// Create a server and node
@@ -153,7 +154,7 @@ func TestEvaluatorThresholdAlert(t *testing.T) {
 	}
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	// Run evaluation manually
 	eval.evaluate()
@@ -175,7 +176,7 @@ func TestEvaluatorThresholdAlert(t *testing.T) {
 }
 
 func TestEvaluatorResolvesAlert(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -215,7 +216,7 @@ func TestEvaluatorResolvesAlert(t *testing.T) {
 	}
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	// First eval: should fire
 	eval.evaluate()
@@ -249,7 +250,7 @@ func TestEvaluatorResolvesAlert(t *testing.T) {
 }
 
 func TestEvaluatorPendingThenFiring(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -279,7 +280,7 @@ func TestEvaluatorPendingThenFiring(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	eval.evaluate()
 
@@ -307,7 +308,7 @@ func TestEvaluatorPendingThenFiring(t *testing.T) {
 }
 
 func TestEvaluatorSystemMetrics(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -333,7 +334,7 @@ func TestEvaluatorSystemMetrics(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 	eval.evaluate()
 
 	active, _ := alertStore.ListActiveAlerts()
@@ -346,8 +347,11 @@ func TestEvaluatorSystemMetrics(t *testing.T) {
 }
 
 func TestEvaluatorHeartbeatStale(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
+
+	// Heartbeat timeout comes from settings now, not the rule threshold.
+	_ = settingsStore.Set("heartbeat_timeout_sec", "60")
 
 	// Server with stale heartbeat (120s ago, threshold 60s)
 	srv := &models.Server{
@@ -365,7 +369,7 @@ func TestEvaluatorHeartbeatStale(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 	eval.evaluate()
 
 	active, _ := alertStore.ListActiveAlerts()
@@ -400,7 +404,7 @@ func TestDefaultRules(t *testing.T) {
 }
 
 func TestEvaluatorNodeOffline(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -426,7 +430,7 @@ func TestEvaluatorNodeOffline(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	eval.evaluate()
 
@@ -451,7 +455,7 @@ func TestEvaluatorNodeOffline(t *testing.T) {
 }
 
 func TestEvaluatorNonceStall(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -482,7 +486,7 @@ func TestEvaluatorNonceStall(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	eval.evaluate()
 
@@ -503,7 +507,7 @@ func TestEvaluatorNonceStall(t *testing.T) {
 }
 
 func TestEvaluatorNonceStall_NotYetStalled(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	srv := &models.Server{
@@ -533,7 +537,7 @@ func TestEvaluatorNonceStall_NotYetStalled(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	eval.evaluate()
 
@@ -545,11 +549,11 @@ func TestEvaluatorNonceStall_NotYetStalled(t *testing.T) {
 }
 
 func TestEvaluatorStartStop(t *testing.T) {
-	alertStore, metricsStore, nodeStore, serverStore, cleanup := setupTestDB(t)
+	alertStore, metricsStore, nodeStore, serverStore, settingsStore, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
 
 	eval.Start()
 	time.Sleep(100 * time.Millisecond)

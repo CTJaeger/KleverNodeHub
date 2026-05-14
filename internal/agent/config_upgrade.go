@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -256,6 +257,8 @@ func ListConfigVersionBackups(dataDir string) ([]ConfigVersionBackup, error) {
 	}
 
 	var backups []ConfigVersionBackup
+
+	// Collect version backups (directories)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -280,6 +283,38 @@ func ListConfigVersionBackups(dataDir string) ([]ConfigVersionBackup, error) {
 			FileCount: fileCount,
 		})
 	}
+
+	// Collect individual file backups (.bak files) grouped by timestamp
+	bakGroups := make(map[string][]string) // timestamp -> file list
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".bak") {
+			continue
+		}
+		// Format: filename.YYYYMMDD-HHMMSS.bak
+		name := entry.Name()
+		parts := strings.Split(name, ".")
+		if len(parts) >= 3 {
+			ts := parts[len(parts)-2] // YYYYMMDD-HHMMSS
+			bakGroups[ts] = append(bakGroups[ts], name)
+		}
+	}
+	for ts, files := range bakGroups {
+		// Parse timestamp from backup name
+		t, err := time.Parse("20060102-150405", ts)
+		if err != nil {
+			continue
+		}
+		backups = append(backups, ConfigVersionBackup{
+			Name:      "save-" + ts,
+			CreatedAt: t.Unix(),
+			FileCount: len(files),
+		})
+	}
+
+	// Sort newest first
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreatedAt > backups[j].CreatedAt
+	})
 
 	return backups, nil
 }

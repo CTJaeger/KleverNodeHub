@@ -115,7 +115,7 @@ func TestListConfigVersionBackups(t *testing.T) {
 	mustWriteFile(t, filepath.Join(backupDir, "v1.1.0-20260313-120000", "config.toml"), []byte("test"))
 	mustWriteFile(t, filepath.Join(backupDir, "v1.1.0-20260313-120000", "genesis.json"), []byte("{}"))
 
-	// Also have a regular .bak file — should be ignored (not a dir)
+	// Individual .bak file — should now be included as a grouped entry
 	mustWriteFile(t, filepath.Join(backupDir, "config.toml.20260312-090000.bak"), []byte("old"))
 
 	backups, err := ListConfigVersionBackups(dir)
@@ -123,18 +123,26 @@ func TestListConfigVersionBackups(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(backups) != 2 {
-		t.Fatalf("expected 2 version backups, got %d", len(backups))
+	if len(backups) != 3 {
+		t.Fatalf("expected 3 backups (2 version + 1 save), got %d", len(backups))
 	}
 
 	// Check file counts
+	found := map[string]bool{}
 	for _, b := range backups {
+		found[b.Name] = true
 		if b.Name == "v1.0.0-20260313-100000" && b.FileCount != 1 {
 			t.Errorf("v1.0.0 backup should have 1 file, got %d", b.FileCount)
 		}
 		if b.Name == "v1.1.0-20260313-120000" && b.FileCount != 2 {
 			t.Errorf("v1.1.0 backup should have 2 files, got %d", b.FileCount)
 		}
+		if b.Name == "save-20260312-090000" && b.FileCount != 1 {
+			t.Errorf("save backup should have 1 file, got %d", b.FileCount)
+		}
+	}
+	if !found["save-20260312-090000"] {
+		t.Error("expected save-20260312-090000 backup from .bak file")
 	}
 }
 
