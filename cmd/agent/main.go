@@ -271,8 +271,10 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		}
 
 		if msg.Type == "command" {
-			// Set progress callback for this command — sends events to dashboard
-			executor.OnProgress = func(action string, payload map[string]any) {
+			// Per-command progress callback — sends events to dashboard.
+			// Defined per-command (not as an Executor field) so concurrent
+			// commands can't race when assigning the callback.
+			onProgress := func(action string, payload map[string]any) {
 				progressMsg := &models.Message{
 					ID:        fmt.Sprintf("progress-%d", time.Now().UnixNano()),
 					Type:      "event",
@@ -287,7 +289,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 			}
 			// Execute command asynchronously
 			go func(m models.Message) {
-				result := executor.Execute(&m)
+				result := executor.Execute(&m, onProgress)
 				resultMsg := agent.BuildResultMessage(result)
 				select {
 				case resultCh <- resultMsg:
