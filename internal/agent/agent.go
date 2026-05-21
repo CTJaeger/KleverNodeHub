@@ -52,7 +52,21 @@ func (a *Agent) Config() *Config {
 }
 
 // TLSConfig builds a tls.Config using the agent's mTLS credentials.
-// The returned config trusts the dashboard CA and presents the agent's client certificate.
+// The returned config trusts the dashboard CA and presents the agent's
+// client certificate, AND verifies the dashboard's server certificate
+// against the CA the agent stored at registration time.
+//
+// The CA we already load was previously ignored: InsecureSkipVerify was
+// set to true on the assumption that mTLS alone was sufficient. It is
+// not — mTLS only ensures the dashboard authenticates the agent, not
+// the reverse. Without verifying the dashboard's cert against the
+// stored CA, an attacker who has stolen any client cert can intercept
+// the connection.
+//
+// ServerName is pinned to "localhost" because crypto.DashboardTLSConfig
+// issues the dashboard's server certificate with DNSNames: ["localhost"]
+// regardless of the host/IP the agent dials. The cert is still signed
+// by the trusted CA, so verifying against that SAN proves authenticity.
 func (a *Agent) TLSConfig() (*tls.Config, error) {
 	if a.config == nil {
 		return nil, fmt.Errorf("agent not configured")
@@ -69,9 +83,10 @@ func (a *Agent) TLSConfig() (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		RootCAs:            caCertPool,
-		InsecureSkipVerify: true, //nolint:gosec // dashboard uses self-signed cert; mTLS client auth is the real protection
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		ServerName:   "localhost",
+		MinVersion:   tls.VersionTLS13,
 	}, nil
 }
 
