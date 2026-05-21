@@ -52,6 +52,10 @@ func main() {
 		return
 	}
 
+	// Clean up stopped finalize-helper containers left behind by past failed
+	// self-update attempts. Best-effort; never blocks startup.
+	handlers.SweepStaleFinalizeHelpers()
+
 	// Ensure data directory exists
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
 		log.Fatalf("create data dir: %v", err)

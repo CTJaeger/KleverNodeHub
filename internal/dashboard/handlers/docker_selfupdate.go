@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -215,9 +216,55 @@ func (d *dockerClient) inspectContainer(id string) (*containerInspect, error) {
 	return &info, nil
 }
 
+// pullImage requests an image pull from the Docker daemon. The /images/create
+// endpoint is unusual: it returns HTTP 200 even on authentication failures,
+// manifest-not-found, or transport errors — those arrive as `{"errorDetail":{
+// "message":"..."}}` lines in the streamed NDJSON response body. We scan the
+// stream so a failed pull surfaces here, not as a misleading "no such image"
+// error from the subsequent container-create call.
 func (d *dockerClient) pullImage(image string) error {
-	_, err := d.post("/images/create?fromImage="+image, nil)
-	return err
+	resp, err := d.http.Post("http://localhost/images/create?fromImage="+image, "", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return parseImagePullStream(resp.Body)
+}
+
+// parseImagePullStream scans the NDJSON body of /images/create and returns
+// an error if any line carries an errorDetail or error field. Extracted from
+// pullImage to make the stream-decoding logic unit-testable without an HTTP
+// round-trip.
+//
+// Bounded read: a typical Docker image-pull progress stream is well under 1MB
+// (it's just JSON status lines, not the layer data itself). 64MB is a generous
+// cap that protects against a runaway/malicious daemon response.
+func parseImagePullStream(r io.Reader) error {
+	dec := json.NewDecoder(io.LimitReader(r, 64<<20))
+	for dec.More() {
+		var msg struct {
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+			Error string `json:"error"`
+		}
+		if err := dec.Decode(&msg); err != nil {
+			// Stream ended unexpectedly or a non-JSON line snuck in. Treat as
+			// success — if the pull truly failed, the create step will catch it.
+			return nil
+		}
+		if msg.ErrorDetail.Message != "" {
+			return fmt.Errorf("pull failed: %s", msg.ErrorDetail.Message)
+		}
+		if msg.Error != "" {
+			return fmt.Errorf("pull failed: %s", msg.Error)
+		}
+	}
+	return nil
 }
 
 func (d *dockerClient) renameContainer(id, newName string) error {
@@ -358,18 +405,66 @@ func (d *dockerClient) createFinalizeHelper(name, image, newID, oldID string) (s
 	return result.ID, nil
 }
 
-// getSelfContainerID reads the container ID from /proc/self/cgroup or hostname.
+// getSelfContainerID detects the ID of the container we're running in.
+//
+// /proc/self/cgroup is the source of truth: regardless of `--hostname`
+// overrides, the cgroup path always contains the full 64-hex container ID
+// (works for both cgroup v1 paths like `/docker/<id>` and v2 paths like
+// `/system.slice/docker-<id>.scope`). We fall back to the hostname (which
+// Docker defaults to the short 12-char ID) only when the cgroup file is
+// unavailable or doesn't contain a recognisable ID — e.g. on macOS where
+// /proc doesn't exist but a developer might still run the daemon locally.
 func getSelfContainerID() (string, error) {
-	// In Docker, hostname is the container ID (short form)
+	if id, ok := readContainerIDFromCgroup(); ok {
+		return id, nil
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		return "", err
 	}
-	// Hostname in Docker is typically the 12-char container ID
-	if len(hostname) >= 12 {
+	// `--hostname my-server` would pass the length check but not look like
+	// a Docker ID — guard against that so the caller's subsequent inspect
+	// call doesn't 404 with a misleading "container not found" error.
+	if len(hostname) >= 12 && looksLikeContainerID(hostname) {
 		return hostname, nil
 	}
-	return "", fmt.Errorf("hostname %q doesn't look like a container ID", hostname)
+	return "", fmt.Errorf("could not determine own container ID (hostname=%q, /proc/self/cgroup yielded no ID)", hostname)
+}
+
+// readContainerIDFromCgroup returns the first 64-hex run found in
+// /proc/self/cgroup, which on a containerised process is the container ID.
+// Returns ok=false if the file is missing (non-Linux) or has no such run.
+var cgroupContainerIDRe = regexp.MustCompile(`[a-f0-9]{64}`)
+
+func readContainerIDFromCgroup() (string, bool) {
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return "", false
+	}
+	if match := cgroupContainerIDRe.Find(data); match != nil {
+		return string(match), true
+	}
+	return "", false
+}
+
+const lowerHexChars = "0123456789abcdef"
+
+// looksLikeContainerID does a cheap structural check: ≥12 lower-hex chars.
+// Stricter than nothing, looser than isContainerID's hard 12-64 bound (we
+// want to accept full 64-char IDs that come back from /proc as well as the
+// 12-char hostnames Docker assigns by default). Docker container IDs are
+// lowercase only, so we restrict to lowercase hex to reject `--hostname`
+// values that happen to be mixed-case hex-like.
+func looksLikeContainerID(s string) bool {
+	if len(s) < 12 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune(lowerHexChars, c) {
+			return false
+		}
+	}
+	return true
 }
 
 // replaceImageTag replaces the tag portion of an image reference.
