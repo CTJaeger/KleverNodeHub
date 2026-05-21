@@ -22,8 +22,15 @@ import (
 )
 
 const (
-	heartbeatInterval   = 30 * time.Second
-	discoveryInterval   = 30 * time.Second
+	heartbeatInterval = 30 * time.Second
+
+	// Container discovery via the Docker API can take up to its own 30s
+	// context timeout per cycle. Running the cycle every 30s left zero idle
+	// time between cycles on a slow daemon — back-to-back discovery starved
+	// other writes. 60s keeps the dashboard's node list reasonably fresh
+	// without crowding the rest of the agent's outbound traffic.
+	discoveryInterval = 60 * time.Second
+
 	nodeMetricsInterval = 15 * time.Second
 	reconnectBaseDelay  = 1 * time.Second
 	reconnectMaxDelay   = 60 * time.Second
