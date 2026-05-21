@@ -1328,14 +1328,51 @@
         }
 
         async function loadBatchUpgradeTags() {
+            // Mirrors loadDockerTags() on the node detail page so the batch
+            // upgrade dropdown is sorted and labelled the same way: regular
+            // versions first, then a disabled separator, then val-only tags.
             try {
                 var data = await API.getJSON('/api/docker/tags');
                 var sel = document.getElementById('batch-upgrade-tag');
                 sel.innerHTML = '';
-                if (data && data.tags) {
-                    data.tags.forEach(function(tag) {
-                        var name = (typeof tag === 'string') ? tag : tag.name;
-                        sel.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Select version...';
+                sel.appendChild(placeholder);
+
+                if (!data || !data.tags) return;
+
+                var regular = [];
+                var valOnly = [];
+                data.tags.forEach(function(tag) {
+                    var name = (typeof tag === 'string') ? tag : tag.name;
+                    if (name.startsWith('val-')) {
+                        valOnly.push(name);
+                    } else {
+                        regular.push(name);
+                    }
+                });
+
+                function shortTag(v) { return v.replace(/-g[0-9a-f]+$/, ''); }
+
+                regular.forEach(function(name) {
+                    var opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = shortTag(name);
+                    sel.appendChild(opt);
+                });
+
+                if (valOnly.length > 0) {
+                    var sep = document.createElement('option');
+                    sep.disabled = true;
+                    sep.textContent = '── Validator only (no operator) ──';
+                    sel.appendChild(sep);
+                    valOnly.forEach(function(name) {
+                        var opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = shortTag(name);
+                        sel.appendChild(opt);
                     });
                 }
             } catch (e) { /* ignore */ }
