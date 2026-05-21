@@ -35,7 +35,22 @@ func main() {
 	domain := flag.String("domain", "localhost", "Domain for WebAuthn RP ID and TLS (e.g. localhost, myserver.local, node.example.com)")
 	dataDir := flag.String("data-dir", defaultDataDir(), "Data directory for DB, certs, config")
 	resetRecoveryCodes := flag.Bool("reset-recovery-codes", false, "Generate new recovery codes and exit")
+	// Internal flags used by the Docker self-update flow. The orchestrator container
+	// spawns a sidecar that re-execs this binary with these flags to finish the
+	// container swap after the orchestrator has stopped itself.
+	finalizeNewID := flag.String("self-update-finalize", "", "Internal: ID of the new container to start once --replaces has stopped")
+	replacesOldID := flag.String("replaces", "", "Internal: ID of the old container to remove during --self-update-finalize")
 	flag.Parse()
+
+	// --- Self-update finalize sidecar mode ---
+	// Runs in a short-lived helper container, finishes the swap, then exits.
+	// Must short-circuit before any data-dir / DB / network init.
+	if *finalizeNewID != "" {
+		if err := handlers.RunSelfUpdateFinalize(*finalizeNewID, *replacesOldID); err != nil {
+			log.Fatalf("self-update finalize: %v", err)
+		}
+		return
+	}
 
 	// Ensure data directory exists
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
