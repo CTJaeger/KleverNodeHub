@@ -83,6 +83,18 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 
 	// Docker mode: pull new image and recreate container (no binary needed)
 	if isRunningInDocker() {
+		// Single-flight: prevent two clicks from racing through the rename /
+		// create / helper-spawn sequence concurrently. Unlock happens in the
+		// goroutine; on the happy path the goroutine never returns (process is
+		// killed mid-stop) and the lock leaks, which is fine — next dashboard
+		// container starts with a fresh mutex.
+		if !dockerSelfUpdateMu.TryLock() {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"success": false,
+				"message": "a docker self-update is already in progress",
+			})
+			return
+		}
 		log.Printf("self-update (docker): updating to %s", latest.TagName)
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -92,6 +104,7 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		})
 
 		go func() {
+			defer dockerSelfUpdateMu.Unlock()
 			time.Sleep(500 * time.Millisecond)
 			if err := dockerSelfUpdate(latest.TagName); err != nil {
 				log.Printf("self-update (docker): FAILED: %v", err)
