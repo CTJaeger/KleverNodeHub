@@ -316,12 +316,25 @@ func extractTarGz(r io.Reader, destDir string, stripComponents int) error {
 			continue
 		}
 
-		// Sanitize path to prevent directory traversal
+		// Sanitize path to prevent directory traversal.
+		// filepath.Clean alone is not sufficient — an entry named "/etc/passwd"
+		// would Clean to "etc/passwd" but Join into "destDir/etc/passwd",
+		// which is fine, while "../../../etc/passwd" cleans to
+		// "../../../etc/passwd" and the strings.Contains("..") check catches
+		// it but a sibling-of-dest path like "/foo" still escapes if destDir
+		// were "/bar". Use filepath.Rel against the absolute destDir to be
+		// certain the resolved target lives inside destDir.
 		name = filepath.Clean(name)
-		if strings.Contains(name, "..") {
+		target := filepath.Join(destDir, name)
+		absDest, errAbs := filepath.Abs(destDir)
+		absTarget, errTarget := filepath.Abs(target)
+		if errAbs != nil || errTarget != nil {
 			continue
 		}
-		target := filepath.Join(destDir, name)
+		rel, err := filepath.Rel(absDest, absTarget)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
