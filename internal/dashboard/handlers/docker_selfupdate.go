@@ -183,9 +183,9 @@ func (d *dockerClient) doDelete(path string) error {
 
 // containerInspect is a minimal subset of Docker's container inspect response.
 type containerInspect struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	State  struct {
+	ID    string `json:"Id"`
+	Name  string `json:"Name"`
+	State struct {
 		Status  string `json:"Status"`
 		Running bool   `json:"Running"`
 	} `json:"State"`
