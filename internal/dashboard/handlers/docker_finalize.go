@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const hexChars = "0123456789abcdefABCDEF"
+
 // isContainerID reports whether s looks like a Docker container ID — 12 to 64
 // hex characters. Used to validate CLI input on the finalize-helper code path
 // so a stray non-hex string can't drive Docker API calls against unrelated
@@ -18,7 +20,7 @@ func isContainerID(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if !strings.ContainsRune(hexChars, c) {
 			return false
 		}
 	}
