@@ -352,9 +352,19 @@ func (e *Executor) executeConfigWrite(payload any, result *models.CommandResult)
 
 	result.Output = "written: " + fileName
 
-	// Restart container if requested
+	// Restart container if requested.
+	//
+	// restart_container is a separate field from the command's container_name
+	// and was previously passed straight to docker.RestartContainer without
+	// going through ValidateCommand's regex check. Apply the same
+	// containerNamePattern here so the field can't smuggle an unsafe name
+	// past validation.
 	restartContainer := extractStringField(payload, "restart_container")
 	if restartContainer != "" {
+		if !containerNamePattern.MatchString(restartContainer) {
+			result.Output += " (restart skipped: invalid container name)"
+			return nil
+		}
 		ctx := context.Background()
 		if err := e.docker.RestartContainer(ctx, restartContainer, defaultStopTimeout); err != nil {
 			result.Output += " (restart failed: " + err.Error() + ")"
