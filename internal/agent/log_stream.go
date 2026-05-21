@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -233,8 +235,15 @@ func splitTimestamp(line string) (string, string) {
 }
 
 // LogStreamManager manages active log streams for containers.
+//
+// The streams map is touched from at least three goroutines (the caller of
+// StartStream/StopStream, the per-stream worker that removes itself when
+// the stream ends, and any caller of StopAll/ActiveStreams). All access
+// goes through mu — concurrent map writes panic at runtime, so the lock
+// is correctness, not optimization.
 type LogStreamManager struct {
 	docker  *DockerClient
+	mu      sync.Mutex
 	streams map[string]context.CancelFunc // containerName -> cancel
 }
 
@@ -249,15 +258,26 @@ func NewLogStreamManager(docker *DockerClient) *LogStreamManager {
 // StartStream starts streaming logs for a container.
 // Only one stream per container is allowed.
 func (m *LogStreamManager) StartStream(containerName string, onLine func(LogLine)) error {
-	// Stop existing stream for this container
+	// Stop existing stream for this container (acquires mu internally)
 	m.StopStream(containerName)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+
+	m.mu.Lock()
 	m.streams[containerName] = cancel
+	m.mu.Unlock()
 
 	go func() {
 		defer cancel()
-		defer delete(m.streams, containerName)
+		defer func() {
+			m.mu.Lock()
+			// Only remove if the entry is still ours — a concurrent
+			// StartStream may have replaced it with a newer cancel.
+			if existing, ok := m.streams[containerName]; ok && fnEq(existing, cancel) {
+				delete(m.streams, containerName)
+			}
+			m.mu.Unlock()
+		}()
 		_ = m.docker.StreamLogs(ctx, containerName, time.Now().Unix(), onLine)
 	}()
 
@@ -266,21 +286,44 @@ func (m *LogStreamManager) StartStream(containerName string, onLine func(LogLine
 
 // StopStream stops streaming logs for a container.
 func (m *LogStreamManager) StopStream(containerName string) {
-	if cancel, ok := m.streams[containerName]; ok {
-		cancel()
+	m.mu.Lock()
+	cancel, ok := m.streams[containerName]
+	if ok {
 		delete(m.streams, containerName)
+	}
+	m.mu.Unlock()
+
+	if ok {
+		cancel()
 	}
 }
 
 // StopAll stops all active log streams.
 func (m *LogStreamManager) StopAll() {
-	for name, cancel := range m.streams {
-		cancel()
-		delete(m.streams, name)
+	m.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(m.streams))
+	for _, c := range m.streams {
+		cancels = append(cancels, c)
+	}
+	m.streams = make(map[string]context.CancelFunc)
+	m.mu.Unlock()
+
+	// Cancel outside the lock — cancels can be slow if listeners block.
+	for _, c := range cancels {
+		c()
 	}
 }
 
 // ActiveStreams returns the number of active streams.
 func (m *LogStreamManager) ActiveStreams() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return len(m.streams)
+}
+
+// fnEq compares two CancelFunc values by their underlying pointer.
+// Used so the per-stream worker only deletes its own map entry if it
+// hasn't been replaced by a newer StartStream call.
+func fnEq(a, b context.CancelFunc) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }

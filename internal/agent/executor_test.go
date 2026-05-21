@@ -76,7 +76,7 @@ func TestExecutor_Start(t *testing.T) {
 		},
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if !result.Success {
 		t.Errorf("expected success, got error: %s", result.Error)
 	}
@@ -99,7 +99,7 @@ func TestExecutor_Stop(t *testing.T) {
 		},
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if !result.Success {
 		t.Errorf("expected success, got error: %s", result.Error)
 	}
@@ -119,7 +119,7 @@ func TestExecutor_Restart(t *testing.T) {
 		},
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if !result.Success {
 		t.Errorf("expected success, got error: %s", result.Error)
 	}
@@ -139,7 +139,7 @@ func TestExecutor_Status(t *testing.T) {
 		},
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if !result.Success {
 		t.Errorf("expected success, got error: %s", result.Error)
 	}
@@ -162,7 +162,7 @@ func TestExecutor_RejectedCommand(t *testing.T) {
 		},
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if result.Success {
 		t.Error("expected failure for rejected command")
 	}
@@ -183,7 +183,7 @@ func TestExecutor_MissingContainerName(t *testing.T) {
 		// No payload
 	}
 
-	result := exec.Execute(msg)
+	result := exec.Execute(msg, nil)
 	if result.Success {
 		t.Error("expected failure for missing container name")
 	}
