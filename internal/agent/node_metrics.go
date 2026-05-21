@@ -120,7 +120,11 @@ func (c *NodeMetricsCollector) CollectOne(nodeID, serverID string) (*models.Node
 	return c.pollNode(nodeID, serverID, ep)
 }
 
-// CollectAll polls all registered nodes and returns metrics events plus any stall alerts.
+// CollectAll polls all registered nodes and returns metrics events plus any
+// stall alerts. Polling is parallel — a single unreachable node would
+// otherwise block the whole cycle for defaultNodePollTimeout. With N nodes
+// down, the previous serial loop took N * 5 s before the writer could send
+// any of the partial results.
 func (c *NodeMetricsCollector) CollectAll(serverID string) ([]*models.NodeMetricsEvent, []*models.NodeNonceStallEvent) {
 	c.mu.RLock()
 	snapshot := make(map[string]nodeEndpoint, len(c.nodes))
@@ -129,28 +133,49 @@ func (c *NodeMetricsCollector) CollectAll(serverID string) ([]*models.NodeMetric
 	}
 	c.mu.RUnlock()
 
-	var events []*models.NodeMetricsEvent
-	var stalls []*models.NodeNonceStallEvent
+	if len(snapshot) == 0 {
+		return nil, nil
+	}
+
+	var (
+		wg      sync.WaitGroup
+		sliceMu sync.Mutex
+		events  = make([]*models.NodeMetricsEvent, 0, len(snapshot))
+		stalls  = make([]*models.NodeNonceStallEvent, 0)
+	)
 
 	for nodeID, ep := range snapshot {
-		evt, err := c.pollNode(nodeID, serverID, ep)
-		if err != nil {
-			log.Printf("poll node %s: %v", nodeID, err)
-			events = append(events, &models.NodeMetricsEvent{
-				NodeID:      nodeID,
-				ServerID:    serverID,
-				Error:       err.Error(),
-				CollectedAt: time.Now().Unix(),
-			})
-			continue
-		}
-		events = append(events, evt)
+		wg.Add(1)
+		go func(nodeID string, ep nodeEndpoint) {
+			defer wg.Done()
 
-		// Check nonce stall
-		if stall := c.checkNonceStall(nodeID, serverID, evt); stall != nil {
-			stalls = append(stalls, stall)
-		}
+			evt, err := c.pollNode(nodeID, serverID, ep)
+			if err != nil {
+				log.Printf("poll node %s: %v", nodeID, err)
+				sliceMu.Lock()
+				events = append(events, &models.NodeMetricsEvent{
+					NodeID:      nodeID,
+					ServerID:    serverID,
+					Error:       err.Error(),
+					CollectedAt: time.Now().Unix(),
+				})
+				sliceMu.Unlock()
+				return
+			}
+
+			// checkNonceStall takes c.mu internally; safe to call from
+			// multiple goroutines.
+			stall := c.checkNonceStall(nodeID, serverID, evt)
+
+			sliceMu.Lock()
+			events = append(events, evt)
+			if stall != nil {
+				stalls = append(stalls, stall)
+			}
+			sliceMu.Unlock()
+		}(nodeID, ep)
 	}
+	wg.Wait()
 
 	return events, stalls
 }
@@ -277,8 +302,20 @@ func (c *NodeMetricsCollector) RunPoller(ctx context.Context, serverID string, m
 			c.mu.RLock()
 			n := len(c.nodes)
 			c.mu.RUnlock()
+			pollStart := time.Now()
 			events, stalls := c.CollectAll(serverID)
-			log.Printf("node metrics poll: %d nodes registered, %d events, %d stalls", n, len(events), len(stalls))
+			elapsed := time.Since(pollStart)
+			// With parallel polling a healthy cycle finishes in well under a
+			// second; anything past defaultNodePollTimeout means at least one
+			// node hit its 5s timeout. Surface that so operators don't need
+			// to packet-capture to see a flapping node.
+			if elapsed >= defaultNodePollTimeout {
+				log.Printf("node metrics poll: %d nodes, %d events, %d stalls in %s (slow — a node may be unreachable)",
+					n, len(events), len(stalls), elapsed.Round(time.Millisecond))
+			} else {
+				log.Printf("node metrics poll: %d nodes, %d events, %d stalls in %s",
+					n, len(events), len(stalls), elapsed.Round(time.Millisecond))
+			}
 
 			for _, evt := range events {
 				msg := &models.Message{
