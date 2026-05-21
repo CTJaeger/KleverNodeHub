@@ -86,7 +86,7 @@ func WriteConfigFile(dataDir, fileName, content string) error {
 	if err := validateConfigPath(dataDir, filePath); err != nil {
 		return err
 	}
-	if err := validateConfigExtension(fileName); err != nil {
+	if err := validateWriteExtension(fileName); err != nil {
 		return err
 	}
 
@@ -222,11 +222,26 @@ func validateConfigPath(dataDir, targetPath string) error {
 	return nil
 }
 
-// validateConfigExtension checks if the file extension is allowed.
+// validateConfigExtension checks if the file extension is allowed for
+// read-side operations (config.list, config.read).
 func validateConfigExtension(fileName string) error {
 	ext := strings.ToLower(filepath.Ext(fileName))
 	if !allowedConfigExtensions[ext] {
 		return fmt.Errorf("file extension not allowed: %q", ext)
+	}
+	return nil
+}
+
+// validateWriteExtension is the stricter check applied to config.write.
+// Validator keys (.pem) are deliberately excluded — they must go through
+// key.import so key material rotation is an explicit, auditable action
+// rather than an ergonomic side-effect of a config edit.
+func validateWriteExtension(fileName string) error {
+	if err := validateConfigExtension(fileName); err != nil {
+		return err
+	}
+	if strings.ToLower(filepath.Ext(fileName)) == ".pem" {
+		return fmt.Errorf("writing .pem files via config.write is not allowed; use key.import for validator keys")
 	}
 	return nil
 }

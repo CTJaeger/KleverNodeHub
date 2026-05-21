@@ -478,14 +478,18 @@ func (d *DockerClient) ListLocalImages(ctx context.Context) ([]string, error) {
 }
 
 // IsPortAvailable checks if a TCP port is available on the host.
+// "Available" here means nothing is currently accepting connections on it.
+//
+// The bounded dial timeout matters: a firewalled black-hole port (SYN
+// silently dropped, no RST) would block indefinitely without it, and
+// provisioning's FindAvailablePort calls this in a 100-port loop.
 func IsPortAvailable(port int) bool {
-	// Try to listen — if we can, the port is free
 	addr := fmt.Sprintf(":%d", port)
-	ln, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", addr)
+	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
 	if err != nil {
-		return true // Can't connect = port is free
+		return true // Can't connect (refused / timeout) = port is free
 	}
-	_ = ln.Close()
+	_ = conn.Close()
 	return false
 }
 
