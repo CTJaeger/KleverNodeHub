@@ -125,6 +125,32 @@ func TestWriteConfigFile_WithBackup(t *testing.T) {
 	}
 }
 
+func TestWriteConfigFile_RejectsPem(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// .pem must NOT be writable through config.write — validator keys go
+	// through key.import so rotations are explicit and auditable.
+	err := WriteConfigFile(dir, "validatorKey.pem", "-----BEGIN PRIVATE KEY-----\n")
+	if err == nil {
+		t.Fatal("expected WriteConfigFile to reject .pem, got nil")
+	}
+	if !strings.Contains(err.Error(), "key.import") {
+		t.Errorf("error message should point operator at key.import, got: %v", err)
+	}
+
+	// Reading .pem is still allowed (so the dashboard can render key info).
+	if err := os.WriteFile(filepath.Join(configDir, "validatorKey.pem"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadConfigFile(dir, "validatorKey.pem"); err != nil {
+		t.Errorf("expected ReadConfigFile(.pem) to succeed, got: %v", err)
+	}
+}
+
 func TestBackupConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "config")

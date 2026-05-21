@@ -27,8 +27,7 @@ type ProgressFunc func(action string, payload map[string]any)
 
 // Executor handles incoming commands from the dashboard.
 type Executor struct {
-	docker     *DockerClient
-	OnProgress ProgressFunc
+	docker *DockerClient
 }
 
 // NewExecutor creates a new command executor.
@@ -44,7 +43,11 @@ func NewExecutorWithClient(client *DockerClient) *Executor {
 }
 
 // Execute processes a command message and returns a result.
-func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
+//
+// onProgress is per-call rather than an Executor field so that concurrent
+// command goroutines don't race when assigning a new callback — each
+// execution carries its own.
+func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models.CommandResult {
 	result := &models.CommandResult{
 		CommandID: msg.ID,
 	}
@@ -142,7 +145,7 @@ func (e *Executor) Execute(msg *models.Message) *models.CommandResult {
 		// returns a successful result. We just need to ack.
 		result.Output = "restarting"
 	case "server.benchmark":
-		err = e.executeBenchmark(ctx, result)
+		err = e.executeBenchmark(ctx, result, onProgress)
 	case "node.discovery":
 		nodes, discErr := e.docker.DiscoverNodes(ctx)
 		if discErr != nil {
@@ -625,16 +628,16 @@ func (e *Executor) executeConfigVersionRestore(payload any, result *models.Comma
 	return nil
 }
 
-func (e *Executor) executeBenchmark(ctx context.Context, result *models.CommandResult) error {
+func (e *Executor) executeBenchmark(ctx context.Context, result *models.CommandResult, onProgress ProgressFunc) error {
 	// Use a longer context for benchmark (up to 5 minutes)
 	benchCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	// Pass progress callback to stream status updates
 	var progressFn func(step, total int, status string)
-	if e.OnProgress != nil {
+	if onProgress != nil {
 		progressFn = func(step, total int, status string) {
-			e.OnProgress("benchmark.progress", map[string]any{
+			onProgress("benchmark.progress", map[string]any{
 				"step":   step,
 				"total":  total,
 				"status": status,
