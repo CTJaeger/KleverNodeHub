@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,11 +22,41 @@ import (
 )
 
 const (
-	heartbeatInterval   = 30 * time.Second
-	discoveryInterval   = 30 * time.Second
+	heartbeatInterval = 30 * time.Second
+
+	// Container discovery via the Docker API can take up to its own 30s
+	// context timeout per cycle. Running the cycle every 30s left zero idle
+	// time between cycles on a slow daemon — back-to-back discovery starved
+	// other writes. 60s keeps the dashboard's node list reasonably fresh
+	// without crowding the rest of the agent's outbound traffic.
+	discoveryInterval = 60 * time.Second
+
 	nodeMetricsInterval = 15 * time.Second
 	reconnectBaseDelay  = 1 * time.Second
 	reconnectMaxDelay   = 60 * time.Second
+
+	// How often to re-detect the agent's public IP. The dashboard updates the
+	// stored IP from any heartbeat that carries a changed value, so this only
+	// affects how stale a recently-changed IP (DHCP renewal, VPN flap) can be.
+	publicIPRefreshInterval = 15 * time.Minute
+
+	// Maximum time to wait for queued result/progress messages to flush before
+	// restartAgent() exec's the new binary, so the dashboard sees the outcome
+	// of the agent.update / agent.restart command it just sent.
+	restartDrainTimeout = 3 * time.Second
+
+	// Application-level keepalive. Detects half-open connections that TCP
+	// alone wouldn't notice (NAT idle timeout, silent intermediary drop).
+	pingInterval = 25 * time.Second
+	pingTimeout  = 10 * time.Second
+
+	// If a connection held for at least this long, treat the next disconnect
+	// as a fresh failure and reset the reconnect backoff to the base delay.
+	connStableThreshold = 5 * time.Minute
+
+	// Discovery slower than this gets logged at WARN level so a busy Docker
+	// daemon is visible in agent logs.
+	discoverySlowThreshold = 5 * time.Second
 )
 
 func main() {
@@ -90,9 +121,21 @@ func main() {
 	}()
 
 	// --- Detect public IP ---
-	publicIP := agent.DetectPublicIP(ctx)
-	if publicIP != "" {
-		log.Printf("public IP: %s", publicIP)
+	// Stored in an atomic so the refresher goroutine and the per-connection
+	// goroutines below can update / read it without a mutex.
+	var publicIPAtomic atomic.Value
+	publicIPAtomic.Store(agent.DetectPublicIP(ctx))
+	if ip := publicIPAtomic.Load().(string); ip != "" {
+		log.Printf("public IP: %s", ip)
+	}
+
+	// Refresh the public IP periodically so a DHCP renewal or VPN flap
+	// surfaces in the next heartbeat rather than waiting for a restart.
+	go refreshPublicIP(ctx, &publicIPAtomic, publicIPRefreshInterval)
+
+	publicIPGetter := func() string {
+		v, _ := publicIPAtomic.Load().(string)
+		return v
 	}
 
 	// --- WebSocket connection loop with auto-reconnect ---
@@ -102,12 +145,22 @@ func main() {
 	for ctx.Err() == nil {
 
 		log.Printf("connecting to %s...", wsURL)
-		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, nodeMetrics, *dockerSocket, publicIP)
+		connectStart := time.Now()
+		err := runAgentLoop(ctx, wsURL, ag, executor, metricsCollector, nodeMetrics, *dockerSocket, publicIPGetter)
+		connectedFor := time.Since(connectStart)
 		if ctx.Err() != nil {
 			break
 		}
 
-		log.Printf("connection lost: %v — reconnecting in %s", err, delay)
+		// A connection that held for a meaningful duration shouldn't be
+		// punished by the previous failure's backoff state. Reset so a
+		// late-life disconnect reconnects quickly.
+		if connectedFor >= connStableThreshold {
+			delay = reconnectBaseDelay
+		}
+
+		log.Printf("connection lost after %s: %v — reconnecting in %s",
+			connectedFor.Round(time.Second), err, delay)
 		select {
 		case <-time.After(delay):
 		case <-ctx.Done():
@@ -124,7 +177,11 @@ func main() {
 }
 
 // runAgentLoop connects to the dashboard and runs the message pump until disconnected.
-func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string, publicIP string) error {
+//
+// publicIPGetter is invoked when each outbound message is built so a public-IP
+// change during the lifetime of the connection is picked up on the next
+// heartbeat without needing to drop and reconnect.
+func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *agent.Executor, metrics *agent.MetricsCollector, nodeMetrics *agent.NodeMetricsCollector, dockerSocket string, publicIPGetter func() string) error {
 	// Create a loop-scoped context so all goroutines (poller, sender) stop on disconnect
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	defer loopCancel()
@@ -153,29 +210,20 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	log.Println("connected to dashboard")
 
 	// Send agent info on connect
-	infoMsg := ag.BuildInfoMessage(publicIP)
+	infoMsg := ag.BuildInfoMessage(publicIPGetter())
 	if err := writeMessage(loopCtx, conn, infoMsg); err != nil {
 		return fmt.Errorf("send agent info: %w", err)
 	}
-
-	// Run initial discovery
-	go func() {
-		report := ag.RunDiscovery(dockerSocket)
-		discoveryMsg := ag.BuildDiscoveryMessage(report)
-		if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
-			log.Printf("send discovery: %v", err)
-		}
-		log.Printf("initial discovery: %d nodes found", len(report.Nodes))
-		nodeMetrics.UpdateNodes(report)
-	}()
 
 	// Heartbeat ticker
 	heartbeatTicker := time.NewTicker(heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
-	// Discovery ticker
-	discoveryTicker := time.NewTicker(discoveryInterval)
-	defer discoveryTicker.Stop()
+	// Ping ticker — application-level keepalive so half-open connections
+	// are detected within ~pingInterval rather than waiting for the next
+	// outbound message to fail.
+	pingTicker := time.NewTicker(pingInterval)
+	defer pingTicker.Stop()
 
 	// Result channel for async command execution
 	resultCh := make(chan *models.Message, 16)
@@ -186,6 +234,11 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	// Discovery trigger channel (e.g. after provisioning)
 	discoverNow := make(chan struct{}, 1)
 
+	// Discovery message channel — produced by runDiscoveryLoop, drained by the writer.
+	// Buffered so a slow writer can't backpressure the discovery goroutine and stall
+	// it inside the Docker call.
+	discoveryMsgCh := make(chan *models.Message, 4)
+
 	// Node metrics channels
 	nodeMetricsCh := make(chan *models.Message, 32)
 	nodeStallCh := make(chan *models.Message, 8)
@@ -193,13 +246,23 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 	// Start node metrics poller (uses loopCtx so it stops on disconnect)
 	go nodeMetrics.RunPoller(loopCtx, ag.Config().ServerID, nodeMetricsCh, nodeStallCh)
 
-	// Heartbeat + discovery + node metrics sender
+	// Discovery is the agent's most expensive operation (up to 30s of Docker
+	// inspect/stats calls per cycle). Run it on its own goroutine so a slow
+	// Docker daemon can never block heartbeats — the writer just drains the
+	// finished message off discoveryMsgCh like any other event.
+	go runDiscoveryLoop(loopCtx, ag, nodeMetrics, dockerSocket, discoverNow, discoveryMsgCh)
+
+	// Heartbeat + discovery dispatch + node metrics writer
 	go func() {
+		// Cancelling loopCtx on writer exit propagates the disconnect to the
+		// read loop and to all the other goroutines (poller, discovery).
+		defer loopCancel()
 		for {
 			select {
 			case <-loopCtx.Done():
 				return
 			case <-heartbeatTicker.C:
+				hbStart := time.Now()
 				hb := &models.Message{
 					ID:     fmt.Sprintf("hb-%d", time.Now().UnixNano()),
 					Type:   "event",
@@ -207,7 +270,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					Payload: &models.HeartbeatPayload{
 						Timestamp: time.Now().Unix(),
 						Metrics:   metrics.Collect(),
-						PublicIP:  publicIP,
+						PublicIP:  publicIPGetter(),
 					},
 					Timestamp: time.Now().Unix(),
 				}
@@ -215,23 +278,22 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					log.Printf("send heartbeat: %v", err)
 					return
 				}
-			case <-discoveryTicker.C:
-				report := ag.RunDiscovery(dockerSocket)
-				discoveryMsg := ag.BuildDiscoveryMessage(report)
-				if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
+				if elapsed := time.Since(hbStart); elapsed > 2*time.Second {
+					log.Printf("heartbeat write took %s (slow link?)", elapsed.Round(time.Millisecond))
+				}
+			case <-pingTicker.C:
+				pingCtx, cancel := context.WithTimeout(loopCtx, pingTimeout)
+				err := conn.Ping(pingCtx)
+				cancel()
+				if err != nil {
+					log.Printf("ping failed: %v — closing connection", err)
+					return
+				}
+			case msg := <-discoveryMsgCh:
+				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send discovery: %v", err)
 					return
 				}
-				nodeMetrics.UpdateNodes(report)
-			case <-discoverNow:
-				log.Printf("triggered immediate discovery")
-				report := ag.RunDiscovery(dockerSocket)
-				discoveryMsg := ag.BuildDiscoveryMessage(report)
-				if err := writeMessage(loopCtx, conn, discoveryMsg); err != nil {
-					log.Printf("send discovery: %v", err)
-					return
-				}
-				nodeMetrics.UpdateNodes(report)
 			case msg := <-nodeMetricsCh:
 				if err := writeMessage(loopCtx, conn, msg); err != nil {
 					log.Printf("send node metrics: %v", err)
@@ -271,8 +333,10 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		}
 
 		if msg.Type == "command" {
-			// Set progress callback for this command — sends events to dashboard
-			executor.OnProgress = func(action string, payload map[string]any) {
+			// Per-command progress callback — sends events to dashboard.
+			// Defined per-command (not as an Executor field) so concurrent
+			// commands can't race when assigning the callback.
+			onProgress := func(action string, payload map[string]any) {
 				progressMsg := &models.Message{
 					ID:        fmt.Sprintf("progress-%d", time.Now().UnixNano()),
 					Type:      "event",
@@ -287,7 +351,7 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 			}
 			// Execute command asynchronously
 			go func(m models.Message) {
-				result := executor.Execute(&m)
+				result := executor.Execute(&m, onProgress)
 				resultMsg := agent.BuildResultMessage(result)
 				select {
 				case resultCh <- resultMsg:
@@ -301,13 +365,111 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 					}
 				}
 				// Self-restart after a successful agent update or an explicit restart command.
+				// Wait for the queued result (and any in-flight progress events) to
+				// actually leave the socket before exec'ing the new binary — otherwise
+				// the dashboard never sees the outcome of the command that triggered
+				// the restart.
 				if (m.Action == "agent.update" || m.Action == "agent.restart") && result.Success {
-					time.Sleep(500 * time.Millisecond) // let response be sent
+					drainBeforeRestart(resultCh, progressCh, restartDrainTimeout)
 					restartAgent()
 				}
 			}(msg)
 		}
 	}
+}
+
+// refreshPublicIP periodically re-detects the agent's public IP and updates
+// the supplied atomic. Logs only when the value actually changes, so a
+// stable network produces no noise.
+func refreshPublicIP(ctx context.Context, store *atomic.Value, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ip := agent.DetectPublicIP(ctx)
+			if ip == "" {
+				continue
+			}
+			old, _ := store.Load().(string)
+			if ip != old {
+				log.Printf("public IP changed: %q -> %q", old, ip)
+				store.Store(ip)
+			}
+		}
+	}
+}
+
+// runDiscoveryLoop owns the periodic Docker discovery. It runs RunDiscovery
+// (which can block on Docker for up to its internal 30s context) off the
+// writer's critical path and emits the finished agent.discovery message
+// on out, where the writer drains it like any other event.
+//
+// Running this on a dedicated goroutine is what stops a slow Docker daemon
+// from starving heartbeats and tripping the dashboard's offline alert.
+func runDiscoveryLoop(
+	ctx context.Context,
+	ag *agent.Agent,
+	nodeMetrics *agent.NodeMetricsCollector,
+	dockerSocket string,
+	discoverNow <-chan struct{},
+	out chan<- *models.Message,
+) {
+	runOnce := func(reason string) {
+		start := time.Now()
+		report := ag.RunDiscovery(dockerSocket)
+		elapsed := time.Since(start)
+		if elapsed >= discoverySlowThreshold {
+			log.Printf("discovery (%s): %d nodes in %s (slow — Docker daemon busy?)",
+				reason, len(report.Nodes), elapsed.Round(time.Millisecond))
+		} else {
+			log.Printf("discovery (%s): %d nodes in %s",
+				reason, len(report.Nodes), elapsed.Round(time.Millisecond))
+		}
+		nodeMetrics.UpdateNodes(report)
+		msg := ag.BuildDiscoveryMessage(report)
+		select {
+		case out <- msg:
+		case <-ctx.Done():
+		}
+	}
+
+	// Initial discovery on connect
+	runOnce("initial")
+
+	ticker := time.NewTicker(discoveryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce("periodic")
+		case <-discoverNow:
+			runOnce("triggered")
+		}
+	}
+}
+
+// drainBeforeRestart waits for outbound result/progress queues to empty so the
+// final command result reaches the dashboard before exec replaces the agent.
+// Returns when the channels are empty (plus a small settle window for the
+// writer's in-flight conn.Write to flush) or after maxWait, whichever comes
+// first. len(chan)==0 only tells us nothing is queued; the settle covers the
+// writer being mid-iteration.
+func drainBeforeRestart(resultCh, progressCh chan *models.Message, maxWait time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		if len(resultCh) == 0 && len(progressCh) == 0 {
+			time.Sleep(200 * time.Millisecond)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	log.Printf("restart: drain timed out after %s, executing anyway", maxWait)
 }
 
 // writeMessage serializes and sends a message over WebSocket.

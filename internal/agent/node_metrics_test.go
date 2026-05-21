@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -309,6 +310,45 @@ func TestCollectAll_UnreachableNode(t *testing.T) {
 	}
 	if events[0].Error == "" {
 		t.Error("expected error in event for unreachable node")
+	}
+}
+
+// TestCollectAll_PollsInParallel proves polling isn't serialized. With N
+// slow nodes that each take ~slowDelay to respond, a serial implementation
+// would take N*slowDelay; the parallel implementation should be close to
+// slowDelay regardless of N.
+func TestCollectAll_PollsInParallel(t *testing.T) {
+	const slowDelay = 100 * time.Millisecond
+	const nodeCount = 5
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(slowDelay)
+		_, _ = w.Write([]byte(sampleNodeStatusJSON))
+	}))
+	defer srv.Close()
+	host, port := parseHostPort(t, srv.URL)
+
+	c := NewNodeMetricsCollector(WithHTTPClient(srv.Client()))
+	c.mu.Lock()
+	for i := 0; i < nodeCount; i++ {
+		c.nodes[fmt.Sprintf("node-%d", i)] = nodeEndpoint{host: host, port: port}
+	}
+	c.mu.Unlock()
+
+	start := time.Now()
+	events, _ := c.CollectAll("server-1")
+	elapsed := time.Since(start)
+
+	if len(events) != nodeCount {
+		t.Fatalf("events = %d, want %d", len(events), nodeCount)
+	}
+	// Generous upper bound — parallel should be ~slowDelay; serial would be
+	// nodeCount*slowDelay = 500ms. Anything past 3x slowDelay means we're
+	// effectively serial.
+	maxParallel := 3 * slowDelay
+	if elapsed > maxParallel {
+		t.Fatalf("CollectAll took %s for %d nodes at %s each — looks serial (limit %s)",
+			elapsed, nodeCount, slowDelay, maxParallel)
 	}
 }
 
