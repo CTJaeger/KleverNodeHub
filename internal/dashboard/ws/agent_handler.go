@@ -126,7 +126,9 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 
 		switch msg.Action {
 		case "agent.info":
-			log.Printf("agent info from %s: %s", serverID, string(data))
+			// handleAgentInfo logs the individual fields (version, IP, region)
+			// it cares about. Dumping the raw message risks leaking any future
+			// field (config snapshot, cert, etc.) into logs as soon as it ships.
 			h.handleAgentInfo(ctx, serverID, &msg)
 
 		case "agent.heartbeat":
