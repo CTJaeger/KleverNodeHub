@@ -1410,6 +1410,30 @@ h1, h2, h3, h4, h5, h6 {
     margin-top: 4px;
 }
 
+.node-upgrade-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.node-upgrade-pill:hover {
+    background: rgba(245, 158, 11, 0.22);
+}
+
+.node-upgrade-pill.hidden {
+    display: none;
+}
+
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-error { color: var(--error); }

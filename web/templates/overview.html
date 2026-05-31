@@ -197,6 +197,10 @@
                         <div class="stat-card-label">RUNNING / TOTAL</div>
                         <div class="stat-card-value text-accent"><span id="stat-running">0</span> / <span id="stat-nodes">0</span></div>
                         <div class="stat-card-sub" id="stat-syncing-sub">0 syncing</div>
+                        <button id="node-upgrade-pill" class="node-upgrade-pill hidden" onclick="upgradeAllOutdatedNodes()" title="">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                            <span id="node-upgrade-pill-text">0 outdated</span>
+                        </button>
                     </div>
                 </div>
                 <div class="stat-card">
@@ -462,6 +466,12 @@
         let overviewSearchQuery = '';
         const selectedNodeIds = new Set();
 
+        // Cached list of Klever node Docker tags. Refreshed lazily — Docker Hub
+        // tag publishes are minutes-to-hours apart, so a 5-min cache is fine
+        // and saves a Hub round-trip on every overview refresh.
+        let dockerTagsCache = { tags: [], at: 0 };
+        const dockerTagsCacheTTL = 5 * 60 * 1000;
+
         // DataTable for servers
         const serverTable = new DataTable({
             containerId: 'server-list',
@@ -663,6 +673,9 @@
         window._dt['nodes-list'] = nodeTable;
 
         async function init() {
+            // Kick off tag fetch in parallel with the first data load.
+            // The upgrade pill needs both to decide if it should appear.
+            loadDockerTagsCache();
             await loadData();
             await loadServerMetrics();
             refreshInterval = setInterval(async () => {
@@ -705,6 +718,9 @@
             }
             const syncText = 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             document.getElementById('sync-time').textContent = syncText;
+            // Refresh the Docker tag cache lazily — the function no-ops when
+            // the cache is still fresh, otherwise re-fetches and re-renders.
+            loadDockerTagsCache();
             renderServers();
             updateStats();
         }
@@ -727,11 +743,105 @@
             document.getElementById('stat-syncing').textContent = syncing;
             document.getElementById('stat-syncing-sub').textContent = syncing + ' syncing';
 
+            updateNodeUpgradePill();
+
             // Alert counts
             var totalActive = activeAlerts ? activeAlerts.length : 0;
             var criticalCount = activeAlerts ? activeAlerts.filter(function(a) { return a.severity === 'critical'; }).length : 0;
             document.getElementById('stat-alerts').textContent = totalActive;
             document.getElementById('stat-alerts-sub').textContent = criticalCount + ' critical';
+        }
+
+        // --- Node-upgrade-available pill ---------------------------------
+        // Detection rule (with RCs in mind, since Klever currently ships
+        // mostly RCs): for each running node, compare its docker_image_tag
+        // against the most recently published tag in its category — `val-*`
+        // nodes against `val-*` tags, others against non-val tags. Nodes
+        // riding the moving `latest` / `val-latest` tags can't be compared
+        // meaningfully and are skipped.
+
+        async function loadDockerTagsCache(force) {
+            var fresh = !force && (Date.now() - dockerTagsCache.at) < dockerTagsCacheTTL && dockerTagsCache.tags.length > 0;
+            if (fresh) return dockerTagsCache.tags;
+            try {
+                var data = await API.getJSON('/api/docker/tags');
+                var list = [];
+                if (data && data.tags) {
+                    data.tags.forEach(function(t) {
+                        var name = (typeof t === 'string') ? t : t.name;
+                        if (name) list.push(name);
+                    });
+                }
+                dockerTagsCache = { tags: list, at: Date.now() };
+                updateNodeUpgradePill();
+                return list;
+            } catch (e) {
+                return dockerTagsCache.tags;
+            }
+        }
+
+        function latestNodeTag(tags, valOnly) {
+            for (var i = 0; i < tags.length; i++) {
+                var t = tags[i];
+                if (t === 'latest' || t === 'val-latest') continue;
+                var isVal = t.indexOf('val-') === 0;
+                if (valOnly && isVal) return t;
+                if (!valOnly && !isVal) return t;
+            }
+            return '';
+        }
+
+        function computeOutdatedNodes() {
+            if (!dockerTagsCache.tags.length || !nodes.length) {
+                return { outdated: [], latestVal: '', latestNonVal: '' };
+            }
+            var latestVal = latestNodeTag(dockerTagsCache.tags, true);
+            var latestNonVal = latestNodeTag(dockerTagsCache.tags, false);
+            var outdated = [];
+            nodes.forEach(function(n) {
+                if (n.status !== 'running') return;
+                var tag = n.docker_image_tag || '';
+                if (!tag || tag === 'latest' || tag === 'val-latest') return;
+                var isVal = tag.indexOf('val-') === 0;
+                var target = isVal ? latestVal : latestNonVal;
+                if (!target) return;
+                if (tag !== target) outdated.push(n);
+            });
+            return { outdated: outdated, latestVal: latestVal, latestNonVal: latestNonVal };
+        }
+
+        function updateNodeUpgradePill() {
+            var pill = document.getElementById('node-upgrade-pill');
+            if (!pill) return;
+            var result = computeOutdatedNodes();
+            if (result.outdated.length === 0) {
+                pill.classList.add('hidden');
+                return;
+            }
+            document.getElementById('node-upgrade-pill-text').textContent =
+                result.outdated.length + ' outdated — Upgrade';
+            // Tooltip: which nodes are on which versions, and what's latest.
+            var byTag = {};
+            result.outdated.forEach(function(n) {
+                var t = n.docker_image_tag || '?';
+                byTag[t] = (byTag[t] || 0) + 1;
+            });
+            var fromParts = Object.keys(byTag).map(function(t) { return t + ' (' + byTag[t] + ')'; });
+            var toParts = [];
+            if (result.latestNonVal) toParts.push(result.latestNonVal);
+            if (result.latestVal) toParts.push(result.latestVal);
+            pill.title = result.outdated.length + ' nodes on older versions: ' +
+                fromParts.join(', ') + ' — newest: ' + toParts.join(', ');
+            pill.classList.remove('hidden');
+        }
+
+        function upgradeAllOutdatedNodes() {
+            var result = computeOutdatedNodes();
+            if (result.outdated.length === 0) return;
+            selectedNodeIds.clear();
+            result.outdated.forEach(function(n) { selectedNodeIds.add(n.id); });
+            renderNodes();
+            showBatchUpgrade();
         }
 
         let serverMetrics = {}; // serverID → latest system metrics
