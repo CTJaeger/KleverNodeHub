@@ -1414,24 +1414,62 @@ h1, h2, h3, h4, h5, h6 {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-top: 8px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid #f59e0b;
-    background: rgba(245, 158, 11, 0.12);
+    margin-top: 6px;
+    padding: 0;
+    background: none;
+    border: none;
     color: #f59e0b;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(245, 158, 11, 0.4);
 }
 
 .node-upgrade-pill:hover {
-    background: rgba(245, 158, 11, 0.22);
+    color: #fbbf24;
+    text-decoration-color: #fbbf24;
 }
 
 .node-upgrade-pill.hidden {
     display: none;
+}
+
+.batch-upgrade-nodelist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.batch-upgrade-nodelist .node-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.batch-upgrade-nodelist .node-chip-version {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.batch-upgrade-nodelist .empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 4px;
 }
 
 .text-success { color: var(--success); }

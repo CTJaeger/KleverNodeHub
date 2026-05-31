@@ -298,6 +298,10 @@
                             Nodes are upgraded sequentially to maintain quorum.
                         </p>
                         <div class="form-group">
+                            <label class="form-label">Selected nodes</label>
+                            <div id="batch-upgrade-nodelist" class="batch-upgrade-nodelist"></div>
+                        </div>
+                        <div class="form-group">
                             <label class="form-label">Target Image Tag</label>
                             <select class="form-input" id="batch-upgrade-tag"></select>
                         </div>
@@ -1429,8 +1433,30 @@
             bar.style.width = '0%';
             bar.style.background = 'var(--accent)';
             document.getElementById('batch-upgrade-btn').disabled = false;
+            renderBatchUpgradeNodeList();
             document.getElementById('modal-batch-upgrade').classList.add('active');
             loadBatchUpgradeTags();
+        }
+
+        // Render the chips that show which nodes the upgrade will hit. The
+        // bare count "Upgrade 11 selected nodes" isn't actionable on its own —
+        // operators want to verify they're not about to swing at the wrong set.
+        function renderBatchUpgradeNodeList() {
+            var listEl = document.getElementById('batch-upgrade-nodelist');
+            if (!listEl) return;
+            var picked = nodes.filter(function(n) { return selectedNodeIds.has(n.id); });
+            if (picked.length === 0) {
+                listEl.innerHTML = '<span class="empty">No nodes selected.</span>';
+                return;
+            }
+            listEl.innerHTML = picked.map(function(n) {
+                var name = n.display_name || n.name || n.container_name || n.id;
+                var tag = n.docker_image_tag || '';
+                return '<span class="node-chip">' +
+                    esc(name) +
+                    (tag ? ' <span class="node-chip-version">' + esc(tag) + '</span>' : '') +
+                    '</span>';
+            }).join('');
         }
 
         function hideBatchUpgrade() {
