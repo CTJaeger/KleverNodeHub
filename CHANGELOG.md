@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-06-01
+- **Batch-Upgrade-Modal: Checkboxen statt Badges**: Die im Modal angezeigte "Selected nodes"-Liste war eine Sammlung Chip-Pillen, in denen sich nichts an-/abwählen ließ — wer im Modal merkte dass ein Knoten nicht mit-upgegradet werden soll, musste das Modal zumachen und in der Hauptliste neu selektieren. Jetzt eine Zeilenliste (`batch-upgrade-row`) mit Checkbox, Name, Server und aktueller Version. Toggle aktualisiert live den Counter und disabled den Upgrade-Button bei 0. `executeBatchUpgrade` liest die Modal-lokale `batchUpgradeSelected`-Set statt der Hauptlisten-Auswahl. Optisch an das bestehende Listen-Pattern angelehnt (Border, Hover, monospace-Version rechts). Alte `.batch-upgrade-nodelist .node-chip`-Styles entfernt.
+
 ### 2026-05-21 (Agent-Härtung)
 - **Sicherheits-Fix: Dashboard-CA wird jetzt wirklich verifiziert (#58)**: Der Agent baute seine TLS-Config mit `InsecureSkipVerify: true` — ein echtes Loch. mTLS authentifiziert nur den Agent zum Dashboard, nicht andersrum. Mit einem geklauten Agent-Cert konnte jeder die Dashboard-Verbindung MITM-en und Befehle an den Agent fälschen. Jetzt verifiziert der Agent das Dashboard-Cert gegen die CA die er bei der Registration gespeichert hat (`Config.CACertPEM` war schon da, wurde nur nie genutzt). `ServerName: "localhost"` pinned weil `crypto.DashboardTLSConfig` den SAN unabhängig von der Dial-Adresse so ausstellt. `MinVersion: TLS 1.3`. **Test** mit zwei CAs beweist: legitimes Dashboard wird akzeptiert, Imposter mit anderer CA wird abgelehnt. **Keine Re-Registration nötig** — existierende Agents haben `CACertPEM` schon.
 - **Sicherheits-Fix: `.pem` über `config.write` blockiert (#58)**: `config.write` darf keine `.pem`-Dateien mehr schreiben. Validator-Key-Rotation gehört auf den expliziten `key.import`-Pfad, nicht als Nebeneffekt eines Config-Edits. Lesen (`config.read`) bleibt erlaubt.
