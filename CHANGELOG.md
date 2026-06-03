@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-06-04
+- **Klever-aware version comparison (fix: RC was flagged newer than stable)**: The outdated-nodes pill used the first non-`latest` tag returned by the Docker Hub API as "latest" — Docker Hub orders by push date, so a freshly pushed `v1.7.18-rc6` overtook the already-released `v1.7.18-0` and the pill recommended a downgrade to the RC. Replaced the heuristic with a Klever-aware comparator (new `web/static/js/version.js`): parses `vX.Y.Z[-N|-rcN]`, strips the optional `val-` prefix and `-g<hash>` git suffix, compares X.Y.Z numerically, and for equal X.Y.Z treats stable (`-N`) as higher precedence than any RC (`-rcN`). Iteration numbers break ties within each track. The pill target is now the highest **stable** on the track (RC fallback only if no stable exists yet). A node intentionally running an RC of a version newer than the latest stable is no longer flagged outdated — pushing it back to stable would be a downgrade. The version dropdowns in the Batch Upgrade modal and on the node detail page are also sorted by the same comparator so the visual order matches the actual precedence (stable above RC of the same X.Y.Z).
+
 ### 2026-06-01
 - **Batch Upgrade modal: checkboxes instead of badges**: The "Selected nodes" list in the Batch Upgrade modal used to be a row of chip-pills with no way to deselect inside the modal — if you noticed a node shouldn't be upgraded, you had to close the modal and re-select in the main list. Now a row list (`batch-upgrade-row`) with checkbox, name, server and current version. Toggling updates the count live and disables the upgrade button at 0 selected. `executeBatchUpgrade` reads the modal-local `batchUpgradeSelected` set instead of the main-list selection, so changes inside the modal don't mutate the main selection. Visually aligned with the dashboard's other list patterns (border, hover, monospace version right-aligned). Old `.batch-upgrade-nodelist .node-chip` styles removed.
 

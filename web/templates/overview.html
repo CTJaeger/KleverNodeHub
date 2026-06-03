@@ -463,6 +463,7 @@
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/agent-update-check.js"></script>
     <script src="/static/js/datatable.js"></script>
+    <script src="/static/js/version.js"></script>
     <script>
         let servers = [];
         let nodes = [];
@@ -785,23 +786,12 @@
             }
         }
 
-        function latestNodeTag(tags, valOnly) {
-            for (var i = 0; i < tags.length; i++) {
-                var t = tags[i];
-                if (t === 'latest' || t === 'val-latest') continue;
-                var isVal = t.indexOf('val-') === 0;
-                if (valOnly && isVal) return t;
-                if (!valOnly && !isVal) return t;
-            }
-            return '';
-        }
-
         function computeOutdatedNodes() {
             if (!dockerTagsCache.tags.length || !nodes.length) {
                 return { outdated: [], latestVal: '', latestNonVal: '' };
             }
-            var latestVal = latestNodeTag(dockerTagsCache.tags, true);
-            var latestNonVal = latestNodeTag(dockerTagsCache.tags, false);
+            var latestVal = KleverVersion.latest(dockerTagsCache.tags, true);
+            var latestNonVal = KleverVersion.latest(dockerTagsCache.tags, false);
             var outdated = [];
             nodes.forEach(function(n) {
                 if (n.status !== 'running') return;
@@ -809,8 +799,12 @@
                 if (!tag || tag === 'latest' || tag === 'val-latest') return;
                 var isVal = tag.indexOf('val-') === 0;
                 var target = isVal ? latestVal : latestNonVal;
-                if (!target) return;
-                if (tag !== target) outdated.push(n);
+                if (!target || tag === target) return;
+                // Only flag as outdated if the node's current tag is actually
+                // older than the recommended target. A node running an RC of a
+                // version newer than the latest stable is intentionally ahead;
+                // pushing it back to stable would be a downgrade.
+                if (KleverVersion.compare(tag, target) < 0) outdated.push(n);
             });
             return { outdated: outdated, latestVal: latestVal, latestNonVal: latestNonVal };
         }
@@ -1511,6 +1505,9 @@
                         regular.push(name);
                     }
                 });
+
+                regular = KleverVersion.sortDesc(regular);
+                valOnly = KleverVersion.sortDesc(valOnly);
 
                 function shortTag(v) { return v.replace(/-g[0-9a-f]+$/, ''); }
 
