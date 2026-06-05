@@ -41,6 +41,16 @@ func NewTagCache() *TagCache {
 	return &TagCache{}
 }
 
+// Invalidate clears the cache so the next GetTags call fetches fresh from
+// Docker Hub. Used by the manual "Check for updates" button so operators can
+// pick up a freshly published release without waiting out the TTL.
+func (tc *TagCache) Invalidate() {
+	tc.mu.Lock()
+	tc.fetchedAt = time.Time{}
+	tc.tags = nil
+	tc.mu.Unlock()
+}
+
 // GetTags returns cached tags or fetches fresh ones if expired.
 func (tc *TagCache) GetTags() ([]DockerTag, error) {
 	tc.mu.RLock()

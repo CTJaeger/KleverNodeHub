@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"testing"
+	"time"
 )
 
 func TestShouldFilterTag(t *testing.T) {
@@ -49,4 +50,19 @@ func TestTagCacheEmpty(t *testing.T) {
 	// Cache is empty, so GetTags will try to fetch (which may fail in test env)
 	// This is OK — the test verifies the code doesn't panic.
 	_, _ = cache.GetTags()
+}
+
+func TestTagCacheInvalidate(t *testing.T) {
+	cache := NewTagCache()
+	cache.tags = []DockerTag{{Name: "v1.0.0"}}
+	cache.fetchedAt = time.Now()
+
+	cache.Invalidate()
+
+	if len(cache.tags) != 0 {
+		t.Errorf("after Invalidate: len(tags) = %d, want 0", len(cache.tags))
+	}
+	if !cache.fetchedAt.IsZero() {
+		t.Errorf("after Invalidate: fetchedAt = %v, want zero", cache.fetchedAt)
+	}
 }

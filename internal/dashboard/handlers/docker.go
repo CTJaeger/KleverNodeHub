@@ -29,8 +29,11 @@ func NewDockerHandler(hub *ws.Hub, nodeStore *store.NodeStore, tagCache *dashboa
 }
 
 // HandleListTags returns available Docker image tags from Docker Hub.
-// GET /api/docker/tags
+// GET /api/docker/tags?force=1 bypasses the cache.
 func (h *DockerHandler) HandleListTags(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("force") == "1" {
+		h.tagCache.Invalidate()
+	}
 	tags, err := h.tagCache.GetTags()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

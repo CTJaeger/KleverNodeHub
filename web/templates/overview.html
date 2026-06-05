@@ -770,7 +770,8 @@
             var fresh = !force && (Date.now() - dockerTagsCache.at) < dockerTagsCacheTTL && dockerTagsCache.tags.length > 0;
             if (fresh) return dockerTagsCache.tags;
             try {
-                var data = await API.getJSON('/api/docker/tags');
+                var url = force ? '/api/docker/tags?force=1' : '/api/docker/tags';
+                var data = await API.getJSON(url);
                 var list = [];
                 if (data && data.tags) {
                     data.tags.forEach(function(t) {
@@ -2367,6 +2368,12 @@
             if (typeof window.kleverAgentUpdateCheck === 'function') {
                 window.kleverAgentUpdateCheck();
             }
+            // Force-refresh the Klever node Docker tags (bypasses both the
+            // browser cache and the dashboard's 15-min server-side cache) so
+            // the outdated-nodes pill picks up a freshly published release
+            // immediately instead of waiting out the TTL.
+            await loadDockerTagsCache(true);
+            updateNodeUpgradePill();
         }
 
         async function checkForUpdates() {
