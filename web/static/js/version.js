@@ -54,22 +54,16 @@
     }
 
     // Highest-precedence tag on the given track (val-only vs non-val).
-    // Prefers a stable release; falls back to the highest RC only if no
-    // stable exists on the track at all (very early in a release cycle).
+    // Uses compareNodeTags directly, so within the same X.Y.Z a stable beats
+    // any RC (no downgrade from -0 to -rcN), but across X.Y.Z higher wins
+    // regardless — a v1.7.19-rc1 surfaces as "newer" against a v1.7.18-0
+    // stable so operators see the start of a new release cycle in the pill.
     function latestNodeTag(tags, valOnly) {
-        var candidates = tags.filter(function (t) {
-            if (t === 'latest' || t === 'val-latest') return false;
-            var isVal = t.indexOf('val-') === 0;
-            return valOnly ? isVal : !isVal;
-        });
-        if (!candidates.length) return '';
-        var stables = candidates.filter(function (t) {
-            var p = parseNodeTag(t);
-            return p && p.stable;
-        });
-        var pool = stables.length ? stables : candidates;
         var best = '';
-        pool.forEach(function (t) {
+        tags.forEach(function (t) {
+            if (t === 'latest' || t === 'val-latest') return;
+            var isVal = t.indexOf('val-') === 0;
+            if (valOnly ? !isVal : isVal) return;
             if (!best || compareNodeTags(t, best) > 0) best = t;
         });
         return best;
