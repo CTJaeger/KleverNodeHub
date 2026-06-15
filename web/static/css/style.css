@@ -1436,6 +1436,59 @@ h1, h2, h3, h4, h5, h6 {
     display: none;
 }
 
+.prov-node-table {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+}
+
+.prov-node-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.prov-node-row:last-child {
+    border-bottom: none;
+}
+
+.prov-node-row__num {
+    flex: 0 0 24px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: right;
+}
+
+.prov-node-row__name {
+    flex: 1;
+    min-width: 0;
+}
+
+.prov-node-row__name input {
+    width: 100%;
+}
+
+.prov-node-row__role {
+    flex: 0 0 140px;
+}
+
+.prov-node-row__port {
+    flex: 0 0 64px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    text-align: right;
+}
+
+.prov-node-row input.invalid,
+.form-input.invalid {
+    border-color: var(--error);
+}
+
 .batch-upgrade-nodelist {
     max-height: 220px;
     overflow-y: auto;

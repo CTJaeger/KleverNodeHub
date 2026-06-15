@@ -371,11 +371,12 @@ func (p *Provisioner) stepCreateContainer(ctx context.Context) error {
 	}
 
 	cfg := &ContainerConfig{
-		Name:        p.req.NodeName,
-		ImageTag:    tag,
-		DataDir:     p.nodeDir,
-		RestAPIPort: port,
-		DisplayName: p.req.ConfigOverrides["NodeDisplayName"],
+		Name:            p.req.NodeName,
+		ImageTag:        tag,
+		DataDir:         p.nodeDir,
+		RestAPIPort:     port,
+		RedundancyLevel: p.req.RedundancyLevel,
+		DisplayName:     p.req.ConfigOverrides["NodeDisplayName"],
 	}
 
 	_, err := p.docker.CreateContainer(ctx, cfg)

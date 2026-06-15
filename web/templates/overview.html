@@ -50,6 +50,12 @@
                         </a>
                     </li>
                     <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="showProvision(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/><path d="M16 11v6M13 14h6"/></svg>
+                            Provision Node
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
                         <a href="/alerts" class="sidebar-nav-link">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                             Alerts
@@ -357,8 +363,8 @@
         </div>
 
         <!-- Provision Node Modal -->
-        <div class="modal-backdrop" id="modal-provision" onclick="if(event.target===this) hideProvision()">
-            <div class="modal-panel">
+        <div class="modal-backdrop" id="modal-provision">
+            <div class="modal-panel modal-panel-lg">
                 <div class="modal-panel-header">
                     <h3>Provision New Node</h3>
                     <button class="modal-close-btn" onclick="hideProvision()">&times;</button>
@@ -366,36 +372,65 @@
                 <div class="modal-panel-body">
                     <!-- Step 1: Server + Config -->
                     <div id="prov-step-config">
+                        <!-- Batch-level settings (shared by all nodes in this run) -->
                         <div class="form-group">
                             <label class="form-label">Server</label>
                             <select class="form-input" id="prov-server"></select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Node Name</label>
-                            <input class="form-input" id="prov-name" placeholder="e.g. validator-01">
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <div class="form-group" style="flex:1;min-width:120px;">
+                                <label class="form-label">Number of Nodes</label>
+                                <input class="form-input" id="prov-count" type="number" min="1" max="50" value="1" oninput="onProvCountChange()">
+                            </div>
+                            <div class="form-group" style="flex:1;min-width:120px;">
+                                <label class="form-label">REST API Port (start)</label>
+                                <input class="form-input" id="prov-port" type="number" value="8080" oninput="renderProvNodeRows()">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Network</label>
-                            <select class="form-input" id="prov-network">
-                                <option value="mainnet">Mainnet</option>
-                                <option value="testnet">Testnet</option>
-                            </select>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <div class="form-group" style="flex:1;min-width:120px;">
+                                <label class="form-label">Network</label>
+                                <select class="form-input" id="prov-network">
+                                    <option value="mainnet">Mainnet</option>
+                                    <option value="testnet">Testnet</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;min-width:120px;">
+                                <label class="form-label">Image Tag</label>
+                                <select class="form-input" id="prov-tag">
+                                    <option value="latest">latest</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Image Tag</label>
-                            <select class="form-input" id="prov-tag">
-                                <option value="latest">latest</option>
-                            </select>
+
+                        <!-- Single-node view -->
+                        <div id="prov-single">
+                            <div class="form-group">
+                                <label class="form-label">Node Name</label>
+                                <input class="form-input" id="prov-name" placeholder="e.g. validator-01" oninput="validateProvSingle()">
+                                <div id="prov-name-error" class="text-sm" style="color:var(--error);min-height:16px;margin-top:4px;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Role</label>
+                                <select class="form-input" id="prov-role">
+                                    <option value="0">Main (active)</option>
+                                    <option value="1">Fallback</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Display Name (optional)</label>
+                                <input class="form-input" id="prov-display-name" placeholder="My Validator">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">REST API Port</label>
-                            <input class="form-input" id="prov-port" type="number" value="8080">
+
+                        <!-- Multi-node view: one row per node -->
+                        <div id="prov-multi" class="hidden">
+                            <label class="form-label">Nodes</label>
+                            <div class="prov-node-table" id="prov-node-table"></div>
+                            <div id="prov-multi-error" class="text-sm" style="color:var(--error);min-height:16px;margin-top:4px;"></div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Display Name (optional)</label>
-                            <input class="form-input" id="prov-display-name" placeholder="My Validator">
-                        </div>
-                        <button class="btn btn-primary" onclick="startProvision()">Deploy Node</button>
+
+                        <button class="btn btn-primary" id="prov-deploy-btn" onclick="startProvision()" style="margin-top:8px;">Deploy</button>
                     </div>
 
                     <!-- Step 2: Progress -->
@@ -1662,19 +1697,26 @@
         }
 
         // --- Provision Wizard ---
+        // Container names must match the agent-side whitelist regex
+        // (whitelist.go containerNamePattern). Validate live so the user is
+        // told immediately instead of having the whole flow rejected later.
+        var PROV_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
         function showProvision() {
             document.getElementById('modal-provision').classList.add('active');
             document.getElementById('prov-step-config').classList.remove('hidden');
             document.getElementById('prov-step-progress').classList.add('hidden');
 
-            // Populate server dropdown (values are already escaped via esc())
+            // Populate server dropdown — prefer the user-set display name, same
+            // convention as everywhere else in the UI (display_name||name||hostname).
             const sel = document.getElementById('prov-server');
             sel.innerHTML = servers
                 .filter(s => s.status === 'online')
-                .map(s => '<option value="' + esc(s.id) + '">' + esc(s.name || s.hostname) + '</option>')
+                .map(s => '<option value="' + esc(s.id) + '">' + esc(s.display_name || s.name || s.hostname) + '</option>')
                 .join('');
 
-            // Load tags
+            document.getElementById('prov-count').value = '1';
+            onProvCountChange();
             loadDockerTags();
         }
 
@@ -1682,100 +1724,236 @@
             document.getElementById('modal-provision').classList.remove('active');
         }
 
+        function provCount() {
+            var n = parseInt(document.getElementById('prov-count').value, 10);
+            if (isNaN(n) || n < 1) n = 1;
+            if (n > 50) n = 50;
+            return n;
+        }
+
+        function provStartPort() {
+            var p = parseInt(document.getElementById('prov-port').value, 10);
+            if (isNaN(p) || p <= 0) p = 8080;
+            return p;
+        }
+
+        // Switch between the single-node mask and the multi-node table.
+        function onProvCountChange() {
+            var multi = provCount() > 1;
+            document.getElementById('prov-single').classList.toggle('hidden', multi);
+            document.getElementById('prov-multi').classList.toggle('hidden', !multi);
+            if (multi) {
+                renderProvNodeRows();
+            } else {
+                validateProvSingle();
+            }
+        }
+
+        // Render one row per node: number | name (editable, validated) | role | port (auto).
+        function renderProvNodeRows() {
+            if (provCount() <= 1) return;
+            var table = document.getElementById('prov-node-table');
+            var startPort = provStartPort();
+            // Preserve any names/roles the user already typed.
+            var prev = {};
+            table.querySelectorAll('.prov-node-row').forEach(function(row) {
+                var idx = row.getAttribute('data-idx');
+                prev[idx] = {
+                    name: row.querySelector('.prov-node-row__name input').value,
+                    role: row.querySelector('.prov-node-row__role select').value
+                };
+            });
+            var html = '';
+            for (var i = 0; i < provCount(); i++) {
+                var num = String(i + 1).padStart(2, '0');
+                var def = prev[i] || {};
+                var name = (def.name !== undefined) ? def.name : ('validator-' + num);
+                var role = def.role || '0';
+                var port = startPort + i;
+                html += '<div class="prov-node-row" data-idx="' + i + '">' +
+                    '<span class="prov-node-row__num">' + (i + 1) + '</span>' +
+                    '<span class="prov-node-row__name"><input class="form-input" value="' + esc(name) + '" oninput="validateProvMulti()" placeholder="node name"></span>' +
+                    '<span class="prov-node-row__role"><select class="form-input">' +
+                        '<option value="0"' + (role === '0' ? ' selected' : '') + '>Main</option>' +
+                        '<option value="1"' + (role === '1' ? ' selected' : '') + '>Fallback</option>' +
+                    '</select></span>' +
+                    '<span class="prov-node-row__port" title="REST API port">:' + port + '</span>' +
+                    '</div>';
+            }
+            table.innerHTML = html;
+            validateProvMulti();
+        }
+
+        // Returns the list of {name, role, port} from the multi table, or null
+        // if any name is invalid/duplicate. Also paints invalid inputs red.
+        function collectProvMulti() {
+            var rows = document.querySelectorAll('#prov-node-table .prov-node-row');
+            var startPort = provStartPort();
+            var nodes = [];
+            var seen = {};
+            var ok = true;
+            var errMsg = '';
+            rows.forEach(function(row, i) {
+                var input = row.querySelector('.prov-node-row__name input');
+                var name = input.value.trim();
+                var valid = PROV_NAME_RE.test(name);
+                if (!valid) { ok = false; errMsg = errMsg || 'One or more node names are invalid.'; }
+                else if (seen[name]) { ok = false; valid = false; errMsg = 'Duplicate node name: ' + name; }
+                seen[name] = true;
+                input.classList.toggle('invalid', !valid);
+                nodes.push({
+                    name: name,
+                    role: parseInt(row.querySelector('.prov-node-row__role select').value, 10) || 0,
+                    port: startPort + i
+                });
+            });
+            return { ok: ok, nodes: nodes, error: errMsg };
+        }
+
+        function validateProvMulti() {
+            var res = collectProvMulti();
+            document.getElementById('prov-multi-error').textContent = res.ok ? '' : res.error;
+            document.getElementById('prov-deploy-btn').disabled = !res.ok;
+        }
+
+        function validateProvSingle() {
+            var name = document.getElementById('prov-name').value.trim();
+            var input = document.getElementById('prov-name');
+            var errEl = document.getElementById('prov-name-error');
+            if (name === '') {
+                input.classList.remove('invalid');
+                errEl.textContent = '';
+                document.getElementById('prov-deploy-btn').disabled = true;
+                return;
+            }
+            var valid = PROV_NAME_RE.test(name);
+            input.classList.toggle('invalid', !valid);
+            errEl.textContent = valid ? '' : "Only letters, digits, '.', '_', '-' — must start with a letter or digit.";
+            document.getElementById('prov-deploy-btn').disabled = !valid;
+        }
+
         async function loadDockerTags() {
             try {
                 const data = await API.getJSON('/api/docker/tags');
                 if (data && data.tags) {
                     const sel = document.getElementById('prov-tag');
-                    sel.innerHTML = data.tags.slice(0, 20).map(t => {
-                        const name = typeof t === 'string' ? t : t.name;
-                        return '<option value="' + esc(name) + '">' + esc(name) + '</option>';
-                    }).join('');
+                    sel.innerHTML = KleverVersion.sortDesc(data.tags.map(t => typeof t === 'string' ? t : t.name))
+                        .slice(0, 20)
+                        .map(name => '<option value="' + esc(name) + '">' + esc(name) + '</option>')
+                        .join('');
                 }
             } catch (e) { /* keep default "latest" */ }
         }
 
         async function startProvision() {
             const serverSel = document.getElementById('prov-server');
-            const req = {
-                server_id: serverSel.value,
-                node_name: document.getElementById('prov-name').value,
-                network: document.getElementById('prov-network').value,
-                image_tag: document.getElementById('prov-tag').value,
-                port: parseInt(document.getElementById('prov-port').value) || 8080,
-                config_overrides: {}
-            };
-
-            const displayName = document.getElementById('prov-display-name').value;
-            if (displayName) req.config_overrides.NodeDisplayName = displayName;
-
-            if (!req.server_id) {
+            const serverId = serverSel.value;
+            if (!serverId) {
                 alert('No server selected. Is any server online?');
                 return;
             }
-            if (!req.node_name) {
-                alert('Node name is required');
-                return;
+
+            const network = document.getElementById('prov-network').value;
+            const imageTag = document.getElementById('prov-tag').value;
+
+            // Build the list of nodes to provision (1 in single mode, N in multi).
+            var jobs = [];
+            if (provCount() > 1) {
+                var res = collectProvMulti();
+                if (!res.ok) { alert(res.error || 'Fix invalid node names first.'); return; }
+                jobs = res.nodes.map(function(n) {
+                    return { node_name: n.name, redundancy_level: n.role, port: n.port, config_overrides: {} };
+                });
+            } else {
+                var name = document.getElementById('prov-name').value.trim();
+                if (!PROV_NAME_RE.test(name)) { alert('Node name is invalid.'); return; }
+                var ovr = {};
+                var displayName = document.getElementById('prov-display-name').value;
+                if (displayName) ovr.NodeDisplayName = displayName;
+                jobs = [{
+                    node_name: name,
+                    redundancy_level: parseInt(document.getElementById('prov-role').value, 10) || 0,
+                    port: provStartPort(),
+                    config_overrides: ovr
+                }];
             }
 
-            // Safety confirmation showing exactly which server
+            // Confirmation listing exactly which server + every node/role/port.
             var serverName = serverSel.options[serverSel.selectedIndex].textContent;
-            var details = '<table style="width:100%;margin:10px 0;font-size:0.85rem;border-collapse:collapse;">' +
-                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Server</td><td style="padding:4px 8px;font-weight:600;">' + esc(serverName) + '</td></tr>' +
-                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Node Name</td><td style="padding:4px 8px;font-family:monospace;">' + esc(req.node_name) + '</td></tr>' +
-                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Network</td><td style="padding:4px 8px;">' + esc(req.network) + '</td></tr>' +
-                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Image</td><td style="padding:4px 8px;">' + esc(req.image_tag) + '</td></tr>' +
-                '<tr><td style="padding:4px 8px;color:var(--text-secondary);">Port</td><td style="padding:4px 8px;">' + req.port + '</td></tr>' +
-                '</table>';
-            var ok = await showConfirm('Confirm Provisioning', details, 'Deploy', 'btn-primary');
+            var rowsHtml = jobs.map(function(j) {
+                return '<tr>' +
+                    '<td style="padding:3px 8px;font-family:monospace;">' + esc(j.node_name) + '</td>' +
+                    '<td style="padding:3px 8px;">' + (j.redundancy_level === 1 ? 'Fallback' : 'Main') + '</td>' +
+                    '<td style="padding:3px 8px;font-family:monospace;">:' + j.port + '</td></tr>';
+            }).join('');
+            var details = '<div style="margin:6px 0;font-size:0.85rem;"><strong>Server:</strong> ' + esc(serverName) +
+                ' &nbsp;·&nbsp; <strong>Network:</strong> ' + esc(network) + ' &nbsp;·&nbsp; <strong>Image:</strong> ' + esc(imageTag) + '</div>' +
+                '<table style="width:100%;margin:8px 0;font-size:0.85rem;border-collapse:collapse;">' +
+                '<tr style="color:var(--text-secondary);"><td style="padding:3px 8px;">Node</td><td style="padding:3px 8px;">Role</td><td style="padding:3px 8px;">Port</td></tr>' +
+                rowsHtml + '</table>';
+            var ok = await showConfirm('Confirm Provisioning (' + jobs.length + ' node' + (jobs.length > 1 ? 's' : '') + ')', details, 'Deploy', 'btn-primary');
             if (!ok) return;
 
-            // Switch to progress view
+            // Switch to progress view — one line per node, provisioned sequentially.
             document.getElementById('prov-step-config').classList.add('hidden');
             document.getElementById('prov-step-progress').classList.remove('hidden');
             document.getElementById('prov-result').classList.add('hidden');
 
-            const steps = ['Pre-flight checks', 'Pull Docker image', 'Create directory structure',
-                'Download configuration', 'Create container', 'Start container', 'Verify node'];
-            document.getElementById('prov-steps-list').innerHTML = steps.map((s, i) =>
-                '<div class="info-row" id="prov-step-' + i + '">' +
-                '<span class="info-label">' + esc(s) + '</span>' +
-                '<span class="info-value text-muted">pending</span></div>'
-            ).join('');
+            document.getElementById('prov-steps-list').innerHTML = jobs.map(function(j, i) {
+                return '<div class="info-row" id="prov-job-' + i + '">' +
+                    '<span class="info-label" style="font-family:monospace;">' + esc(j.node_name) + ' <span class="text-muted">(' + (j.redundancy_level === 1 ? 'Fallback' : 'Main') + ', :' + j.port + ')</span></span>' +
+                    '<span class="info-value text-muted">pending</span></div>';
+            }).join('');
 
-            // Animate progress
-            let currentStep = 0;
-            const progressInterval = setInterval(() => {
-                if (currentStep < steps.length) {
-                    const el = document.getElementById('prov-step-' + currentStep);
-                    if (el) el.querySelector('.info-value').textContent = 'running...';
-                    document.getElementById('prov-progress-bar').style.width =
-                        ((currentStep + 1) / steps.length * 100) + '%';
-                    currentStep++;
+            var succeeded = 0;
+            var failed = [];
+            for (var i = 0; i < jobs.length; i++) {
+                var jobEl = document.getElementById('prov-job-' + i);
+                if (jobEl) jobEl.querySelector('.info-value').textContent = 'provisioning…';
+                document.getElementById('prov-progress-bar').style.width = (i / jobs.length * 100) + '%';
+
+                var req = {
+                    server_id: serverId,
+                    node_name: jobs[i].node_name,
+                    network: network,
+                    image_tag: imageTag,
+                    port: jobs[i].port,
+                    redundancy_level: jobs[i].redundancy_level,
+                    config_overrides: jobs[i].config_overrides
+                };
+                var result = await API.postJSON('/api/nodes/provision', req);
+                if (result && result.ok && result.data && result.data.success) {
+                    succeeded++;
+                    if (jobEl) {
+                        jobEl.querySelector('.info-value').textContent = 'done';
+                        jobEl.querySelector('.info-value').className = 'info-value text-success';
+                    }
+                } else {
+                    var emsg = (result && result.data && result.data.error) ? result.data.error : 'failed';
+                    failed.push({ name: jobs[i].node_name, error: emsg });
+                    if (jobEl) {
+                        jobEl.querySelector('.info-value').textContent = 'failed';
+                        jobEl.querySelector('.info-value').className = 'info-value text-error';
+                    }
                 }
-            }, 2000);
+            }
 
-            // Send provision request
-            const result = await API.postJSON('/api/nodes/provision', req);
-            clearInterval(progressInterval);
+            document.getElementById('prov-progress-bar').style.width = '100%';
+            document.getElementById('prov-progress-bar').className =
+                failed.length > 0 ? 'progress-bar-fill red' : 'progress-bar-fill green';
 
             const resultEl = document.getElementById('prov-result');
             resultEl.classList.remove('hidden');
-
-            if (result && result.ok && result.data.success) {
-                document.getElementById('prov-progress-bar').style.width = '100%';
-                steps.forEach((_, i) => {
-                    const el = document.getElementById('prov-step-' + i);
-                    if (el) el.querySelector('.info-value').textContent = 'done';
-                });
+            if (failed.length === 0) {
                 resultEl.className = 'alert alert-success mt-16';
-                resultEl.textContent = 'Node provisioned successfully! ' + (result.data.output || '');
-                loadData(); // Refresh server/node list
+                resultEl.textContent = succeeded + ' node' + (succeeded > 1 ? 's' : '') + ' provisioned successfully.';
             } else {
-                document.getElementById('prov-progress-bar').className = 'progress-bar-fill red';
                 resultEl.className = 'alert alert-error mt-16';
-                resultEl.textContent = 'Provisioning failed: ' + (result?.data?.error || 'Unknown error');
+                var html = succeeded + ' of ' + jobs.length + ' provisioned. Failed:<ul style="margin:4px 0 0 16px;padding:0;">';
+                failed.forEach(function(f) { html += '<li><strong>' + esc(f.name) + '</strong>: ' + esc(f.error) + '</li>'; });
+                resultEl.innerHTML = html + '</ul>';
             }
+            loadData(); // Refresh server/node list
         }
 
         function toggleSidebar() {

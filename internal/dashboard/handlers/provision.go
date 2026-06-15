@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 )
+
+// nodeNamePattern mirrors the agent-side containerNamePattern (whitelist.go)
+// so we reject invalid names with a clear 400 before the agent does, rather
+// than after the provisioning flow has already started.
+var nodeNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // ProvisionHandler handles node provisioning requests.
 type ProvisionHandler struct {
@@ -36,6 +42,14 @@ func (h *ProvisionHandler) HandleProvision(w http.ResponseWriter, r *http.Reques
 	}
 	if req.NodeName == "" {
 		http.Error(w, "node_name is required", http.StatusBadRequest)
+		return
+	}
+	if !nodeNamePattern.MatchString(req.NodeName) {
+		http.Error(w, "invalid node_name: only letters, digits, '.', '_' and '-' are allowed, and it must start with a letter or digit", http.StatusBadRequest)
+		return
+	}
+	if req.RedundancyLevel != 0 && req.RedundancyLevel != 1 {
+		http.Error(w, "redundancy_level must be 0 (main) or 1 (fallback)", http.StatusBadRequest)
 		return
 	}
 	if req.Network == "" {
@@ -67,6 +81,7 @@ func (h *ProvisionHandler) HandleProvision(w http.ResponseWriter, r *http.Reques
 			"network":          req.Network,
 			"image_tag":        req.ImageTag,
 			"port":             req.Port,
+			"redundancy_level": req.RedundancyLevel,
 			"generate_keys":    req.GenerateKeys,
 			"config_overrides": req.ConfigOverrides,
 		},
