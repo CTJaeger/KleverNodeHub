@@ -280,6 +280,9 @@ func (e *Executor) executeProvision(ctx context.Context, payload any, result *mo
 	if v, ok := p["port"].(float64); ok {
 		req.Port = int(v)
 	}
+	if v, ok := p["redundancy_level"].(float64); ok {
+		req.RedundancyLevel = int(v)
+	}
 	if v, ok := p["generate_keys"].(bool); ok {
 		req.GenerateKeys = v
 	}

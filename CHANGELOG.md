@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 2026-06-07
+- **Provisioning overhaul (multi-node, role selection, live validation)**: The Provision Node modal could only create one node at a time and several things were broken or awkward. Now:
+  - **Multi-node in one run**: a "Number of Nodes" field. At 1 it's the simple mask; above 1 it renders a table with one row per node — **Node Name | Role (Main/Fallback) | Port**. Nodes are provisioned sequentially with per-node progress and a final success/failure summary. A batch is deliberately all-Main or per-row-selectable, never a hidden mix.
+  - **REST API port auto-increments**: enter the start port (8080), each subsequent node gets +1 (8081, 8082…). The node software handles its remaining ports itself.
+  - **Main/Fallback is now actually settable and wired end-to-end**: `redundancy_level` was previously dropped on the floor — missing from `ProvisionRequest`, not forwarded by the handler, not read by the agent's `executeProvision`, not set on the container. Now it flows all the way to `--redundancy-level=N` on the validator container (0 = Main, flag omitted; 1 = Fallback).
+  - **Live node-name validation**: names are checked against the agent's container-name regex as you type — the field turns red and Deploy is disabled on invalid or duplicate names, instead of the whole flow being rejected after it already started. The dashboard also validates server-side (clear 400) as defense in depth.
+  - **Server dropdown shows the nickname**: it now uses `display_name || name || hostname` like the rest of the UI, instead of falling back to the hostname and forcing you to remember which host was which.
+  - **Provision Node added to the sidebar** under "Add Server".
+  - **Clicking outside the modal no longer discards it** — only the ✕ closes it, so a stray click doesn't wipe a half-filled form.
+  - Test: `provision_test.go` covers rejection of invalid names, invalid redundancy level, and a well-formed request passing validation.
+
 ### 2026-06-04 (later)
 - **Fix: RC of a higher X.Y.Z was hidden from the outdated-nodes pill**: v0.3.74 introduced a "stable beats RC" rule but applied it too broadly — `latestNodeTag` filtered the candidate pool down to stables whenever *any* stable existed on the track, which also dropped legitimate "next-release" RCs (e.g. `v1.7.19-rc1` while only `v1.7.18-0` was stable). Operators stopped seeing new RCs surface as "newer" in the header pill and had no install entry point. The filter is gone; `latestNodeTag` now picks the max via `KleverVersion.compare` directly, which already encodes the right semantics — same X.Y.Z prefers stable, different X.Y.Z prefers higher regardless of RC/stable. A node on `v1.7.18-0` with `v1.7.19-rc1` available is again flagged outdated; a node on `v1.7.18-0` with only `v1.7.18-rc6` "available" is correctly not flagged (no downgrade prompt).
 

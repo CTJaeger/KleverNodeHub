@@ -111,6 +111,7 @@ type ProvisionRequest struct {
 	Network         string            `json:"network"` // "mainnet" or "testnet"
 	ImageTag        string            `json:"image_tag"`
 	Port            int               `json:"port"`
+	RedundancyLevel int               `json:"redundancy_level"` // 0 = main/active, 1 = fallback
 	GenerateKeys    bool              `json:"generate_keys"`
 	ConfigOverrides map[string]string `json:"config_overrides,omitempty"`
 }
