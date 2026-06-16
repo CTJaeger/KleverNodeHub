@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klever Node Hub - Docker Cleanup</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/img/icon-192.png">
+</head>
+<body>
+    <div class="overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#141416" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="sidebar-title">Klever Node Hub</span>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Navigation</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Overview
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Management</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#add-server" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                            Add Server
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/alerts" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            Alerts
+                            <span id="sidebar-alert-badge" class="sidebar-alert-badge"></span>
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/overview#agent-update" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Agent Update
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">Tools</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/batchconfig" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h13M10 18h10"/><circle cx="3" cy="6" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="9" cy="18" r="1"/></svg>
+                            Batch Config
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/slotinspector" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                            Slot Inspector
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/docker-cleanup" class="sidebar-nav-link active">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                            Docker Cleanup
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/settings" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="#" class="sidebar-nav-link" onclick="API.logout(); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <div style="padding-top:10px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--text-muted);line-height:1.6;">
+                    <a href="https://github.com/CTJaeger/KleverNodeHub" target="_blank" rel="noopener" style="color:var(--text-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                        KleverNodeHub
+                    </a>
+                    <div>&copy; 2025 CryptoJaeger &middot; MIT License</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="topbar">
+                <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h1>Docker Cleanup</h1>
+                <div style="width:36px"></div>
+            </div>
+
+            <div class="page-header">
+                <div class="page-header-left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                    <span class="page-header-title">Docker Cleanup</span>
+                    <span class="page-header-sub">Reclaim disk space by removing old Klever node images</span>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <div class="card mb-16">
+                    <div class="card-header"><h3>1. Select a server</h3></div>
+                    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:240px;">
+                            <label class="form-label">Server</label>
+                            <select id="dc-server" class="form-input" onchange="onServerChange()">
+                                <option value="">Loading servers...</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-ghost" onclick="loadImages()" id="dc-refresh-btn" disabled>Refresh</button>
+                    </div>
+                </div>
+
+                <div class="card mb-16">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                        <h3>2. Images</h3>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-sm btn-ghost" onclick="dcSelectAll(true)">Select unused</button>
+                            <button class="btn btn-sm btn-ghost" onclick="dcSelectAll(false)">None</button>
+                        </div>
+                    </div>
+                    <div id="dc-image-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                        <div class="text-sm text-muted" style="padding:16px;text-align:center;">Select a server to list its images.</div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+                    <button class="btn btn-danger" onclick="deleteSelected()" id="dc-delete-btn" disabled>Delete selected</button>
+                    <span id="dc-selection-summary" class="text-sm text-muted"></span>
+                    <span id="dc-status" class="text-sm text-muted" style="margin-left:auto;"></span>
+                </div>
+
+                <div id="dc-results"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/agent-update-check.js"></script>
+    <script>
+    (async function() {
+        await API.refresh();
+        loadServers();
+    })();
+
+    var allServers = [];
+    var currentImages = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function fmtSize(bytes) {
+        if (!bytes || bytes < 0) return '0 B';
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        var v = bytes;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return (i === 0 ? v : v.toFixed(2)) + ' ' + units[i];
+    }
+
+    function fmtDate(unixSec) {
+        if (!unixSec) return '—';
+        try { return new Date(unixSec * 1000).toLocaleString(); } catch (e) { return '—'; }
+    }
+
+    function shortID(id) {
+        return String(id || '').replace(/^sha256:/, '').slice(0, 12);
+    }
+
+    function imageTag(img) {
+        var tags = (img.repo_tags || []).filter(function(t) { return t && t !== '<none>:<none>'; });
+        if (tags.length === 0) return '<untagged>';
+        return tags.join(', ');
+    }
+
+    async function loadServers() {
+        var sel = document.getElementById('dc-server');
+        try {
+            var data = await API.getJSON('/api/servers');
+            allServers = (data && data.servers) || [];
+        } catch (e) {
+            allServers = [];
+        }
+        if (allServers.length === 0) {
+            sel.innerHTML = '<option value="">No servers available</option>';
+            return;
+        }
+        var opts = ['<option value="">— Choose a server —</option>'];
+        allServers.forEach(function(s) {
+            var online = s.status === 'online';
+            var label = (s.display_name || s.name || s.hostname || s.id) + (online ? '' : ' (offline)');
+            opts.push('<option value="' + esc(s.id) + '"' + (online ? '' : ' disabled') + '>' + esc(label) + '</option>');
+        });
+        sel.innerHTML = opts.join('');
+    }
+
+    function onServerChange() {
+        var id = document.getElementById('dc-server').value;
+        document.getElementById('dc-refresh-btn').disabled = !id;
+        document.getElementById('dc-results').innerHTML = '';
+        if (id) {
+            loadImages();
+        } else {
+            currentImages = [];
+            renderImageList();
+            updateSelectionSummary();
+        }
+    }
+
+    async function loadImages() {
+        var serverID = document.getElementById('dc-server').value;
+        if (!serverID) return;
+        var list = document.getElementById('dc-image-list');
+        list.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">Loading images…</div>';
+        document.getElementById('dc-status').textContent = '';
+        document.getElementById('dc-results').innerHTML = '';
+        try {
+            var result = await API.getJSON('/api/servers/' + encodeURIComponent(serverID) + '/images');
+            if (!result || !result.success) {
+                throw new Error((result && result.error) || 'failed to list images');
+            }
+            currentImages = JSON.parse(result.output || '[]') || [];
+            currentImages.sort(function(a, b) { return (b.created || 0) - (a.created || 0); });
+            renderImageList();
+            updateSelectionSummary();
+        } catch (e) {
+            currentImages = [];
+            list.innerHTML = '<div class="text-sm" style="padding:16px;text-align:center;color:var(--error);">Failed to load images: ' + esc(e.message || e) + '</div>';
+            updateSelectionSummary();
+        }
+    }
+
+    function renderImageList() {
+        var list = document.getElementById('dc-image-list');
+        if (currentImages.length === 0) {
+            list.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No Klever images found on this server.</div>';
+            return;
+        }
+        var header = '<div class="dc-row dc-row-head" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:.04em;">' +
+            '<span style="width:18px;"></span>' +
+            '<span style="flex:1;">Image</span>' +
+            '<span style="width:110px;">ID</span>' +
+            '<span style="width:180px;">Created</span>' +
+            '<span style="width:90px;text-align:right;">Size</span>' +
+            '</div>';
+        var rows = currentImages.map(function(img) {
+            var disabled = img.in_use ? ' disabled' : '';
+            var usedBy = (img.used_by || []).filter(Boolean).join(', ');
+            var badge = img.in_use
+                ? '<span title="' + esc(usedBy) + '" style="padding:2px 8px;border-radius:4px;background:#f59e0b20;color:#f59e0b;font-size:11px;font-weight:700;white-space:nowrap;">In use</span>'
+                : '<span style="padding:2px 8px;border-radius:4px;background:#22c55e20;color:#22c55e;font-size:11px;font-weight:700;white-space:nowrap;">Unused</span>';
+            return '<label class="dc-row" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:' + (img.in_use ? 'not-allowed' : 'pointer') + ';opacity:' + (img.in_use ? '.6' : '1') + ';">' +
+                '<input type="checkbox" class="dc-img-cb" data-img-id="' + esc(img.id) + '" data-img-size="' + (img.size || 0) + '"' + disabled + ' onchange="updateSelectionSummary()" style="width:16px;height:16px;cursor:' + (img.in_use ? 'not-allowed' : 'pointer') + ';">' +
+                '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">' +
+                    '<span style="color:var(--text-primary);font-size:13px;font-family:\'JetBrains Mono\',monospace;word-break:break-all;">' + esc(imageTag(img)) + '</span>' +
+                    badge +
+                '</span>' +
+                '<span style="width:110px;color:var(--text-muted);font-size:12px;font-family:\'JetBrains Mono\',monospace;">' + esc(shortID(img.id)) + '</span>' +
+                '<span style="width:180px;color:var(--text-secondary);font-size:12px;">' + esc(fmtDate(img.created)) + '</span>' +
+                '<span style="width:90px;text-align:right;color:var(--text-secondary);font-size:12px;">' + esc(fmtSize(img.size)) + '</span>' +
+                '</label>';
+        }).join('');
+        list.innerHTML = header + rows;
+    }
+
+    function dcSelectAll(state) {
+        document.querySelectorAll('.dc-img-cb').forEach(function(cb) {
+            if (!cb.disabled) cb.checked = state;
+        });
+        updateSelectionSummary();
+    }
+
+    function selectedCheckboxes() {
+        return Array.prototype.slice.call(document.querySelectorAll('.dc-img-cb:checked'));
+    }
+
+    function updateSelectionSummary() {
+        var checked = selectedCheckboxes();
+        var totalBytes = checked.reduce(function(sum, cb) {
+            return sum + (parseInt(cb.getAttribute('data-img-size'), 10) || 0);
+        }, 0);
+        var summary = document.getElementById('dc-selection-summary');
+        var btn = document.getElementById('dc-delete-btn');
+        if (checked.length === 0) {
+            summary.textContent = '';
+            btn.disabled = true;
+        } else {
+            summary.textContent = checked.length + ' selected · ' + fmtSize(totalBytes) + ' to reclaim';
+            btn.disabled = false;
+        }
+    }
+
+    async function deleteSelected() {
+        var serverID = document.getElementById('dc-server').value;
+        if (!serverID) return;
+        var checked = selectedCheckboxes();
+        if (checked.length === 0) return;
+        var ids = checked.map(function(cb) { return cb.getAttribute('data-img-id'); });
+        var totalBytes = checked.reduce(function(sum, cb) {
+            return sum + (parseInt(cb.getAttribute('data-img-size'), 10) || 0);
+        }, 0);
+
+        if (!confirm('Delete ' + ids.length + ' image(s) and reclaim ~' + fmtSize(totalBytes) + '? This cannot be undone.')) {
+            return;
+        }
+
+        var btn = document.getElementById('dc-delete-btn');
+        btn.disabled = true;
+        btn.textContent = 'Deleting…';
+        document.getElementById('dc-status').textContent = 'Removing ' + ids.length + ' image(s)…';
+
+        try {
+            var resp = await API.postJSON('/api/servers/' + encodeURIComponent(serverID) + '/images/remove', { image_ids: ids });
+            if (!resp || !resp.data) throw new Error('no response');
+            var result = resp.data;
+            if (!result.success) throw new Error(result.error || 'removal failed');
+            var perImage = JSON.parse(result.output || '[]') || [];
+            renderResults(perImage);
+            var ok = perImage.filter(function(r) { return r.success; }).length;
+            var failed = perImage.length - ok;
+            document.getElementById('dc-status').textContent = 'Done. ' + ok + ' removed' + (failed ? ', ' + failed + ' failed' : '') + '.';
+            await loadImages();
+        } catch (e) {
+            document.getElementById('dc-status').innerHTML = '<span style="color:var(--error);">Failed: ' + esc(e.message || e) + '</span>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Delete selected';
+            updateSelectionSummary();
+        }
+    }
+
+    function renderResults(perImage) {
+        if (!perImage || perImage.length === 0) {
+            document.getElementById('dc-results').innerHTML = '';
+            return;
+        }
+        var rows = perImage.map(function(r) {
+            var ok = r.success;
+            var color = ok ? '#22c55e' : 'var(--error)';
+            var icon = ok ? '&#10003;' : '&#10007;';
+            return '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;">' +
+                '<span style="color:' + color + ';font-weight:700;">' + icon + '</span>' +
+                '<span style="font-family:\'JetBrains Mono\',monospace;color:var(--text-muted);">' + esc(shortID(r.id)) + '</span>' +
+                '<span style="flex:1;color:' + (ok ? 'var(--text-secondary)' : 'var(--error)') + ';">' + esc(ok ? 'removed' : (r.error || 'failed')) + '</span>' +
+                '</div>';
+        }).join('');
+        document.getElementById('dc-results').innerHTML =
+            '<div class="card"><div class="card-header"><h3>Removal results</h3></div>' +
+            '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">' + rows + '</div></div>';
+    }
+    </script>
+    <script>
+    (function() {
+        function updateSidebarAlertBadge(alerts) {
+            var badge = document.getElementById('sidebar-alert-badge');
+            if (!badge) return;
+            var count = alerts ? alerts.length : 0;
+            if (count === 0) {
+                badge.classList.remove('visible', 'pulse');
+                badge.textContent = '';
+                return;
+            }
+            badge.textContent = count;
+            badge.classList.add('visible');
+            var hasCritical = alerts.some(function(a) { return a.severity === 'critical'; });
+            if (hasCritical) { badge.classList.add('pulse'); } else { badge.classList.remove('pulse'); }
+        }
+        async function pollAlerts() {
+            try {
+                var data = await API.getJSON('/api/alerts');
+                if (data && data.alerts) updateSidebarAlertBadge(data.alerts);
+            } catch(e) {}
+        }
+        pollAlerts();
+        setInterval(pollAlerts, 15000);
+    })();
+
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebar-overlay').classList.toggle('active');
+    }
+    </script>
+</body>
+</html>
