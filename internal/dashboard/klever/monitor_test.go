@@ -27,7 +27,7 @@ func mockChain(t *testing.T) *httptest.Server {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/node/overview", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"data":{"overview":{"epochNumber":42,"nonce":5,"currentSlot":500,"slotsPerEpoch":1000,"slotDuration":4000}}}`)
+		_, _ = fmt.Fprint(w, `{"data":{"overview":{"epochNumber":42,"nonce":5,"currentSlot":500,"slotsPerEpoch":1000,"slotDuration":4000}}}`)
 	})
 	mux.HandleFunc("/v1.0/block/by-nonce/", func(w http.ResponseWriter, r *http.Request) {
 		var n uint64
@@ -38,15 +38,15 @@ func mockChain(t *testing.T) *httptest.Server {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprintf(w, `{"data":{"block":{"nonce":%d,"slot":%d,"epoch":42,"producerBLS":%q,"validators":%s}}}`,
+		_, _ = fmt.Fprintf(w, `{"data":{"block":{"nonce":%d,"slot":%d,"epoch":42,"producerBLS":%q,"validators":%s}}}`,
 			n, n, b.producer, b.signers)
 	})
 	mux.HandleFunc("/v1.0/validator/list", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") != "1" {
-			fmt.Fprint(w, `{"data":{"validators":[]}}`)
+			_, _ = fmt.Fprint(w, `{"data":{"validators":[]}}`)
 			return
 		}
-		fmt.Fprint(w, `{"data":{"validators":[
+		_, _ = fmt.Fprint(w, `{"data":{"validators":[
 			{"ownerAddress":"klv1own","blsPublicKey":"aa","name":"Community-Node-1","list":"elected",
 			 "commission":3000,"selfStake":5000000,"accumulatedFees":1500000,
 			 "leaderSuccessRate":{"numSuccess":2,"numFailure":1},
