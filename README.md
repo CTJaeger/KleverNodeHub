@@ -48,8 +48,10 @@ Any Device (Browser)
 ## Features
 
 ### Node Management
-- **Install from scratch** — Provision new nodes remotely (Docker, config, keys)
+- **Provision from scratch** — Deploy new nodes remotely (Docker, config, keys). Create **multiple nodes in one run** with auto-incrementing REST API ports, pick **Main or Fallback** role per node, and choose a **sync mode**: fast bootstrap (latest epoch), full-DB snapshot (archival node in one step), or full sync from genesis. Live node-name validation as you type.
 - **Full lifecycle** — Start, stop, restart, upgrade, downgrade nodes
+- **Chain DB restore** — Replace a node's chain database with the official Klever FullNode snapshot, streamed straight to disk with a preflight disk check and rollback of the previous DB. For turning a fast-bootstrapped node into a full archival node (e.g. for indexers).
+- **Version-aware upgrades** — An outdated-nodes indicator shows which nodes aren't on the latest version; Klever-aware version ordering (stable outranks RC) keeps upgrade suggestions correct. Batch-upgrade selected nodes sequentially to maintain quorum, with optional config refresh.
 - **Docker image tags** — Select specific Klever Docker image versions
 - **Batch operations** — Apply actions to multiple nodes at once
 - **Auto-discovery** — Agent detects existing Klever nodes on registration
@@ -64,10 +66,19 @@ Any Device (Browser)
 ### Monitoring & Alerting
 - **Real-time metrics** — CPU, memory, disk, network per server
 - **Klever node metrics** — Nonce, sync status, epoch, peers, consensus state (76 metrics from `/node/status`)
+- **Validator overview** — A dedicated Validators page tracking your managed validators (matched by BLS key) on-chain: state (elected/jailed/waiting), commission, self-stake, allowance, blocks produced/missed, plus a live **block-production timeline** of the last 100 blocks per validator
 - **Historical data** — 7-day high-resolution + long-term averaged archives
 - **Nonce stall detection** — Alerts when a node stops producing blocks
-- **Alert rules** — Configurable alert rules with acknowledgement
+- **Version performance regression** — Flags when a new node version is measurably slower at block processing, with a passive before/after report per node
+- **Maintenance awareness** — Nodes you deliberately stop from the dashboard are recognized as maintenance and don't fire offline alerts; cleared automatically once running again
+- **Alert rules** — Configurable alert rules with acknowledgement, plus a global alert badge on every page
 - **GeoIP detection** — Automatic server region detection
+
+### Tools
+- **Batch Config** — Change one config parameter across all nodes at once, with a side-by-side view of the current value per node and optional restart-after-apply
+- **Slot Inspector** — Enter a slot number, pick nodes, and the Hub pulls the matching logs from every agent, filters around that slot, and parses `validatorTime` / `lowerBound` into a comparison table
+- **Server Hardware Benchmark** — One click runs the official Klever benchmark (Disk I/O, Network, CPU, Memory, KV Store) with a score and grade
+- **Docker Cleanup** — Reclaim disk from old `klever-go` images left behind by upgrades; images still referenced by a container (running or stopped) are flagged in-use and protected
 
 ### Notifications
 - **Telegram bot** — Alerts with Markdown formatting
@@ -79,10 +90,11 @@ Any Device (Browser)
 ### Dashboard
 - **Mobile-first** — Responsive UI that works on phone, tablet, and desktop
 - **Progressive Web App** — Installable on mobile/desktop, works like a native app
-- **Overview grid** — All servers and nodes at a glance with live status
+- **Overview grid** — All servers and nodes at a glance with live status; flat or grouped-by-BLS-key view (Master on top, fallbacks indented) and a search mode that lifts the tables under the search box
 - **Live log streaming** — Docker container logs in the browser
 - **Agent auto-update** — Push agent updates from the dashboard with inline progress per server
-- **Dashboard self-update** — One-click update from within the dashboard
+- **Restart agent** — Restart an agent from the dashboard without touching the running nodes
+- **Dashboard self-update** — One-click update from within the dashboard (Docker mode swaps the container cleanly via a finalize helper, with rollback)
 - **Data tables** — Pagination, search, and column filtering
 
 ## Security
@@ -235,18 +247,19 @@ KleverNodeHub/
 │   ├── auth/                      # Password, WebAuthn, Klever Extension, recovery codes, JWT, rate limiter
 │   ├── crypto/                    # AES-256-GCM, Ed25519, mTLS, CA
 │   ├── dashboard/                 # HTTP server, tag cache, GeoIP, token manager
-│   │   ├── alerting/              # Alert evaluator, default rules
-│   │   ├── handlers/              # HTTP handlers (nodes, servers, docker, config, keys, alerts, ...)
+│   │   ├── alerting/              # Alert evaluator, default rules, version regression
+│   │   ├── handlers/              # HTTP handlers (nodes, servers, docker, config, keys, alerts, provision, restore, cleanup, validators, ...)
+│   │   ├── klever/                # Klever chain client + validator block-production monitor
 │   │   ├── scheduler/             # Metrics retention scheduler
 │   │   └── ws/                    # WebSocket hub, agent handler, browser handler
-│   ├── agent/                     # Agent logic, Docker ops, executor, metrics collector
+│   ├── agent/                     # Agent logic, Docker ops, executor, provisioner, DB restore, image cleanup, metrics collector
 │   ├── models/                    # Shared data structures and message types
 │   ├── store/                     # SQLite database layer (servers, nodes, metrics, alerts, settings)
 │   ├── notify/                    # Telegram, Pushover, webhook dispatchers
 │   └── version/                   # Build version info
 ├── web/
-│   ├── templates/                 # HTML templates (overview, server, node, alerts, settings, login)
-│   └── static/                    # JS (api, app, charts, datatable, login, passkey, klever, ws) + CSS
+│   ├── templates/                 # HTML templates (overview, server, node, validators, alerts, settings, login, batchconfig, slotinspector, docker-cleanup)
+│   └── static/                    # JS (api, app, charts, datatable, login, passkey, klever, version, ws) + CSS + service worker
 ├── scripts/                       # Agent install script
 ├── docs/                          # PRD and documentation
 ├── .github/workflows/             # CI + Release pipelines
