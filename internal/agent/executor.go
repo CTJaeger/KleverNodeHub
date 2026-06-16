@@ -33,6 +33,8 @@ var longRunningTimeouts = map[string]time.Duration{
 	"server.benchmark": 10 * time.Minute,
 	"node.upgrade":     15 * time.Minute,
 	"node.restore-db":  6 * time.Hour,
+	// Deleting several large image layers can exceed the 60s default.
+	"docker.images.remove": 5 * time.Minute,
 }
 
 // ProgressFunc is called to send progress events during long-running commands.
@@ -173,6 +175,16 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 			jsonBytes, _ := json.Marshal(nodes)
 			result.Output = string(jsonBytes)
 		}
+	case "docker.images.list":
+		images, listErr := e.docker.ListKleverImages(ctx)
+		if listErr != nil {
+			err = listErr
+		} else {
+			jsonBytes, _ := json.Marshal(images)
+			result.Output = string(jsonBytes)
+		}
+	case "docker.images.remove":
+		err = e.executeRemoveImages(ctx, msg.Payload, result)
 	default:
 		err = fmt.Errorf("unhandled command: %s", msg.Action)
 	}
@@ -281,6 +293,26 @@ func extractStringField(payload any, field string) string {
 		return p[field]
 	}
 	return ""
+}
+
+// extractStringSlice pulls a []string field from a JSON-decoded payload, where
+// the value arrives as []any of strings.
+func extractStringSlice(payload any, field string) []string {
+	p, ok := payload.(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := p[field].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // executeProvision handles the node.provision command.
