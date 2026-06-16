@@ -19,6 +19,8 @@ var AllowedCommands = map[string]CommandSpec{
 	"node.provision":         {Description: "Provision a new Klever node from scratch", RequiresContainer: false},
 	"node.restore-db":        {Description: "Restore a node's chain DB from the official Klever backup", RequiresContainer: true},
 	"node.discovery":         {Description: "Scan for existing Klever nodes", RequiresContainer: false},
+	"docker.images.list":     {Description: "List local Klever Docker images", RequiresContainer: false},
+	"docker.images.remove":   {Description: "Remove unused Klever Docker images", RequiresContainer: false},
 	"config.list":            {Description: "List configuration files for a node", RequiresContainer: false},
 	"config.read":            {Description: "Read a configuration file", RequiresContainer: false},
 	"config.write":           {Description: "Write a configuration file (auto-backup)", RequiresContainer: false},
