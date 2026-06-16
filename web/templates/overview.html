@@ -703,7 +703,7 @@
                 const nodeIDJS = escJS(n.id || '');
                 const nodeNameJS = escJS(n.display_name || n.name || n.container_name || '');
                 const nodeURLJS = escJS('/node/' + encodeURIComponent(n.id));
-                const syncHtml = syncBadge(meta);
+                const syncHtml = syncBadge(meta, n.status);
                 function metricBar(pct, label) {
                     pct = Math.max(0, Math.min(100, pct || 0));
                     const fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
@@ -1052,7 +1052,7 @@
             var memPct = meta.mem_percent || 0;
             var memUsed = meta.mem_used || 0;
             var memLimit = meta.mem_limit || 0;
-            var syncHtml = syncBadge(meta);
+            var syncHtml = syncBadge(meta, n.status);
             function metricBar(pct, label) {
                 pct = Math.max(0, Math.min(100, pct || 0));
                 var fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
@@ -2123,19 +2123,19 @@
             return v.replace(/-g[0-9a-f]+$/, '');
         }
 
-        // Sync badge — a freshly started node legitimately reports "syncing"
-        // while it initializes/catches up, which looks alarming. Show
-        // "initializing" for the first few minutes of uptime so a brand-new
-        // node doesn't read as a problem.
-        var SYNC_INIT_GRACE_SEC = 600; // 10 min
-        function syncBadge(meta) {
+        // Sync badge. While a freshly started node initializes (network
+        // discovery, trie sync, consensus setup) its REST API on :8080 isn't up
+        // yet, so the metrics poller gets nothing and klv_is_syncing is absent.
+        // A running container with no sync metric = still initializing. Once
+        // the API answers we get is_syncing: 1 (catching up) or 0 (synced).
+        // status is the container status ("running", "stopped", …).
+        function syncBadge(meta, status) {
+            if (status && status !== 'running') return '<span class="text-muted">-</span>';
             var isSyncing = meta.klv_is_syncing;
-            if (isSyncing == null) return '<span class="text-muted">-</span>';
-            if (isSyncing === 0) return '<span class="badge badge-running">synced</span>';
-            var uptime = meta.klv_node_uptime_seconds;
-            if (typeof uptime === 'number' && uptime >= 0 && uptime < SYNC_INIT_GRACE_SEC) {
-                return '<span class="badge badge-syncing" title="Node started recently and is still initializing">initializing</span>';
+            if (isSyncing == null) {
+                return '<span class="badge badge-syncing" title="Node API not up yet — still initializing">initializing</span>';
             }
+            if (isSyncing === 0) return '<span class="badge badge-running">synced</span>';
             return '<span class="badge badge-syncing">syncing</span>';
         }
 

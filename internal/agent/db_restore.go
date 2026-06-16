@@ -140,10 +140,14 @@ func RestoreDB(ctx context.Context, docker *DockerClient, req *models.RestoreDBR
 		log.Printf("db-restore %s: chown warning: %v", req.ContainerName, err)
 	}
 
-	// --- Start the node back up ---
-	report("starting", 100, "starting node container")
-	if err := docker.StartContainer(ctx, req.ContainerName); err != nil {
-		return fmt.Errorf("start container after restore: %w", err)
+	// --- Recreate without --start-in-epoch and start ---
+	// A plain restart would keep the original fast-bootstrap flag, making the
+	// node jump to the latest epoch and skip every block between the restored
+	// snapshot and now. Recreate the container without --start-in-epoch so it
+	// resumes from the restored DB height and syncs forward continuously.
+	report("starting", 100, "recreating node without fast-bootstrap and starting")
+	if err := docker.RecreateWithoutStartInEpoch(ctx, req.ContainerName); err != nil {
+		return fmt.Errorf("recreate/start container after restore: %w", err)
 	}
 
 	// Success — drop the kept-aside old DB.
