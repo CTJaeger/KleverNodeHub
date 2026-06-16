@@ -79,3 +79,17 @@ func TestHandleProvision_ValidNameAgentOffline(t *testing.T) {
 		t.Errorf("valid request: status = %d, want 503 (agent offline)", code)
 	}
 }
+
+func TestHandleProvision_RejectsInvalidSyncMode(t *testing.T) {
+	h, cleanup := setupProvisionTest(t)
+	defer cleanup()
+
+	code := postProvision(t, h, map[string]any{
+		"server_id": "srv-1",
+		"node_name": "validator-01",
+		"sync_mode": "turbo",
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("sync_mode=turbo: status = %d, want 400", code)
+	}
+}

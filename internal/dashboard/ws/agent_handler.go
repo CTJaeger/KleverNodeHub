@@ -165,6 +165,12 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 				"payload":   msg.Payload,
 			})
 
+		case "node.restore-db.progress":
+			h.hub.BroadcastToBrowsers("node.restore-db.progress", map[string]any{
+				"server_id": serverID,
+				"payload":   msg.Payload,
+			})
+
 		default:
 			log.Printf("unknown action from %s: %s", serverID, msg.Action)
 		}
@@ -222,6 +228,11 @@ func (h *AgentHandler) handleDiscovery(serverID string, msg *models.Message) {
 					for k, v := range meta {
 						existing[i].Metadata[k] = v
 					}
+				}
+				// Self-heal the maintenance flag: once the node is seen running
+				// again (however it was started), clear the alert suppression.
+				if discovered.Status == "running" {
+					delete(existing[i].Metadata, "maintenance")
 				}
 				if err := h.nodeStore.Update(&existing[i]); err != nil {
 					log.Printf("discovery: failed to update node %q: %v", discovered.ContainerName, err)

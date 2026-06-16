@@ -194,6 +194,69 @@ func (h *DockerHandler) HandleBatchUpgrade(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
+// restoreDBRequest is the request body for a chain-DB restore.
+type restoreDBRequest struct {
+	Network string `json:"network"`
+}
+
+// HandleRestoreDB handles POST /api/nodes/{id}/restore-db
+// Fire-and-forget: tells the agent to replace the node's chain DB with the
+// official Klever FullNode snapshot. The restore can run for over an hour, so
+// we don't block on the result — progress and completion are streamed to the
+// browser as "node.restore-db.progress" events.
+func (h *DockerHandler) HandleRestoreDB(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	var req restoreDBRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Network == "" {
+		req.Network = "mainnet"
+	}
+	if req.Network != "mainnet" && req.Network != "testnet" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "network must be mainnet or testnet"})
+		return
+	}
+
+	if node.DataDirectory == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "node has no known data directory; cannot restore"})
+		return
+	}
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-restore-db-%d", time.Now().UnixNano()),
+		Type:   "command",
+		Action: "node.restore-db",
+		Payload: map[string]any{
+			"node_id":        node.ID,
+			"container_name": node.ContainerName,
+			"data_dir":       node.DataDirectory,
+			"network":        req.Network,
+		},
+		Timestamp: time.Now().Unix(),
+	}
+
+	// Fire-and-forget — the agent streams progress events; we return immediately.
+	if err := h.hub.Send(node.ServerID, msg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"started":        true,
+		"node_id":        node.ID,
+		"container_name": node.ContainerName,
+	})
+}
+
 // HandleConfigUpgrade handles POST /api/nodes/{id}/config/upgrade
 // Downloads and applies new Klever configs during a node upgrade.
 func (h *DockerHandler) HandleConfigUpgrade(w http.ResponseWriter, r *http.Request) {

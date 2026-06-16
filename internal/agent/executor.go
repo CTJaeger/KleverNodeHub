@@ -22,6 +22,19 @@ const (
 	defaultStopTimeout    = 30 // seconds for graceful stop
 )
 
+// longRunningTimeouts overrides the default 60s command deadline for actions
+// that legitimately take much longer. Without this, a context derived from the
+// 60s default would cancel these mid-flight (a full chain-DB restore alone
+// downloads tens of GB and can run well over an hour).
+var longRunningTimeouts = map[string]time.Duration{
+	// node.provision covers full-DB mode, which downloads tens of GB.
+	"node.provision":   6 * time.Hour,
+	"config.upgrade":   10 * time.Minute,
+	"server.benchmark": 10 * time.Minute,
+	"node.upgrade":     15 * time.Minute,
+	"node.restore-db":  6 * time.Hour,
+}
+
 // ProgressFunc is called to send progress events during long-running commands.
 type ProgressFunc func(action string, payload map[string]any)
 
@@ -61,8 +74,12 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 		return result
 	}
 
-	// Execute with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), defaultCommandTimeout)
+	// Execute with timeout — long-running actions get an extended deadline.
+	timeout := defaultCommandTimeout
+	if t, ok := longRunningTimeouts[msg.Action]; ok {
+		timeout = t
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	var err error
@@ -106,6 +123,8 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 		}
 	case "node.provision":
 		err = e.executeProvision(ctx, msg.Payload, result)
+	case "node.restore-db":
+		err = e.executeRestoreDB(ctx, msg.Payload, result, onProgress)
 	case "config.list":
 		err = e.executeConfigList(msg.Payload, result)
 	case "config.read":
@@ -276,6 +295,7 @@ func (e *Executor) executeProvision(ctx context.Context, payload any, result *mo
 		NodeName: extractStringFromMap(p, "node_name"),
 		Network:  extractStringFromMap(p, "network"),
 		ImageTag: extractStringFromMap(p, "image_tag"),
+		SyncMode: extractStringFromMap(p, "sync_mode"),
 	}
 	if v, ok := p["port"].(float64); ok {
 		req.Port = int(v)
@@ -306,6 +326,54 @@ func (e *Executor) executeProvision(ctx context.Context, payload any, result *mo
 	}
 
 	result.Output = fmt.Sprintf("node %s provisioned successfully (job: %s)", req.NodeName, jobID)
+	return nil
+}
+
+// executeRestoreDB handles the node.restore-db command — replacing a node's
+// chain DB with the official Klever FullNode snapshot. Progress is streamed to
+// the dashboard via onProgress as "node.restore-db.progress" events.
+func (e *Executor) executeRestoreDB(ctx context.Context, payload any, result *models.CommandResult, onProgress ProgressFunc) error {
+	p, ok := payload.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid restore-db payload")
+	}
+	req := &models.RestoreDBRequest{
+		NodeID:        extractStringFromMap(p, "node_id"),
+		ContainerName: extractStringFromMap(p, "container_name"),
+		DataDir:       extractStringFromMap(p, "data_dir"),
+		Network:       extractStringFromMap(p, "network"),
+	}
+	if req.ContainerName == "" {
+		return fmt.Errorf("container_name is required")
+	}
+	if req.DataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	if req.Network == "" {
+		req.Network = "mainnet"
+	}
+
+	progressFn := func(pr *models.DBRestoreProgress) {
+		if onProgress == nil {
+			return
+		}
+		onProgress("node.restore-db.progress", map[string]any{
+			"node_id":        req.NodeID,
+			"container_name": pr.ContainerName,
+			"phase":          pr.Phase,
+			"percent":        pr.Percent,
+			"message":        pr.Message,
+			"error":          pr.Error,
+		})
+	}
+
+	if err := RestoreDB(ctx, e.docker, req, progressFn); err != nil {
+		// Surface a failed-phase event so the UI bar can turn red even though
+		// the final result also carries the error.
+		progressFn(&models.DBRestoreProgress{ContainerName: req.ContainerName, Phase: "failed", Error: err.Error()})
+		return err
+	}
+	result.Output = fmt.Sprintf("chain DB restored for %s", req.ContainerName)
 	return nil
 }
 

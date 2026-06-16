@@ -145,6 +145,18 @@ func (h *NodeHandler) executeNodeCommand(nodeID, action string) batchResultEntry
 		_ = h.nodeStore.UpdateStatus(nodeID, cmdResult.Output)
 	}
 
+	// Toggle maintenance so a deliberate stop doesn't fire an offline alert.
+	// Cleared on start/restart; discovery also clears it once the node is
+	// seen running again (self-healing if started outside the dashboard).
+	if cmdResult.Success {
+		switch action {
+		case "node.stop":
+			_ = h.nodeStore.SetMaintenance(nodeID, true)
+		case "node.start", "node.restart":
+			_ = h.nodeStore.SetMaintenance(nodeID, false)
+		}
+	}
+
 	return result
 }
 

@@ -353,6 +353,12 @@ func (e *Evaluator) evaluateNodeStatusRule(rule *store.AlertRule, nodes []models
 			continue
 		}
 
+		// Skip nodes deliberately stopped from the dashboard (maintenance) —
+		// they're down on purpose and shouldn't fire offline alerts.
+		if m, ok := node.Metadata["maintenance"].(bool); ok && m {
+			continue
+		}
+
 		stateKey := fmt.Sprintf("%s:%s", rule.ID, node.ID)
 
 		// Node is "offline" if status is not "running"

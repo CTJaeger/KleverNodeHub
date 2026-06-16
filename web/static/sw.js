@@ -1,53 +1,89 @@
 // Klever Node Hub — Service Worker (PWA)
-const CACHE_NAME = 'knh-v1';
-const STATIC_ASSETS = [
-    '/static/css/style.css',
-    '/static/js/api.js',
-    '/static/js/ws.js',
-    '/static/js/datatable.js',
-    '/static/js/charts.js',
+//
+// Strategy: the dashboard is a live monitoring tool, so freshness beats
+// offline-availability. CSS/JS/pages are network-first (always serve the
+// latest when online; the cache is only an offline fallback). Only rarely
+// changing binary assets (icons/fonts) are cache-first.
+//
+// The previous version cached CSS/JS cache-first under a fixed cache name,
+// so a tab left open kept serving stale styles after a deploy — new HTML
+// (network-first) collided with an old style.css, breaking layout until a
+// hard refresh. Network-first for code assets removes that whole class of bug.
+const CACHE_NAME = 'knh-v2';
+
+// Binary assets that change rarely and are safe to serve cache-first.
+const PRECACHE_ASSETS = [
     '/static/manifest.json',
 ];
 
-// Install: pre-cache static assets
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+        caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE_ASSETS)).catch(() => {})
     );
     self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: drop every cache that isn't the current one, so old cached CSS/JS
+// from a previous build can't linger.
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
             Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-        )
+        ).then(() => self.clients.claim())
     );
-    self.clients.claim();
 });
 
-// Fetch: network-first for API/pages, cache-first for static assets
+function isCacheFirstAsset(pathname) {
+    return /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|eot)$/i.test(pathname) ||
+        pathname === '/static/manifest.json';
+}
+
+// networkFirst: try the network, fall back to cache (and refresh the cache on
+// success so the fallback stays as current as possible).
+async function networkFirst(request) {
+    try {
+        const fresh = await fetch(request);
+        if (fresh && fresh.ok && request.method === 'GET') {
+            const copy = fresh.clone();
+            caches.open(CACHE_NAME).then(c => c.put(request, copy)).catch(() => {});
+        }
+        return fresh;
+    } catch (err) {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        throw err;
+    }
+}
+
+// cacheFirst: serve from cache, fall back to network and cache the result.
+async function cacheFirst(request) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const fresh = await fetch(request);
+    if (fresh && fresh.ok) {
+        const copy = fresh.clone();
+        caches.open(CACHE_NAME).then(c => c.put(request, copy)).catch(() => {});
+    }
+    return fresh;
+}
+
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // Skip non-GET and API requests
+    // Never touch non-GET or API requests.
     if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
         return;
     }
 
-    // Static assets: cache-first
-    if (url.pathname.startsWith('/static/')) {
-        event.respondWith(
-            caches.match(event.request).then(cached => cached || fetch(event.request))
-        );
+    // Rarely-changing binary assets: cache-first.
+    if (url.pathname.startsWith('/static/') && isCacheFirstAsset(url.pathname)) {
+        event.respondWith(cacheFirst(event.request));
         return;
     }
 
-    // Pages: network-first (always get fresh HTML)
-    event.respondWith(
-        fetch(event.request).catch(() => caches.match(event.request))
-    );
+    // Everything else (CSS, JS, HTML pages): network-first so a deploy is
+    // picked up immediately without a hard refresh.
+    event.respondWith(networkFirst(event.request));
 });
 
 // Push: show notification when receiving a push message

@@ -398,6 +398,31 @@ func TestNodeUpdateStatus(t *testing.T) {
 	}
 }
 
+func TestNodeSetMaintenance(t *testing.T) {
+	db := newTestDB(t)
+	serverStore := NewServerStore(db)
+	nodeStore := NewNodeStore(db)
+
+	_ = serverStore.Create(&models.Server{ID: "srv-1", Name: "S1", Hostname: "h1", IPAddress: "1.2.3.4", Status: "online"})
+	_ = nodeStore.Create(&models.Node{ID: "node-1", ServerID: "srv-1", Name: "n1", ContainerName: "kn1", NodeType: "validator", RestAPIPort: 8080, DataDirectory: "/opt/n1", Status: "running"})
+
+	if err := nodeStore.SetMaintenance("node-1", true); err != nil {
+		t.Fatalf("set maintenance: %v", err)
+	}
+	node, _ := nodeStore.GetByID("node-1")
+	if m, ok := node.Metadata["maintenance"].(bool); !ok || !m {
+		t.Errorf("maintenance metadata = %v, want true", node.Metadata["maintenance"])
+	}
+
+	if err := nodeStore.SetMaintenance("node-1", false); err != nil {
+		t.Fatalf("clear maintenance: %v", err)
+	}
+	node, _ = nodeStore.GetByID("node-1")
+	if _, present := node.Metadata["maintenance"]; present {
+		t.Errorf("maintenance should be cleared, still present: %v", node.Metadata)
+	}
+}
+
 func TestNodeCascadeDelete(t *testing.T) {
 	db := newTestDB(t)
 	serverStore := NewServerStore(db)

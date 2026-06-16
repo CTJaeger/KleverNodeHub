@@ -162,6 +162,26 @@ func (s *NodeStore) Delete(id string) error {
 	return nil
 }
 
+// SetMaintenance marks a node as intentionally stopped (true) or clears that
+// mark (false) by toggling a "maintenance" key in its metadata. While set, the
+// alert evaluator suppresses node-offline alerts for the node — so deliberately
+// stopping nodes from the dashboard doesn't spam alerts.
+func (s *NodeStore) SetMaintenance(id string, maintenance bool) error {
+	node, err := s.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if node.Metadata == nil {
+		node.Metadata = map[string]any{}
+	}
+	if maintenance {
+		node.Metadata["maintenance"] = true
+	} else {
+		delete(node.Metadata, "maintenance")
+	}
+	return s.Update(node)
+}
+
 // UpdateStatus updates only the node's status.
 func (s *NodeStore) UpdateStatus(id, status string) error {
 	s.db.mu.Lock()

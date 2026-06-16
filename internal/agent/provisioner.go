@@ -69,11 +69,18 @@ func NewProvisioner(docker *DockerClient, req *models.ProvisionRequest, jobID st
 		{"Pull Docker image", (*Provisioner).stepPullImage},
 		{"Create directory structure", (*Provisioner).stepCreateDirs},
 		{"Download configuration", (*Provisioner).stepDownloadConfig},
-		{"Set permissions", (*Provisioner).stepSetPermissions},
-		{"Create container", (*Provisioner).stepCreateContainer},
-		{"Start container", (*Provisioner).stepStartContainer},
-		{"Verify node", (*Provisioner).stepVerify},
 	}
+	// Full-DB sync mode downloads the official FullNode snapshot before the
+	// container is created so it starts with a complete archival DB.
+	if req.SyncMode == models.SyncModeFullDB {
+		p.steps = append(p.steps, ProvisionStep{"Download full chain DB", (*Provisioner).stepDownloadFullDB})
+	}
+	p.steps = append(p.steps,
+		ProvisionStep{"Set permissions", (*Provisioner).stepSetPermissions},
+		ProvisionStep{"Create container", (*Provisioner).stepCreateContainer},
+		ProvisionStep{"Start container", (*Provisioner).stepStartContainer},
+		ProvisionStep{"Verify node", (*Provisioner).stepVerify},
+	)
 
 	return p
 }
@@ -81,7 +88,13 @@ func NewProvisioner(docker *DockerClient, req *models.ProvisionRequest, jobID st
 // Run executes all provisioning steps in sequence.
 // On failure, it attempts cleanup and reports which step failed.
 func (p *Provisioner) Run(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	// Full-DB mode downloads tens of GB; give it the same long budget as a
+	// standalone restore instead of the standard provisioning timeout.
+	timeout := provisionTimeout
+	if p.req.SyncMode == models.SyncModeFullDB {
+		timeout = 6 * time.Hour
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	total := len(p.steps)
@@ -201,6 +214,25 @@ func (p *Provisioner) stepDownloadConfig(ctx context.Context) error {
 
 	log.Printf("configuration downloaded to %s", configDir)
 	return nil
+}
+
+// stepDownloadFullDB downloads the official Klever FullNode chain-DB snapshot
+// into the node's db/ directory (full-db sync mode only).
+func (p *Provisioner) stepDownloadFullDB(ctx context.Context) error {
+	url, ok := dbBackupSources[p.req.Network]
+	if !ok {
+		url = dbBackupSources["mainnet"]
+	}
+	archiveSize, err := remoteContentLength(ctx, url)
+	if err != nil {
+		return fmt.Errorf("reach backup server: %w", err)
+	}
+	free, err := freeDiskSpace(p.nodeDir)
+	if err == nil && free < archiveSize*extractedSizeFactor {
+		return fmt.Errorf("not enough disk space for full DB: need ~%s, have %s free",
+			humanBytes(archiveSize*extractedSizeFactor), humanBytes(free))
+	}
+	return downloadAndExtractDB(ctx, url, p.nodeDir, archiveSize, func(_ int) {})
 }
 
 // stepSetPermissions sets ownership to 999:999 (matching container user).
@@ -377,6 +409,9 @@ func (p *Provisioner) stepCreateContainer(ctx context.Context) error {
 		RestAPIPort:     port,
 		RedundancyLevel: p.req.RedundancyLevel,
 		DisplayName:     p.req.ConfigOverrides["NodeDisplayName"],
+		// Fast bootstrap only — for full-db the DB is already in place, for
+		// genesis we want a full sync from epoch 0.
+		StartInEpoch: p.req.SyncMode == "" || p.req.SyncMode == models.SyncModeFast,
 	}
 
 	_, err := p.docker.CreateContainer(ctx, cfg)

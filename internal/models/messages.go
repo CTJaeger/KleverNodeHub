@@ -112,9 +112,22 @@ type ProvisionRequest struct {
 	ImageTag        string            `json:"image_tag"`
 	Port            int               `json:"port"`
 	RedundancyLevel int               `json:"redundancy_level"` // 0 = main/active, 1 = fallback
+	SyncMode        string            `json:"sync_mode"`        // "fast" (default), "full-db", "genesis"
 	GenerateKeys    bool              `json:"generate_keys"`
 	ConfigOverrides map[string]string `json:"config_overrides,omitempty"`
 }
+
+// Provisioning sync modes.
+const (
+	// SyncModeFast uses --start-in-epoch: fast bootstrap from the network's
+	// latest epoch. The default and right choice for most validators.
+	SyncModeFast = "fast"
+	// SyncModeFullDB downloads the official Klever FullNode DB snapshot before
+	// first start — a full archival node (e.g. for indexers like Klever-Radar).
+	SyncModeFullDB = "full-db"
+	// SyncModeGenesis syncs from epoch 0 with no flag. Slow, complete history.
+	SyncModeGenesis = "genesis"
+)
 
 // ProvisionProgress is sent during provisioning to report step status.
 type ProvisionProgress struct {
@@ -126,4 +139,25 @@ type ProvisionProgress struct {
 	Status     string `json:"status"` // "running", "completed", "failed"
 	Message    string `json:"message,omitempty"`
 	Error      string `json:"error,omitempty"`
+}
+
+// RestoreDBRequest is the request body for restoring a node's chain DB from
+// the official Klever FullNode backup snapshot.
+type RestoreDBRequest struct {
+	NodeID        string `json:"node_id"`
+	ContainerName string `json:"container_name"`
+	DataDir       string `json:"data_dir"`
+	Network       string `json:"network"` // "mainnet" or "testnet"
+}
+
+// DBRestoreProgress is sent during a chain-DB restore to report status. It is
+// emitted as an "node.restore-db.progress" event so the dashboard can show a
+// live bar for a download that can run from minutes to over an hour.
+type DBRestoreProgress struct {
+	JobID         string `json:"job_id"`
+	ContainerName string `json:"container_name"`
+	Phase         string `json:"phase"`   // "preflight", "stopping", "downloading", "extracting", "permissions", "starting", "done", "failed"
+	Percent       int    `json:"percent"` // 0-100 for the download phase; best-effort otherwise
+	Message       string `json:"message,omitempty"`
+	Error         string `json:"error,omitempty"`
 }

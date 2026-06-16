@@ -22,6 +22,7 @@ type ContainerConfig struct {
 	RestAPIPort     int    `json:"rest_api_port"`    // REST API port
 	DisplayName     string `json:"display_name"`     // Node display name
 	RedundancyLevel int    `json:"redundancy_level"` // 0 = active, 1 = fallback
+	StartInEpoch    bool   `json:"start_in_epoch"`   // add --start-in-epoch (fast bootstrap)
 }
 
 // containerCreateBody is the Docker API request body for container creation.
@@ -135,7 +136,12 @@ func (d *DockerClient) CreateContainer(ctx context.Context, cfg *ContainerConfig
 		"--log-save",
 		"--use-log-view",
 		fmt.Sprintf("--rest-api-interface=0.0.0.0:%d", cfg.RestAPIPort),
-		"--start-in-epoch",
+	}
+
+	// --start-in-epoch = fast bootstrap from the latest epoch. Omitted for a
+	// full-DB restore (the DB is already present) or a genesis sync.
+	if cfg.StartInEpoch {
+		args = append(args, "--start-in-epoch")
 	}
 
 	if cfg.DisplayName != "" {

@@ -52,6 +52,13 @@ func (h *ProvisionHandler) HandleProvision(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "redundancy_level must be 0 (main) or 1 (fallback)", http.StatusBadRequest)
 		return
 	}
+	if req.SyncMode == "" {
+		req.SyncMode = models.SyncModeFast
+	}
+	if req.SyncMode != models.SyncModeFast && req.SyncMode != models.SyncModeFullDB && req.SyncMode != models.SyncModeGenesis {
+		http.Error(w, "sync_mode must be fast, full-db or genesis", http.StatusBadRequest)
+		return
+	}
 	if req.Network == "" {
 		req.Network = "mainnet"
 	}
@@ -82,6 +89,7 @@ func (h *ProvisionHandler) HandleProvision(w http.ResponseWriter, r *http.Reques
 			"image_tag":        req.ImageTag,
 			"port":             req.Port,
 			"redundancy_level": req.RedundancyLevel,
+			"sync_mode":        req.SyncMode,
 			"generate_keys":    req.GenerateKeys,
 			"config_overrides": req.ConfigOverrides,
 		},

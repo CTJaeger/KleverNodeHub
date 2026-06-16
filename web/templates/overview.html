@@ -336,6 +336,38 @@
             </div><!-- /page-body -->
         </main>
 
+        <!-- Restore Chain DB Modal -->
+        <div class="modal-backdrop" id="modal-restore-db">
+            <div class="modal-panel modal-panel-lg">
+                <div class="modal-panel-header">
+                    <h3>Restore Chain DB</h3>
+                    <button class="modal-close-btn" onclick="hideRestoreDB()">&times;</button>
+                </div>
+                <div class="modal-panel-body">
+                    <div id="restore-db-config">
+                        <div class="alert alert-warning mb-16" style="font-size:0.85rem;">
+                            This replaces each selected node's chain database with the official Klever FullNode snapshot
+                            (tens of GB). Each node is <strong>stopped</strong>, its DB swapped, then started again.
+                            Nodes are processed <strong>one at a time</strong> to avoid saturating disk and bandwidth — this can take a long while.
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Network</label>
+                            <select class="form-input" id="restore-db-network">
+                                <option value="mainnet">Mainnet</option>
+                                <option value="testnet">Testnet</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Nodes</label>
+                            <div class="batch-upgrade-nodelist" id="restore-db-nodelist"></div>
+                        </div>
+                        <button class="btn btn-primary" id="restore-db-btn" onclick="startRestoreDB()">Restore Selected Nodes</button>
+                    </div>
+                    <div id="restore-db-progress" class="hidden mt-8"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Add Server Modal -->
         <div class="modal-backdrop" id="modal-add-server" onclick="if(event.target===this) hideAddServer()">
             <div class="modal-panel">
@@ -401,6 +433,15 @@
                                     <option value="latest">latest</option>
                                 </select>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Sync Mode</label>
+                            <select class="form-input" id="prov-syncmode">
+                                <option value="fast">Fast bootstrap (latest epoch) — recommended</option>
+                                <option value="full-db">Full DB snapshot (archival, tens of GB)</option>
+                                <option value="genesis">Full sync from genesis (slow)</option>
+                            </select>
+                            <div class="text-sm text-muted" style="margin-top:4px;">Full DB downloads the official Klever FullNode snapshot before first start — needed for indexers/archival use. Applies to all nodes in this run.</div>
                         </div>
 
                         <!-- Single-node view -->
@@ -617,6 +658,7 @@
                     '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="batchAction(\'stop\')">Stop</button>' +
                     '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="batchAction(\'restart\')">Restart</button>' +
                     '<button class="btn btn-sm btn-primary"' + (someChecked ? '' : ' disabled') + ' onclick="showBatchUpgrade()">Upgrade</button>' +
+                    '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="showRestoreDB()">Restore DB</button>' +
                     '<button class="btn btn-sm btn-secondary"' + (someChecked ? '' : ' disabled') + ' onclick="clearBatchSelection()">Clear</button>' +
                     '</div>';
                 return batchHtml +
@@ -640,7 +682,6 @@
                 servers.forEach(function(s) { serverMap[s.id] = s.display_name || s.name || s.hostname; });
                 const meta = n.metadata || {};
                 const nonce = meta.klv_nonce;
-                const isSyncing = meta.klv_is_syncing;
                 const cpuPct = meta.cpu_percent || 0;
                 const memPct = meta.mem_percent || 0;
                 const memUsed = meta.mem_used || 0;
@@ -650,11 +691,7 @@
                 const nodeIDJS = escJS(n.id || '');
                 const nodeNameJS = escJS(n.display_name || n.name || n.container_name || '');
                 const nodeURLJS = escJS('/node/' + encodeURIComponent(n.id));
-                const syncHtml = isSyncing != null
-                    ? (isSyncing === 0
-                        ? '<span class="badge badge-running">synced</span>'
-                        : '<span class="badge badge-syncing">syncing</span>')
-                    : '<span class="text-muted">-</span>';
+                const syncHtml = syncBadge(meta);
                 function metricBar(pct, label) {
                     pct = Math.max(0, Math.min(100, pct || 0));
                     const fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
@@ -999,16 +1036,11 @@
             var nodeURLJS = escJS('/node/' + encodeURIComponent(n.id));
             var meta = n.metadata || {};
             var nonce = meta.klv_nonce;
-            var isSyncing = meta.klv_is_syncing;
             var cpuPct = meta.cpu_percent || 0;
             var memPct = meta.mem_percent || 0;
             var memUsed = meta.mem_used || 0;
             var memLimit = meta.mem_limit || 0;
-            var syncHtml = isSyncing != null
-                ? (isSyncing === 0
-                    ? '<span class="badge badge-running">synced</span>'
-                    : '<span class="badge badge-syncing">syncing</span>')
-                : '<span class="text-muted">-</span>';
+            var syncHtml = syncBadge(meta);
             function metricBar(pct, label) {
                 pct = Math.max(0, Math.min(100, pct || 0));
                 var fillWidth = pct > 0 ? Math.max(6, pct).toFixed(0) : '0';
@@ -1425,6 +1457,106 @@
         function clearBatchSelection() {
             selectedNodeIds.clear();
             nodeTable.render();
+        }
+
+        // --- Restore Chain DB (one or more nodes, processed sequentially) ---
+        var restoreDBResolvers = {}; // node_id -> resolve fn for the in-flight restore
+        var restoreDBRunning = false;
+
+        function showRestoreDB() {
+            if (selectedNodeIds.size === 0) return;
+            var picked = nodes.filter(function(n) { return selectedNodeIds.has(n.id); });
+            document.getElementById('restore-db-config').classList.remove('hidden');
+            document.getElementById('restore-db-progress').classList.add('hidden');
+            document.getElementById('restore-db-progress').innerHTML = '';
+            document.getElementById('restore-db-btn').disabled = false;
+            var list = document.getElementById('restore-db-nodelist');
+            list.innerHTML = picked.map(function(n) {
+                var name = n.display_name || n.name || n.container_name || n.id;
+                return '<div class="batch-upgrade-row"><span class="batch-upgrade-row__name">' + esc(name) +
+                    '</span><span class="batch-upgrade-row__meta">' + esc(n.server_name || '') + '</span></div>';
+            }).join('');
+            document.getElementById('modal-restore-db').classList.add('active');
+        }
+
+        function hideRestoreDB() {
+            if (restoreDBRunning && !confirm('A restore is still running. Close anyway? The restore continues on the server.')) return;
+            document.getElementById('modal-restore-db').classList.remove('active');
+        }
+
+        async function startRestoreDB() {
+            if (restoreDBRunning) return;
+            var picked = nodes.filter(function(n) { return selectedNodeIds.has(n.id); });
+            if (!picked.length) return;
+            var network = document.getElementById('restore-db-network').value;
+
+            var ok = await showConfirm('Restore Chain DB',
+                'This stops each of the ' + picked.length + ' selected node(s), replaces its chain DB with the official ' +
+                esc(network) + ' snapshot, and starts it again. Existing DB is kept aside and only deleted on success (or removed up front if disk is tight). Continue?',
+                'Restore', 'btn-primary');
+            if (!ok) return;
+
+            restoreDBRunning = true;
+            document.getElementById('restore-db-config').classList.add('hidden');
+            var prog = document.getElementById('restore-db-progress');
+            prog.classList.remove('hidden');
+            prog.innerHTML = picked.map(function(n) {
+                return '<div class="info-row" id="restore-row-' + esc(n.id) + '">' +
+                    '<span class="info-label" style="font-family:monospace;">' + esc(n.display_name || n.name || n.container_name) + '</span>' +
+                    '<span class="info-value text-muted">queued</span></div>' +
+                    '<div style="height:4px;background:var(--bg-input);border-radius:2px;margin:2px 0 8px;overflow:hidden;">' +
+                    '<div id="restore-bar-' + esc(n.id) + '" style="height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width 0.3s;"></div></div>';
+            }).join('');
+
+            for (var i = 0; i < picked.length; i++) {
+                var node = picked[i];
+                setRestoreRow(node.id, 'starting…', 0);
+                var done = new Promise(function(resolve) { restoreDBResolvers[node.id] = resolve; });
+                var resp = await API.postJSON('/api/nodes/' + node.id + '/restore-db', { network: network });
+                if (!resp || !resp.ok) {
+                    delete restoreDBResolvers[node.id];
+                    setRestoreRow(node.id, 'failed to start: ' + ((resp && resp.data && resp.data.error) || 'error'), 0, true);
+                    continue;
+                }
+                await done; // resolved by the WS 'done'/'failed' progress event
+            }
+
+            restoreDBRunning = false;
+            loadData();
+        }
+
+        function setRestoreRow(nodeId, text, pct, isError) {
+            var row = document.getElementById('restore-row-' + nodeId);
+            if (row) {
+                var v = row.querySelector('.info-value');
+                v.textContent = text;
+                v.className = 'info-value ' + (isError ? 'text-error' : (text === 'done' ? 'text-success' : 'text-muted'));
+            }
+            var bar = document.getElementById('restore-bar-' + nodeId);
+            if (bar && typeof pct === 'number') {
+                bar.style.width = pct + '%';
+                if (isError) bar.style.background = 'var(--error)';
+            }
+        }
+
+        // Live progress from the agent for an in-flight DB restore.
+        if (typeof WS !== 'undefined') {
+            WS.on('node.restore-db.progress', function(data) {
+                if (!data || !data.payload) return;
+                var p = data.payload;
+                var nodeId = p.node_id;
+                if (!nodeId) return;
+                var label = p.phase;
+                if (p.phase === 'downloading') label = 'downloading ' + (p.percent || 0) + '%';
+                else if (p.message) label = p.phase + ' — ' + p.message;
+                var isError = p.phase === 'failed';
+                if (p.phase === 'failed' && p.error) label = 'failed: ' + p.error;
+                setRestoreRow(nodeId, label, typeof p.percent === 'number' ? p.percent : undefined, isError);
+                if (p.phase === 'done' || p.phase === 'failed') {
+                    var r = restoreDBResolvers[nodeId];
+                    if (r) { delete restoreDBResolvers[nodeId]; r(); }
+                }
+            });
         }
 
         async function batchAction(action) {
@@ -1855,6 +1987,7 @@
 
             const network = document.getElementById('prov-network').value;
             const imageTag = document.getElementById('prov-tag').value;
+            const syncMode = document.getElementById('prov-syncmode').value;
 
             // Build the list of nodes to provision (1 in single mode, N in multi).
             var jobs = [];
@@ -1919,6 +2052,7 @@
                     image_tag: imageTag,
                     port: jobs[i].port,
                     redundancy_level: jobs[i].redundancy_level,
+                    sync_mode: syncMode,
                     config_overrides: jobs[i].config_overrides
                 };
                 var result = await API.postJSON('/api/nodes/provision', req);
@@ -1975,6 +2109,22 @@
         function shortVersion(v) {
             if (!v) return '-';
             return v.replace(/-g[0-9a-f]+$/, '');
+        }
+
+        // Sync badge — a freshly started node legitimately reports "syncing"
+        // while it initializes/catches up, which looks alarming. Show
+        // "initializing" for the first few minutes of uptime so a brand-new
+        // node doesn't read as a problem.
+        var SYNC_INIT_GRACE_SEC = 600; // 10 min
+        function syncBadge(meta) {
+            var isSyncing = meta.klv_is_syncing;
+            if (isSyncing == null) return '<span class="text-muted">-</span>';
+            if (isSyncing === 0) return '<span class="badge badge-running">synced</span>';
+            var uptime = meta.klv_node_uptime_seconds;
+            if (typeof uptime === 'number' && uptime >= 0 && uptime < SYNC_INIT_GRACE_SEC) {
+                return '<span class="badge badge-syncing" title="Node started recently and is still initializing">initializing</span>';
+            }
+            return '<span class="badge badge-syncing">syncing</span>';
         }
 
         // --- Alerts ---
