@@ -237,6 +237,24 @@
                         </div>
                         <div id="config-backups-list" class="text-sm text-muted">Loading...</div>
                     </div>
+                    <div class="node-action-panel" id="restore-db-section">
+                        <div class="node-action-panel-head">
+                            <span class="node-action-kicker">Chain Database</span>
+                            <span class="node-action-hint">Restore from official snapshot</span>
+                        </div>
+                        <div class="node-action-group">
+                            <select id="restore-db-network" class="form-input node-action-select">
+                                <option value="mainnet">Mainnet</option>
+                                <option value="testnet">Testnet</option>
+                            </select>
+                            <button class="btn btn-sm btn-warning" onclick="doRestoreDB()" id="btn-restore-db">Restore Chain DB</button>
+                        </div>
+                        <div class="text-sm text-muted mt-8">Replaces this node's chain DB with the official Klever FullNode snapshot (tens of GB). The node is stopped, the DB swapped (previous DB kept aside for rollback), and restarted without fast-bootstrap. Can take a long time.</div>
+                        <div id="restore-db-progress" class="hidden mt-8">
+                            <div class="progress-bar"><div class="progress-bar-fill green" id="restore-db-bar" style="width:0%"></div></div>
+                            <div class="text-sm text-muted mt-8" id="restore-db-status"></div>
+                        </div>
+                    </div>
                 </div>
                 <div id="upgrade-progress" class="hidden mt-8">
                         <div class="progress-bar">
@@ -491,6 +509,29 @@
             WS.connect();
             WS.on('node.update', (data) => {
                 if (data && data.id === nodeId) loadNode();
+            });
+            // Live progress for a chain-DB restore of this node.
+            WS.on('node.restore-db.progress', (data) => {
+                if (!data || !data.payload || data.payload.node_id !== nodeId) return;
+                var p = data.payload;
+                var bar = document.getElementById('restore-db-bar');
+                var status = document.getElementById('restore-db-status');
+                var btn = document.getElementById('btn-restore-db');
+                var label = p.phase;
+                if (p.phase === 'downloading') label = 'downloading ' + (p.percent || 0) + '%';
+                else if (p.message) label = p.phase + ' — ' + p.message;
+                if (typeof p.percent === 'number') bar.style.width = Math.max(2, p.percent) + '%';
+                if (p.phase === 'failed') {
+                    label = 'failed: ' + (p.error || '');
+                    bar.className = 'progress-bar-fill red';
+                    bar.style.width = '100%';
+                    btn.disabled = false;
+                } else if (p.phase === 'done') {
+                    bar.style.width = '100%';
+                    btn.disabled = false;
+                    setTimeout(loadNode, 1500);
+                }
+                status.textContent = label;
             });
 
             window.addEventListener('resize', () => loadMetrics());
@@ -1358,6 +1399,32 @@
                     }
                 }
             } catch (e) { /* ignore */ }
+        }
+
+        async function doRestoreDB() {
+            var network = document.getElementById('restore-db-network').value;
+            if (!confirm('Restore this node\'s chain DB from the official ' + network + ' snapshot?\n\n' +
+                'The node will be STOPPED, its DB replaced (previous DB kept aside for rollback if space allows), ' +
+                'and restarted without fast-bootstrap. This downloads tens of GB and can take a long time.')) return;
+
+            var btn = document.getElementById('btn-restore-db');
+            var prog = document.getElementById('restore-db-progress');
+            var bar = document.getElementById('restore-db-bar');
+            var status = document.getElementById('restore-db-status');
+            btn.disabled = true;
+            prog.classList.remove('hidden');
+            bar.className = 'progress-bar-fill green';
+            bar.style.width = '2%';
+            status.textContent = 'Starting restore…';
+
+            var resp = await API.postJSON('/api/nodes/' + nodeId + '/restore-db', { network: network });
+            if (!resp || !resp.ok) {
+                status.textContent = 'Failed to start: ' + ((resp && resp.data && resp.data.error) || 'error');
+                bar.className = 'progress-bar-fill red';
+                bar.style.width = '100%';
+                btn.disabled = false;
+            }
+            // Progress and completion arrive via the 'node.restore-db.progress' WS event.
         }
 
         async function doUpgrade() {

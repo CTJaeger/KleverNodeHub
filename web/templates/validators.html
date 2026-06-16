@@ -336,11 +336,15 @@
 
     function renderTimeline(vals) {
         var wrap = document.getElementById('vm-timeline');
-        if (vals.length === 0) {
-            wrap.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No managed validators to display.</div>';
+        // Only elected validators produce blocks — off-chain / non-elected ones
+        // have nothing to show, so they're left out of the timeline (the table
+        // above still lists them with their state).
+        var elected = vals.filter(function(v) { return v.state === 'elected'; });
+        if (elected.length === 0) {
+            wrap.innerHTML = '<div class="text-sm text-muted" style="padding:16px;text-align:center;">No elected validators to display.</div>';
             return;
         }
-        wrap.innerHTML = vals.map(function(v) {
+        wrap.innerHTML = elected.map(function(v) {
             var cells = (v.timeline || []).map(function(c) {
                 var color = c.status === 'produced' ? 'var(--success)'
                     : c.status === 'missed' ? 'var(--error)'
