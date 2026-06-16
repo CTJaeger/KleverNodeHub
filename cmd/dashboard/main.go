@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/alerting"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/handlers"
+	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/klever"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/scheduler"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
 	"github.com/CTJaeger/KleverNodeHub/internal/notify"
@@ -164,6 +166,45 @@ func main() {
 	metricsScheduler := scheduler.New(metricsStore)
 	metricsScheduler.Start()
 
+	// --- Validator monitor (Klever chain block production) ---
+	// API base URLs default from the network; both are overridable via settings
+	// (klever_network / klever_api_url / klever_node_url) for testnet or a proxy.
+	kleverNetwork, _ := settingsStore.Get("klever_network")
+	if kleverNetwork == "" {
+		kleverNetwork = "mainnet"
+	}
+	defAPIURL, defNodeURL := klever.DefaultAPIURLs(kleverNetwork)
+	kleverAPIURL, _ := settingsStore.Get("klever_api_url")
+	if kleverAPIURL == "" {
+		kleverAPIURL = defAPIURL
+	}
+	kleverNodeURL, _ := settingsStore.Get("klever_node_url")
+	if kleverNodeURL == "" {
+		kleverNodeURL = defNodeURL
+	}
+	kleverClient := klever.NewClient(kleverAPIURL, kleverNodeURL, 4)
+	validatorMonitor := klever.NewMonitor(kleverClient, func() []klever.ManagedNode {
+		nodes, err := nodeStore.ListAll("")
+		if err != nil {
+			log.Printf("validator-monitor: list nodes: %v", err)
+			return nil
+		}
+		managed := make([]klever.ManagedNode, 0, len(nodes))
+		for _, n := range nodes {
+			if n.BLSPublicKey == "" {
+				continue
+			}
+			label := n.DisplayName
+			if label == "" {
+				label = n.Name
+			}
+			managed = append(managed, klever.ManagedNode{BLS: n.BLSPublicKey, Name: label})
+		}
+		return managed
+	}, kleverNetwork, 100, 6*time.Second)
+	monitorCtx, stopMonitor := context.WithCancel(context.Background())
+	validatorMonitor.Start(monitorCtx)
+
 	// --- WebSocket Hub ---
 	// Reset all servers to offline on startup; agents will set online when they connect
 	if err := serverStore.ResetAllStatus("offline"); err != nil {
@@ -190,6 +231,7 @@ func main() {
 	logHandler := handlers.NewLogHandler(hub, nodeStore)
 	keyHandler := handlers.NewKeyHandler(hub, nodeStore)
 	provisionHandler := handlers.NewProvisionHandler(hub)
+	validatorsHandler := handlers.NewValidatorsHandler(validatorMonitor)
 	notifyManager := notify.NewManager()
 	handlers.LoadSavedChannels(settingsStore, notifyManager)
 	notifyHandler := handlers.NewNotificationHandler(notifyManager, settingsStore)
@@ -292,6 +334,7 @@ func main() {
 	mux.Handle("GET /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleGet)))
 	mux.Handle("PATCH /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleUpdateServer)))
 	mux.Handle("DELETE /api/servers/{id}", authMw(http.HandlerFunc(serverHandler.HandleDelete)))
+	mux.Handle("GET /api/validators", authMw(http.HandlerFunc(validatorsHandler.HandleSnapshot)))
 	mux.Handle("GET /api/nodes", authMw(http.HandlerFunc(serverHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleGetNode)))
 	mux.Handle("PATCH /api/nodes/{id}", authMw(http.HandlerFunc(serverHandler.HandleUpdateNode)))
@@ -375,6 +418,7 @@ func main() {
 		log.Printf("received %s, shutting down...", sig)
 		alertEvaluator.Stop()
 		metricsScheduler.Stop()
+		stopMonitor()
 		hub.Stop()
 		_ = db.Close()
 		os.Exit(0)
