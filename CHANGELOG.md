@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-06-17
+- **Node log auto-refresh defaults to 5s** (was 10s).
 - **Removed the validator monitoring page**: It polled an external public API (`api.mainnet.klever.org`) block-by-block for the block-production timeline. That contradicts NodeHub's core principle — a self-hosted node manager must not depend on a third-party API: if it's down or rate-limits, the dashboard degrades for reasons outside the operator's control. The whole feature (the **Validators** sidebar entry, the page, and the `internal/dashboard/klever` poller) is reverted. NodeHub gets its data from the operator's own nodes via the agents, never from an outside service.
 
 ### 2026-06-16 (later)
