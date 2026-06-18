@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-06-18
+- **Generate a BLS validator key during provisioning**: The Provision modal has a new "Generate a fresh BLS validator key for each node" checkbox. When ticked, provisioning runs the Klever `keygenerator` and places a new `validatorKey.pem` into each node's config dir (before the permissions step, so the key is chown'd to the container user too). Works for single and batch provisioning — each node gets its own key. The capability already existed as a standalone step (`key.generate` on the node detail page); this wires it into the create flow. Left off, behavior is unchanged (import/generate the key afterwards).
+
 ### 2026-06-17
 - **Node log auto-refresh defaults to 5s** (was 10s).
 - **Removed the validator monitoring page**: It polled an external public API (`api.mainnet.klever.org`) block-by-block for the block-production timeline. That contradicts NodeHub's core principle — a self-hosted node manager must not depend on a third-party API: if it's down or rate-limits, the dashboard degrades for reasons outside the operator's control. The whole feature (the **Validators** sidebar entry, the page, and the `internal/dashboard/klever` poller) is reverted. NodeHub gets its data from the operator's own nodes via the agents, never from an outside service.

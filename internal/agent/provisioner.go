@@ -75,6 +75,11 @@ func NewProvisioner(docker *DockerClient, req *models.ProvisionRequest, jobID st
 	if req.SyncMode == models.SyncModeFullDB {
 		p.steps = append(p.steps, ProvisionStep{"Download full chain DB", (*Provisioner).stepDownloadFullDB})
 	}
+	// Optionally generate a fresh BLS validator key into the config dir before
+	// permissions are set (so the key is chown'd to the container user too).
+	if req.GenerateKeys {
+		p.steps = append(p.steps, ProvisionStep{"Generate validator key", (*Provisioner).stepGenerateKey})
+	}
 	p.steps = append(p.steps,
 		ProvisionStep{"Set permissions", (*Provisioner).stepSetPermissions},
 		ProvisionStep{"Create container", (*Provisioner).stepCreateContainer},
@@ -233,6 +238,19 @@ func (p *Provisioner) stepDownloadFullDB(ctx context.Context) error {
 			humanBytes(archiveSize*extractedSizeFactor), humanBytes(free))
 	}
 	return downloadAndExtractDB(ctx, url, p.nodeDir, archiveSize, func(_ int) {})
+}
+
+// stepGenerateKey generates a fresh BLS validator key into the node's config
+// directory via the klever-go keygenerator (same as a standalone key.generate).
+func (p *Provisioner) stepGenerateKey(ctx context.Context) error {
+	tag := p.req.ImageTag
+	if tag == "" {
+		tag = "latest"
+	}
+	if _, err := p.docker.GenerateKey(ctx, p.nodeDir, tag); err != nil {
+		return fmt.Errorf("generate validator key: %w", err)
+	}
+	return nil
 }
 
 // stepSetPermissions sets ownership to 999:999 (matching container user).
