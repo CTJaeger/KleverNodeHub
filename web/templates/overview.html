@@ -449,6 +449,13 @@
                             </select>
                             <div class="text-sm text-muted" style="margin-top:4px;">Full DB downloads the official Klever FullNode snapshot before first start — needed for indexers/archival use. Applies to all nodes in this run.</div>
                         </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="prov-genkeys">
+                                <span class="text-sm">Generate a fresh BLS validator key for each node</span>
+                            </label>
+                            <div class="text-sm text-muted" style="margin-top:4px;">Runs the Klever keygenerator and places a new <code>validatorKey.pem</code> in each node's config. Leave off to import an existing key afterwards.</div>
+                        </div>
 
                         <!-- Single-node view -->
                         <div id="prov-single">
@@ -1994,6 +2001,7 @@
             const network = document.getElementById('prov-network').value;
             const imageTag = document.getElementById('prov-tag').value;
             const syncMode = document.getElementById('prov-syncmode').value;
+            const genKeys = document.getElementById('prov-genkeys').checked;
 
             // Build the list of nodes to provision (1 in single mode, N in multi).
             var jobs = [];
@@ -2059,6 +2067,7 @@
                     port: jobs[i].port,
                     redundancy_level: jobs[i].redundancy_level,
                     sync_mode: syncMode,
+                    generate_keys: genKeys,
                     config_overrides: jobs[i].config_overrides
                 };
                 var result = await API.postJSON('/api/nodes/provision', req);
