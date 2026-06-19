@@ -157,6 +157,51 @@ func TestDecimate(t *testing.T) {
 	}
 }
 
+// TestDecimate_MultipleSlices covers data spanning more than one decimation
+// slice (sliceBuckets * bucketSize), exercising the chunked path: every old row
+// must be aggregated and removed from metrics_recent across slices.
+func TestDecimate_MultipleSlices(t *testing.T) {
+	s := setupMetricsStore(t)
+
+	bucket := 5 * time.Minute
+	// Spread old rows across ~4 hours (well beyond one 6-bucket=30-min slice),
+	// one sample every 5 minutes so each falls in its own bucket.
+	base := time.Now().Add(-10 * 24 * time.Hour).Unix()
+	const samples = 48 // 4 hours / 5 min
+	for i := 0; i < samples; i++ {
+		m := map[string]float64{"klv_nonce": float64(i)}
+		if err := s.InsertNodeMetrics("node-1", "server-1", m, base+int64(i)*int64(bucket.Seconds())); err != nil {
+			t.Fatalf("insert %d: %v", i, err)
+		}
+	}
+
+	count, err := s.Decimate(7*24*time.Hour, bucket)
+	if err != nil {
+		t.Fatalf("decimate: %v", err)
+	}
+	if count != samples {
+		t.Errorf("decimated = %d, want %d (all old rows across slices)", count, samples)
+	}
+
+	// metrics_recent must be empty of the old rows.
+	pts, err := s.QueryRecent("node-1", "klv_nonce", base-60, base+int64(samples)*int64(bucket.Seconds())+60)
+	if err != nil {
+		t.Fatalf("query recent: %v", err)
+	}
+	if len(pts) != 0 {
+		t.Errorf("recent rows left after decimation = %d, want 0", len(pts))
+	}
+
+	// Archive should hold one bucket per sample (each sample in its own 5-min bucket).
+	arc, err := s.QueryArchive("node-1", "klv_nonce", base-300, base+int64(samples)*int64(bucket.Seconds())+300)
+	if err != nil {
+		t.Fatalf("query archive: %v", err)
+	}
+	if len(arc) != samples {
+		t.Errorf("archive buckets = %d, want %d", len(arc), samples)
+	}
+}
+
 func TestPurge(t *testing.T) {
 	s := setupMetricsStore(t)
 

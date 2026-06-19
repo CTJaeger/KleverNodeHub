@@ -106,7 +106,35 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 // readLoop reads messages from the WebSocket and dispatches them.
+//
+// The high-frequency, DB-writing handlers (heartbeat + node metrics) run on a
+// background worker, not inline. The agent pings every 25s and expects a pong
+// within 10s; coder/websocket only emits pongs while conn.Read is being called.
+// If the read loop blocked on a slow DB write (e.g. during hourly metrics
+// decimation, which holds the metrics lock), pongs would stall and the agent
+// would disconnect. Persisting asynchronously keeps the loop — and pongs —
+// responsive regardless of DB contention. Liveness is already captured by the
+// in-memory UpdateHeartbeat below, so dropping a queued metrics sample under
+// backpressure never marks the agent offline.
 func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serverID string, agentConn *AgentConn) {
+	work := make(chan func(), 512)
+	go func() {
+		for fn := range work {
+			fn()
+		}
+	}()
+	defer close(work)
+
+	// enqueueLossy runs DB work on the worker; if it's backed up (DB stalled),
+	// the sample is dropped rather than blocking the read loop / pongs.
+	enqueueLossy := func(action string, fn func()) {
+		select {
+		case work <- fn:
+		default:
+			log.Printf("agent %s: dropping %s (DB worker backed up)", serverID, action)
+		}
+	}
+
 	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
@@ -123,6 +151,8 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 		}
 
 		agentConn.UpdateHeartbeat()
+		m := msg                    // per-iteration copy captured by async closures
+		recvAt := time.Now().Unix() // receipt time, recorded now (not when the worker runs)
 
 		switch msg.Action {
 		case "agent.info":
@@ -132,9 +162,11 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 			h.handleAgentInfo(ctx, serverID, &msg)
 
 		case "agent.heartbeat":
-			_ = h.serverStore.UpdateHeartbeat(serverID, time.Now().Unix())
-			h.handleHeartbeatMetrics(serverID, &msg)
-			h.handleHeartbeatIP(ctx, serverID, &msg)
+			enqueueLossy("agent.heartbeat", func() {
+				_ = h.serverStore.UpdateHeartbeat(serverID, recvAt)
+				h.handleHeartbeatMetrics(serverID, &m)
+				h.handleHeartbeatIP(ctx, serverID, &m)
+			})
 
 		case "agent.discovery":
 			h.handleDiscovery(serverID, &msg)
@@ -146,7 +178,9 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 			})
 
 		case "node.metrics":
-			h.handleNodeMetrics(&msg)
+			enqueueLossy("node.metrics", func() {
+				h.handleNodeMetrics(&m)
+			})
 			h.hub.BroadcastToBrowsers("node.metrics", msg.Payload)
 
 		case "node.nonce_stall":
