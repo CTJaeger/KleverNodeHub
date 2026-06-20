@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-06-20
+- **Fix: agents intermittently dropped ("heartbeat stalled") under DB contention (#63)**: Agents across servers went offline simultaneously at irregular intervals (and reliably every hour), then reconnected within seconds — while the dashboard process itself stayed healthy. Root cause: the per-agent WebSocket read loop persisted heartbeat + node metrics to SQLite **synchronously** through the shared metrics lock; whenever that lock was held a while (most reliably the hourly `Decimate`, which ran the whole aggregate+delete in one long transaction), every agent's read loop blocked, and since `coder/websocket` only emits pongs while `conn.Read` runs, all agents' pings timed out at once. Fix: (1) heartbeat/metrics DB writes now run on a per-connection background worker so the read loop and pongs stay responsive (in-memory liveness still updates synchronously; a sample is dropped under backpressure rather than blocking); (2) `Decimate` runs in short bucket-aligned slices, each in its own transaction, releasing the lock between slices; (3) `Purge` batches its deletes and the SQLite `busy_timeout` is raised 5s→30s. Dashboard-side only — agents unchanged. New test `TestDecimate_MultipleSlices`.
+
 ### 2026-06-18
 - **Generate a BLS validator key during provisioning**: The Provision modal has a new "Generate a fresh BLS validator key for each node" checkbox. When ticked, provisioning runs the Klever `keygenerator` and places a new `validatorKey.pem` into each node's config dir (before the permissions step, so the key is chown'd to the container user too). Works for single and batch provisioning — each node gets its own key. The capability already existed as a standalone step (`key.generate` on the node detail page); this wires it into the create flow. Left off, behavior is unchanged (import/generate the key afterwards).
 
