@@ -41,8 +41,14 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	// Set busy timeout for concurrent access (5 seconds)
-	if _, err := sqlDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	// Busy timeout: SQLite allows one writer at a time, and writes from different
+	// stores run on different pooled connections. Rather than serialize on a
+	// single connection (which also serializes reads and stalled startup while a
+	// large decimation backlog held the connection), keep the pool and wait out
+	// brief write contention. The decimation runs in short bucket-aligned slices
+	// and heartbeats persist off the WS loop, so contention windows are short and
+	// a generous timeout absorbs them instead of erroring with SQLITE_BUSY.
+	if _, err := sqlDB.Exec("PRAGMA busy_timeout=30000"); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}

@@ -162,84 +162,139 @@ func (s *MetricsStore) QuerySystemMetrics(serverID string, from, to int64) ([]Sy
 	return result, rows.Err()
 }
 
-// Decimate aggregates raw metrics older than the cutoff into 5-minute buckets
-// in metrics_archive, then deletes the aggregated raw rows.
-// Returns the number of raw rows decimated.
+// Decimate aggregates raw metrics older than the cutoff into time buckets in
+// metrics_archive, then deletes the aggregated raw rows. Returns the number of
+// raw rows decimated.
+//
+// The work is done in small, bucket-aligned time slices, each in its own short
+// transaction, releasing the store lock between slices. A single big
+// aggregate+delete transaction would hold the lock (shared with every agent
+// heartbeat/metric write) for as long as the scan takes; during the hourly run
+// that stalled heartbeat persistence enough to make the dashboard miss
+// WebSocket pongs and drop every agent at once. Slicing bounds each lock hold to
+// a few buckets' worth of rows.
 func (s *MetricsStore) Decimate(olderThan time.Duration, bucketSize time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-olderThan).Unix()
+	bucketSecs := int64(bucketSize.Seconds())
+	if bucketSecs <= 0 {
+		bucketSecs = 300
+	}
+	const sliceBuckets = 6 // process up to 6 buckets per locked transaction
+	sliceSpan := bucketSecs * sliceBuckets
+
+	var total int64
+	for {
+		done, n, err := s.decimateSlice(cutoff, bucketSecs, sliceSpan)
+		if err != nil {
+			return total, err
+		}
+		total += n
+		if done {
+			break
+		}
+		// Yield the lock between slices so agent heartbeat/metric writes (which
+		// share s.mu) interleave instead of being starved by a long decimation.
+		time.Sleep(10 * time.Millisecond)
+	}
+	return total, nil
+}
+
+// decimateSlice decimates one bucket-aligned slice of raw metrics below cutoff
+// in a single short transaction. Returns done=true once nothing below cutoff
+// remains. Holds s.mu only for this slice.
+func (s *MetricsStore) decimateSlice(cutoff, bucketSecs, sliceSpan int64) (done bool, n int64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cutoff := time.Now().Add(-olderThan).Unix()
-	bucketSecs := int64(bucketSize.Seconds())
+	var minTs sql.NullInt64
+	if err := s.db.db.QueryRow(`SELECT MIN(collected_at) FROM metrics_recent WHERE collected_at < ?`, cutoff).Scan(&minTs); err != nil {
+		return false, 0, fmt.Errorf("min ts: %w", err)
+	}
+	if !minTs.Valid {
+		return true, 0, nil // nothing left below cutoff
+	}
+	sliceStart := (minTs.Int64 / bucketSecs) * bucketSecs // align down to a bucket boundary
+	sliceEnd := sliceStart + sliceSpan
+	if sliceEnd > cutoff {
+		sliceEnd = cutoff
+	}
 
 	tx, err := s.db.db.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
+		return false, 0, fmt.Errorf("begin tx: %w", err)
 	}
 
-	// Aggregate into buckets
-	_, err = tx.Exec(`
+	if _, err := tx.Exec(`
 		INSERT INTO metrics_archive (node_id, server_id, metric_name, avg_value, min_value, max_value, sample_count, bucket_start, bucket_end)
 		SELECT node_id, server_id, metric_name,
 			AVG(metric_value), MIN(metric_value), MAX(metric_value), COUNT(*),
 			(collected_at / ?) * ?,
 			(collected_at / ?) * ? + ?
 		FROM metrics_recent
-		WHERE collected_at < ?
+		WHERE collected_at >= ? AND collected_at < ?
 		GROUP BY node_id, server_id, metric_name, (collected_at / ?) * ?
-	`, bucketSecs, bucketSecs, bucketSecs, bucketSecs, bucketSecs, cutoff, bucketSecs, bucketSecs)
-	if err != nil {
+	`, bucketSecs, bucketSecs, bucketSecs, bucketSecs, bucketSecs, sliceStart, sliceEnd, bucketSecs, bucketSecs); err != nil {
 		_ = tx.Rollback()
-		return 0, fmt.Errorf("aggregate: %w", err)
+		return false, 0, fmt.Errorf("aggregate: %w", err)
 	}
 
-	// Delete decimated raw rows
-	result, err := tx.Exec(`DELETE FROM metrics_recent WHERE collected_at < ?`, cutoff)
+	result, err := tx.Exec(`DELETE FROM metrics_recent WHERE collected_at >= ? AND collected_at < ?`, sliceStart, sliceEnd)
 	if err != nil {
 		_ = tx.Rollback()
-		return 0, fmt.Errorf("delete raw: %w", err)
+		return false, 0, fmt.Errorf("delete raw: %w", err)
 	}
-
 	count, _ := result.RowsAffected()
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
+		return false, 0, fmt.Errorf("commit: %w", err)
 	}
 
-	return count, nil
+	// Done once this slice reaches the cutoff; otherwise more rows remain above.
+	return sliceEnd >= cutoff, count, nil
 }
 
 // Purge deletes archived metrics older than the given duration.
 // Returns the number of rows deleted.
 func (s *MetricsStore) Purge(olderThan time.Duration) (int64, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-
 	cutoff := time.Now().Add(-olderThan).Unix()
-
-	result, err := s.db.db.Exec(`DELETE FROM metrics_archive WHERE bucket_end < ?`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("purge archive: %w", err)
-	}
-
-	count, _ := result.RowsAffected()
-	return count, nil
+	return s.purgeOldRows("metrics_archive", "bucket_end", cutoff)
 }
 
 // PurgeSystemMetrics deletes system metrics older than the given duration.
 func (s *MetricsStore) PurgeSystemMetrics(olderThan time.Duration) (int64, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-
 	cutoff := time.Now().Add(-olderThan).Unix()
+	return s.purgeOldRows("system_metrics", "collected_at", cutoff)
+}
 
-	result, err := s.db.db.Exec(`DELETE FROM system_metrics WHERE collected_at < ?`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("purge system metrics: %w", err)
+// purgeBatch is how many rows one purge DELETE removes before releasing the
+// lock/connection, so a large purge can't hold the single DB connection (and
+// thereby stall agent heartbeats) for the whole delete.
+const purgeBatch = 2000
+
+// purgeOldRows deletes rows where col < cutoff in bounded batches, yielding the
+// lock between batches. table/col are package-internal constants (never user
+// input), so interpolating them into the statement is safe.
+func (s *MetricsStore) purgeOldRows(table, col string, cutoff int64) (int64, error) {
+	q := fmt.Sprintf(
+		`DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s WHERE %s < ? LIMIT %d)`,
+		table, table, col, purgeBatch,
+	)
+	var total int64
+	for {
+		s.mu.Lock()
+		result, err := s.db.db.Exec(q, cutoff)
+		s.mu.Unlock()
+		if err != nil {
+			return total, fmt.Errorf("purge %s: %w", table, err)
+		}
+		n, _ := result.RowsAffected()
+		total += n
+		if n < purgeBatch {
+			break
+		}
+		time.Sleep(10 * time.Millisecond) // yield between batches
 	}
-
-	count, _ := result.RowsAffected()
-	return count, nil
+	return total, nil
 }
 
 // QueryAutoResolution automatically selects metrics_recent or metrics_archive
