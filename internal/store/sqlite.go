@@ -41,17 +41,21 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	// Busy timeout: SQLite allows one writer at a time, and writes from different
-	// stores run on different pooled connections. Rather than serialize on a
-	// single connection (which also serializes reads and stalled startup while a
-	// large decimation backlog held the connection), keep the pool and wait out
-	// brief write contention. The decimation runs in short bucket-aligned slices
-	// and heartbeats persist off the WS loop, so contention windows are short and
-	// a generous timeout absorbs them instead of erroring with SQLITE_BUSY.
-	if _, err := sqlDB.Exec("PRAGMA busy_timeout=30000"); err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("set busy timeout: %w", err)
-	}
+	// Serialize all DB access on a single connection. SQLite allows only one
+	// writer at a time; with multiple pooled connections, concurrent writes from
+	// different stores race for the write lock and get SQLITE_BUSY. A single
+	// connection lets database/sql queue writes in Go-land instead — no SQLite
+	// lock contention, no SQLITE_BUSY. Reads are also serialized, which is fine:
+	// our read load is negligible and WAL mode's reader/writer independence only
+	// matters with truly concurrent connections, which we don't use here.
+	//
+	// The previous PRAGMA busy_timeout approach was insufficient: the PRAGMA is
+	// per-connection and only applied to the one connection that executed it at
+	// Open() time; new pool connections got the default 0ms timeout and would
+	// immediately fail with SQLITE_BUSY under any write contention.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
 
 	store := &DB{db: sqlDB}
 

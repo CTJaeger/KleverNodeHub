@@ -135,6 +135,19 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 		}
 	}
 
+	// enqueueOrSpawn is like enqueueLossy but never drops: if the worker queue
+	// is full it falls back to a fire-and-forget goroutine. Used for heartbeat
+	// DB writes, which are infrequent (every 25 s) and critical — dropping them
+	// causes the alerting evaluator to see a stale timestamp and fire false
+	// Agent Offline alerts even while the agent is still connected.
+	enqueueOrSpawn := func(fn func()) {
+		select {
+		case work <- fn:
+		default:
+			go fn()
+		}
+	}
+
 	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
@@ -162,8 +175,13 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 			h.handleAgentInfo(ctx, serverID, &msg)
 
 		case "agent.heartbeat":
-			enqueueLossy("agent.heartbeat", func() {
-				_ = h.serverStore.UpdateHeartbeat(serverID, recvAt)
+			// DB heartbeat write is non-lossy: dropping it leaves the DB timestamp
+			// stale, which triggers false Agent Offline alerts from the evaluator.
+			// Heartbeats arrive every 25s so spawning a goroutine on queue-full is safe.
+			recvAtCopy := recvAt
+			enqueueOrSpawn(func() { _ = h.serverStore.UpdateHeartbeat(serverID, recvAtCopy) })
+			// Metrics + IP derivation from heartbeat payload can be lossy.
+			enqueueLossy("agent.heartbeat metrics", func() {
 				h.handleHeartbeatMetrics(serverID, &m)
 				h.handleHeartbeatIP(ctx, serverID, &m)
 			})

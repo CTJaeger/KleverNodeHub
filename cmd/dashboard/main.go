@@ -209,7 +209,7 @@ func main() {
 	// Note: we do NOT resolve all firing alerts on startup.
 	// The evaluator will naturally resolve them if conditions clear,
 	// and dedup prevents duplicate alerts from being created.
-	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifyManager)
+	alertEvaluator := alerting.NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifyManager, hub.IsConnected)
 	alertEvaluator.EnsureDefaults()
 	alertEvaluator.Start()
 	regressionDetector := alerting.NewRegressionDetector(versionHistoryStore, metricsStore, nodeStore, alertStore, notifyManager)

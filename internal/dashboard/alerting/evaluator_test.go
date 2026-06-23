@@ -89,7 +89,7 @@ func TestEvaluatorEnsureDefaults(t *testing.T) {
 	defer cleanup()
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	// First call should create defaults
 	eval.EnsureDefaults()
@@ -154,7 +154,7 @@ func TestEvaluatorThresholdAlert(t *testing.T) {
 	}
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	// Run evaluation manually
 	eval.evaluate()
@@ -216,7 +216,7 @@ func TestEvaluatorResolvesAlert(t *testing.T) {
 	}
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	// First eval: should fire
 	eval.evaluate()
@@ -280,7 +280,7 @@ func TestEvaluatorPendingThenFiring(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	eval.evaluate()
 
@@ -334,7 +334,7 @@ func TestEvaluatorSystemMetrics(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 	eval.evaluate()
 
 	active, _ := alertStore.ListActiveAlerts()
@@ -369,7 +369,7 @@ func TestEvaluatorHeartbeatStale(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 	eval.evaluate()
 
 	active, _ := alertStore.ListActiveAlerts()
@@ -430,7 +430,7 @@ func TestEvaluatorNodeOffline(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	eval.evaluate()
 
@@ -486,7 +486,7 @@ func TestEvaluatorNonceStall(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	eval.evaluate()
 
@@ -537,7 +537,7 @@ func TestEvaluatorNonceStall_NotYetStalled(t *testing.T) {
 	_ = alertStore.CreateRule(rule)
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	eval.evaluate()
 
@@ -553,7 +553,7 @@ func TestEvaluatorStartStop(t *testing.T) {
 	defer cleanup()
 
 	notifier := notify.NewManager()
-	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier)
+	eval := NewEvaluator(alertStore, metricsStore, nodeStore, serverStore, settingsStore, notifier, nil)
 
 	eval.Start()
 	time.Sleep(100 * time.Millisecond)

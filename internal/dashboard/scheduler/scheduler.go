@@ -83,7 +83,15 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) runDecimation(ctx context.Context) {
-	// Run once at startup to clean any backlog
+	// Delay the startup run so the server finishes initializing and starts
+	// listening before decimation takes the single DB connection for a while.
+	// With SetMaxOpenConns(1), chunked decimation interleaves with other ops
+	// between slices, so a large backlog won't hang startup — just slow it.
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(10 * time.Second):
+	}
 	s.decimateOnce()
 
 	ticker := time.NewTicker(decimationInterval)

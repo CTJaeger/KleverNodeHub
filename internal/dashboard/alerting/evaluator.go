@@ -35,20 +35,24 @@ var systemMetrics = map[string]bool{
 
 // Evaluator evaluates alert rules against current metrics.
 type Evaluator struct {
-	mu            sync.Mutex
-	alertStore    *store.AlertStore
-	metricsStore  *store.MetricsStore
-	nodeStore     *store.NodeStore
-	serverStore   *store.ServerStore
-	settingsStore *store.SettingsStore
-	notifier      *notify.Manager
-	states        map[string]*AlertState
-	cancel        context.CancelFunc
-	interval      time.Duration
-	idCounter     int64
+	mu               sync.Mutex
+	alertStore       *store.AlertStore
+	metricsStore     *store.MetricsStore
+	nodeStore        *store.NodeStore
+	serverStore      *store.ServerStore
+	settingsStore    *store.SettingsStore
+	notifier         *notify.Manager
+	states           map[string]*AlertState
+	cancel           context.CancelFunc
+	interval         time.Duration
+	idCounter        int64
+	isAgentConnected func(serverID string) bool // nil = not available
 }
 
 // NewEvaluator creates a new alert evaluator.
+// isConnected (optional) reports whether an agent WebSocket is currently live;
+// when provided, Agent Offline alerts are suppressed for connected agents even if
+// the DB heartbeat is stale (e.g. writes were queued under DB contention).
 func NewEvaluator(
 	alertStore *store.AlertStore,
 	metricsStore *store.MetricsStore,
@@ -56,16 +60,18 @@ func NewEvaluator(
 	serverStore *store.ServerStore,
 	settingsStore *store.SettingsStore,
 	notifier *notify.Manager,
+	isConnected func(serverID string) bool,
 ) *Evaluator {
 	return &Evaluator{
-		alertStore:    alertStore,
-		metricsStore:  metricsStore,
-		nodeStore:     nodeStore,
-		serverStore:   serverStore,
-		settingsStore: settingsStore,
-		notifier:      notifier,
-		states:        make(map[string]*AlertState),
-		interval:      15 * time.Second,
+		alertStore:       alertStore,
+		metricsStore:     metricsStore,
+		nodeStore:        nodeStore,
+		serverStore:      serverStore,
+		settingsStore:    settingsStore,
+		notifier:         notifier,
+		states:           make(map[string]*AlertState),
+		interval:         15 * time.Second,
+		isAgentConnected: isConnected,
 	}
 }
 
@@ -337,6 +343,14 @@ func (e *Evaluator) evaluateHeartbeatRule(rule *store.AlertRule, servers []model
 		}
 
 		stateKey := fmt.Sprintf("%s:server:%s", rule.ID, srv.ID)
+
+		// If the agent WebSocket is live, suppress the offline alert even when the
+		// DB heartbeat looks stale (heartbeat DB writes can be queued/dropped under
+		// contention; in-memory hub state is the authoritative liveness source).
+		if e.isAgentConnected != nil && e.isAgentConnected(srv.ID) {
+			e.markNormal(stateKey, now)
+			continue
+		}
 
 		staleSec := float64(now.Unix() - srv.LastHeartbeat)
 		breached := staleSec > thresholdSec
