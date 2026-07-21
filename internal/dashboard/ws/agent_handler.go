@@ -223,6 +223,12 @@ func (h *AgentHandler) readLoop(ctx context.Context, conn *websocket.Conn, serve
 				"payload":   msg.Payload,
 			})
 
+		case "node.reset-db.progress":
+			h.hub.BroadcastToBrowsers("node.reset-db.progress", map[string]any{
+				"server_id": serverID,
+				"payload":   msg.Payload,
+			})
+
 		default:
 			log.Printf("unknown action from %s: %s", serverID, msg.Action)
 		}

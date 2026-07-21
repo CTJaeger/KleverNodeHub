@@ -257,6 +257,57 @@ func (h *DockerHandler) HandleRestoreDB(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// HandleResetDB handles POST /api/nodes/{id}/reset-db
+// Fire-and-forget: tells the agent to delete the node's local chain DB and
+// restart it with --start-in-epoch (fast-bootstrap from the latest epoch). This
+// is the opposite of HandleRestoreDB — no download, no full history. Progress is
+// streamed to the browser as "node.reset-db.progress" events.
+func (h *DockerHandler) HandleResetDB(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	if node.DataDirectory == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "node has no known data directory; cannot reset"})
+		return
+	}
+	if node.ContainerName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "node has no container; cannot reset"})
+		return
+	}
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-reset-db-%d", time.Now().UnixNano()),
+		Type:   "command",
+		Action: "node.reset-db",
+		Payload: map[string]any{
+			"node_id":        node.ID,
+			"container_name": node.ContainerName,
+			"data_dir":       node.DataDirectory,
+		},
+		Timestamp: time.Now().Unix(),
+	}
+
+	// Fire-and-forget — the agent streams progress events; we return immediately.
+	if err := h.hub.Send(node.ServerID, msg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"started":        true,
+		"node_id":        node.ID,
+		"container_name": node.ContainerName,
+	})
+}
+
 // HandleConfigUpgrade handles POST /api/nodes/{id}/config/upgrade
 // Downloads and applies new Klever configs during a node upgrade.
 func (h *DockerHandler) HandleConfigUpgrade(w http.ResponseWriter, r *http.Request) {

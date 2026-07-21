@@ -33,6 +33,9 @@ var longRunningTimeouts = map[string]time.Duration{
 	"server.benchmark": 10 * time.Minute,
 	"node.upgrade":     15 * time.Minute,
 	"node.restore-db":  6 * time.Hour,
+	// Fast-reset stops the node (up to 30s) then deletes the DB and recreates
+	// the container — seconds of work, but give it headroom for a large DB.
+	"node.reset-db": 15 * time.Minute,
 	// Deleting several large image layers can exceed the 60s default.
 	"docker.images.remove": 5 * time.Minute,
 }
@@ -127,6 +130,8 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 		err = e.executeProvision(ctx, msg.Payload, result)
 	case "node.restore-db":
 		err = e.executeRestoreDB(ctx, msg.Payload, result, onProgress)
+	case "node.reset-db":
+		err = e.executeResetDB(ctx, msg.Payload, result, onProgress)
 	case "config.list":
 		err = e.executeConfigList(msg.Payload, result)
 	case "config.read":
@@ -406,6 +411,47 @@ func (e *Executor) executeRestoreDB(ctx context.Context, payload any, result *mo
 		return err
 	}
 	result.Output = fmt.Sprintf("chain DB restored for %s", req.ContainerName)
+	return nil
+}
+
+// executeResetDB handles the node.reset-db command — deleting a node's local
+// chain DB and restarting it with --start-in-epoch. Progress is streamed to the
+// dashboard via onProgress as "node.reset-db.progress" events.
+func (e *Executor) executeResetDB(ctx context.Context, payload any, result *models.CommandResult, onProgress ProgressFunc) error {
+	p, ok := payload.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid reset-db payload")
+	}
+	req := &models.ResetDBRequest{
+		NodeID:        extractStringFromMap(p, "node_id"),
+		ContainerName: extractStringFromMap(p, "container_name"),
+		DataDir:       extractStringFromMap(p, "data_dir"),
+	}
+	if req.ContainerName == "" {
+		return fmt.Errorf("container_name is required")
+	}
+	if req.DataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+
+	progressFn := func(pr *models.DBResetProgress) {
+		if onProgress == nil {
+			return
+		}
+		onProgress("node.reset-db.progress", map[string]any{
+			"node_id":        req.NodeID,
+			"container_name": pr.ContainerName,
+			"phase":          pr.Phase,
+			"message":        pr.Message,
+			"error":          pr.Error,
+		})
+	}
+
+	if err := ResetDBFastBootstrap(ctx, e.docker, req, progressFn); err != nil {
+		progressFn(&models.DBResetProgress{ContainerName: req.ContainerName, Phase: "failed", Error: err.Error()})
+		return err
+	}
+	result.Output = fmt.Sprintf("chain DB reset for %s", req.ContainerName)
 	return nil
 }
 

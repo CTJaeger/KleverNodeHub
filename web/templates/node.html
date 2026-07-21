@@ -248,6 +248,14 @@
                             <div class="progress-bar"><div class="progress-bar-fill green" id="restore-db-bar" style="width:0%"></div></div>
                             <div class="text-sm text-muted mt-8" id="restore-db-status"></div>
                         </div>
+
+                        <hr class="node-action-divider">
+
+                        <div class="node-action-group">
+                            <button class="btn btn-sm btn-danger" onclick="doResetDB()" id="btn-reset-db">Fast Reset — clear DB &amp; re-bootstrap</button>
+                        </div>
+                        <div class="text-sm text-muted mt-8">Deletes this node's local chain DB and restarts it from the latest epoch (fast-bootstrap). No download. <strong>Not a full history</strong> — do not use this on indexer/archival nodes. Keys and config are kept.</div>
+                        <div id="reset-db-status" class="text-sm text-muted mt-8 hidden"></div>
                     </div>
                 </div>
                 <div id="upgrade-progress" class="hidden mt-8">
@@ -526,6 +534,24 @@
                     setTimeout(loadNode, 1500);
                 }
                 status.textContent = label;
+            });
+            // Live progress for a fast-reset of this node.
+            WS.on('node.reset-db.progress', (data) => {
+                if (!data || !data.payload || data.payload.node_id !== nodeId) return;
+                var p = data.payload;
+                var status = document.getElementById('reset-db-status');
+                var btn = document.getElementById('btn-reset-db');
+                status.classList.remove('hidden');
+                if (p.phase === 'failed') {
+                    status.textContent = 'failed: ' + (p.error || '');
+                    btn.disabled = false;
+                } else if (p.phase === 'done') {
+                    status.textContent = p.message || 'done';
+                    btn.disabled = false;
+                    setTimeout(loadNode, 1500);
+                } else {
+                    status.textContent = p.message ? (p.phase + ' — ' + p.message) : p.phase;
+                }
             });
 
             window.addEventListener('resize', () => loadMetrics());
@@ -1419,6 +1445,26 @@
                 btn.disabled = false;
             }
             // Progress and completion arrive via the 'node.restore-db.progress' WS event.
+        }
+
+        async function doResetDB() {
+            if (!confirm('Fast Reset this node?\n\n' +
+                'The node will be STOPPED, its local chain DB DELETED, and restarted from ' +
+                'the latest epoch (fast-bootstrap). This is NOT a full-history restore — ' +
+                'do not use it on indexer/archival nodes.\n\nKeys and config are kept.')) return;
+
+            var btn = document.getElementById('btn-reset-db');
+            var status = document.getElementById('reset-db-status');
+            btn.disabled = true;
+            status.classList.remove('hidden');
+            status.textContent = 'Starting fast reset…';
+
+            var resp = await API.postJSON('/api/nodes/' + nodeId + '/reset-db', {});
+            if (!resp || !resp.ok) {
+                status.textContent = 'Failed to start: ' + ((resp && resp.data && resp.data.error) || 'error');
+                btn.disabled = false;
+            }
+            // Progress and completion arrive via the 'node.reset-db.progress' WS event.
         }
 
         async function doUpgrade() {

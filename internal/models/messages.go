@@ -161,3 +161,23 @@ type DBRestoreProgress struct {
 	Message       string `json:"message,omitempty"`
 	Error         string `json:"error,omitempty"`
 }
+
+// ResetDBRequest is the request body for a fast-reset: delete a node's local
+// chain DB and restart it with --start-in-epoch so it re-bootstraps from the
+// latest epoch. This is deliberately NOT a full-history restore — it is for
+// operators who do not need archival history and want a quick fresh sync.
+type ResetDBRequest struct {
+	NodeID        string `json:"node_id"`
+	ContainerName string `json:"container_name"`
+	DataDir       string `json:"data_dir"`
+}
+
+// DBResetProgress is sent during a fast-reset to report status. Emitted as a
+// "node.reset-db.progress" event. Unlike a restore there is no download, so the
+// phases are few and it completes in seconds before the node syncs on its own.
+type DBResetProgress struct {
+	ContainerName string `json:"container_name"`
+	Phase         string `json:"phase"` // "stopping", "clearing", "starting", "done", "failed"
+	Message       string `json:"message,omitempty"`
+	Error         string `json:"error,omitempty"`
+}

@@ -285,6 +285,42 @@ func (d *DockerClient) RecreateWithoutStartInEpoch(ctx context.Context, containe
 	return d.StartContainer(ctx, containerName)
 }
 
+// RecreateWithStartInEpoch recreates a container with the same config but with
+// --start-in-epoch added. Used by the fast-reset flow: after the local chain DB
+// is deleted, the node must fast-bootstrap from the latest epoch rather than try
+// to resume from an empty DB. Docker only applies command args at create time,
+// so a plain restart would keep whatever flag the container was created with —
+// hence the recreate.
+func (d *DockerClient) RecreateWithStartInEpoch(ctx context.Context, containerName string) error {
+	cj, err := d.InspectContainer(ctx, containerName)
+	if err != nil {
+		return fmt.Errorf("inspect for recreate: %w", err)
+	}
+	node := parseContainerToNode(cj)
+	tag := node.DockerImageTag
+	if tag == "" {
+		tag = "latest"
+	}
+
+	if err := d.RemoveContainer(ctx, containerName, false); err != nil {
+		return fmt.Errorf("remove for recreate: %w", err)
+	}
+
+	cfg := &ContainerConfig{
+		Name:            node.ContainerName,
+		ImageTag:        tag,
+		DataDir:         node.DataDirectory,
+		RestAPIPort:     node.RestAPIPort,
+		DisplayName:     node.DisplayName,
+		RedundancyLevel: node.RedundancyLevel,
+		StartInEpoch:    true, // DB deleted — fast-bootstrap from the latest epoch
+	}
+	if _, err := d.CreateContainer(ctx, cfg); err != nil {
+		return fmt.Errorf("recreate container: %w", err)
+	}
+	return d.StartContainer(ctx, containerName)
+}
+
 // UpgradeContainer upgrades a container to a new image tag.
 // 1. Inspect current container for config
 // 2. Pull new image

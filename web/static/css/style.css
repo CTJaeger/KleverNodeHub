@@ -2756,6 +2756,12 @@ textarea.form-input {
     align-items: center;
 }
 
+.node-action-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+}
+
 .node-action-select {
     flex: 1 1 220px;
     min-width: 220px;

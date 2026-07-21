@@ -18,6 +18,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"node.pull":              {Description: "Pull a Docker image", RequiresContainer: false},
 	"node.provision":         {Description: "Provision a new Klever node from scratch", RequiresContainer: false},
 	"node.restore-db":        {Description: "Restore a node's chain DB from the official Klever backup", RequiresContainer: true},
+	"node.reset-db":          {Description: "Delete a node's chain DB and re-bootstrap from the latest epoch", RequiresContainer: true},
 	"node.discovery":         {Description: "Scan for existing Klever nodes", RequiresContainer: false},
 	"docker.images.list":     {Description: "List local Klever Docker images", RequiresContainer: false},
 	"docker.images.remove":   {Description: "Remove unused Klever Docker images", RequiresContainer: false},
