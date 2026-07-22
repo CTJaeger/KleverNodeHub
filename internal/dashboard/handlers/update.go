@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -33,6 +34,25 @@ func NewUpdateHandler(hub *ws.Hub, updateStore *dashboard.UpdateStore, serverSto
 		serverStore:    serverStore,
 		versionChecker: vc,
 	}
+}
+
+// buildAgentUpdatePayload chooses the update transport per agent. If the agent
+// advertised the http-update capability it gets a download_path and pulls the
+// binary over a separate HTTP request (keeping the ~15 MB off the WebSocket);
+// otherwise it gets the binary base64-encoded inline, exactly as before — so
+// older agents keep working with no change on their side.
+func (h *UpdateHandler) buildAgentUpdatePayload(serverID string, binaryData []byte, info *dashboard.AgentBinaryInfo) map[string]any {
+	payload := map[string]any{
+		"version":  info.Version,
+		"checksum": info.Checksum,
+		"size":     info.Size,
+	}
+	if h.hub.AgentHasCapability(serverID, models.CapabilityHTTPUpdate) {
+		payload["download_path"] = fmt.Sprintf("/api/agent/binary/%s?version=%s", serverID, url.QueryEscape(info.Version))
+	} else {
+		payload["data"] = base64.StdEncoding.EncodeToString(binaryData)
+	}
+	return payload
 }
 
 // HandleUploadBinary handles POST /api/agent/upload
@@ -100,6 +120,43 @@ func (h *UpdateHandler) HandleListBinaries(w http.ResponseWriter, _ *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// HandleAgentBinary handles GET /api/agent/binary/{server_id}?version=...
+// Called by the AGENT (not the browser) to fetch its update binary over a
+// separate HTTP request instead of receiving it base64-encoded inside the
+// WebSocket command — this keeps the ~15 MB transfer off the WS connection so it
+// can't hold the write lock, stall pongs and get the agent dropped. Auth is by
+// server_id existence (the same model the WebSocket upgrade uses); the agent
+// binary is a public release artifact anyway. Deliberately NOT behind the
+// browser-session auth middleware, since the agent has no browser session.
+func (h *UpdateHandler) HandleAgentBinary(w http.ResponseWriter, r *http.Request) {
+	serverID := r.PathValue("server_id")
+	srv, err := h.serverStore.GetByID(serverID)
+	if err != nil {
+		http.Error(w, "unknown server", http.StatusNotFound)
+		return
+	}
+
+	osName, arch := parseOSArch(srv.OSInfo)
+	version := r.URL.Query().Get("version")
+	var binaryData []byte
+	var info *dashboard.AgentBinaryInfo
+	if version != "" {
+		binaryData, info, err = h.updateStore.GetBinaryVersion(version, osName, arch)
+	} else {
+		binaryData, info, err = h.updateStore.GetBinary(osName, arch)
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf("no binary for %s/%s: %v", osName, arch, err), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Agent-Version", info.Version)
+	w.Header().Set("X-Agent-Checksum", info.Checksum)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(binaryData)))
+	_, _ = w.Write(binaryData)
+}
+
 // HandleUpdateAgent handles POST /api/agent/update/{server_id}
 // Sends the binary to the agent over WebSocket.
 // Optional body: { "version": "v0.3.4" } to send a specific version.
@@ -141,19 +198,13 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Send update command via WebSocket with binary as base64
-	encoded := base64.StdEncoding.EncodeToString(binaryData)
-
+	// Send update command via WebSocket. Transport (HTTP download vs. inline
+	// base64) is chosen per agent based on its advertised capabilities.
 	msg := &models.Message{
-		ID:     fmt.Sprintf("update-%d", time.Now().UnixNano()),
-		Type:   "command",
-		Action: "agent.update",
-		Payload: map[string]any{
-			"version":  info.Version,
-			"checksum": info.Checksum,
-			"size":     info.Size,
-			"data":     encoded,
-		},
+		ID:        fmt.Sprintf("update-%d", time.Now().UnixNano()),
+		Type:      "command",
+		Action:    "agent.update",
+		Payload:   h.buildAgentUpdatePayload(serverID, binaryData, info),
 		Timestamp: time.Now().Unix(),
 	}
 
@@ -275,17 +326,11 @@ func (h *UpdateHandler) HandleUpdateAll(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 
-		encoded := base64.StdEncoding.EncodeToString(binaryData)
 		msg := &models.Message{
-			ID:     fmt.Sprintf("update-%s-%d", srv.ID, time.Now().UnixNano()),
-			Type:   "command",
-			Action: "agent.update",
-			Payload: map[string]any{
-				"version":  info.Version,
-				"checksum": info.Checksum,
-				"size":     info.Size,
-				"data":     encoded,
-			},
+			ID:        fmt.Sprintf("update-%s-%d", srv.ID, time.Now().UnixNano()),
+			Type:      "command",
+			Action:    "agent.update",
+			Payload:   h.buildAgentUpdatePayload(srv.ID, binaryData, info),
 			Timestamp: time.Now().Unix(),
 		}
 

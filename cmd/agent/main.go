@@ -31,6 +31,15 @@ const (
 	// without crowding the rest of the agent's outbound traffic.
 	discoveryInterval = 60 * time.Second
 
+	// On a heavily loaded host discovery can take 10s+ per cycle (Docker daemon
+	// contention). Running it every 60s then burns a large, constant slice of an
+	// already-starved CPU — which in turn slows the agent's WebSocket read loop
+	// enough that the dashboard can't get a pong written in time and drops the
+	// connection. When discovery is slow we back the interval off (doubling up to
+	// this max) so a struggling host gets breathing room; it snaps back to the
+	// base interval as soon as discovery is fast again.
+	discoveryIntervalMax = 5 * time.Minute
+
 	nodeMetricsInterval = 15 * time.Second
 	reconnectBaseDelay  = 1 * time.Second
 	reconnectMaxDelay   = 60 * time.Second
@@ -108,6 +117,13 @@ func main() {
 
 	// --- Executor ---
 	executor := agent.NewExecutor(*dockerSocket)
+	// Configure the HTTP update source so a capable dashboard can hand us the
+	// update binary via a download URL instead of base64-over-WebSocket. Uses
+	// the same TLS client config as the WebSocket, so it trusts the dashboard
+	// the same way. Falls back to the inline payload if this can't be set up.
+	if tlsConfig, err := ag.TLSConfig(); err == nil {
+		executor.SetUpdateSource(config.DashboardURL, tlsConfig)
+	}
 
 	// --- Metrics collector ---
 	metricsCollector := agent.NewMetricsCollector(nil)
@@ -438,7 +454,9 @@ func runDiscoveryLoop(
 	discoverNow <-chan struct{},
 	out chan<- *models.Message,
 ) {
-	runOnce := func(reason string) {
+	// runOnce runs one discovery cycle and returns how long it took, so the
+	// caller can adapt the next interval to how loaded the host is.
+	runOnce := func(reason string) time.Duration {
 		start := time.Now()
 		report := ag.RunDiscovery(dockerSocket)
 		elapsed := time.Since(start)
@@ -455,22 +473,52 @@ func runDiscoveryLoop(
 		case out <- msg:
 		case <-ctx.Done():
 		}
+		return elapsed
+	}
+
+	// interval adapts to load: back off (double, capped) while discovery is
+	// slow, snap back to the base interval once it's fast again.
+	interval := discoveryInterval
+	adapt := func(elapsed time.Duration) {
+		if elapsed >= discoverySlowThreshold {
+			interval *= 2
+			if interval > discoveryIntervalMax {
+				interval = discoveryIntervalMax
+			}
+			log.Printf("discovery slow (%s) — backing off next interval to %s",
+				elapsed.Round(time.Millisecond), interval)
+		} else if interval != discoveryInterval {
+			interval = discoveryInterval
+			log.Printf("discovery back to normal — interval reset to %s", interval)
+		}
 	}
 
 	// Initial discovery on connect
-	runOnce("initial")
+	adapt(runOnce("initial"))
 
-	ticker := time.NewTicker(discoveryInterval)
-	defer ticker.Stop()
+	// A resettable timer (not a fixed ticker) so the interval can change per cycle.
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	resetTimer := func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(interval)
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			runOnce("periodic")
+		case <-timer.C:
+			adapt(runOnce("periodic"))
+			resetTimer()
 		case <-discoverNow:
-			runOnce("triggered")
+			adapt(runOnce("triggered"))
+			resetTimer()
 		}
 	}
 }

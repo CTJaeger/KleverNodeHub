@@ -2,12 +2,16 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
@@ -45,7 +49,9 @@ type ProgressFunc func(action string, payload map[string]any)
 
 // Executor handles incoming commands from the dashboard.
 type Executor struct {
-	docker *DockerClient
+	docker       *DockerClient
+	dashboardURL string
+	updateClient *http.Client
 }
 
 // NewExecutor creates a new command executor.
@@ -53,6 +59,43 @@ func NewExecutor(dockerSocket string) *Executor {
 	return &Executor{
 		docker: NewDockerClient(dockerSocket),
 	}
+}
+
+// SetUpdateSource configures where and how the agent fetches its update binary
+// over HTTP, used when the dashboard sends a download_path instead of inline
+// base64 data. tlsConfig is the same client config used for the WebSocket, so
+// the HTTP download trusts the dashboard exactly the same way. If this is never
+// called (e.g. in tests), the agent falls back to the base64 payload.
+func (e *Executor) SetUpdateSource(dashboardURL string, tlsConfig *tls.Config) {
+	e.dashboardURL = strings.TrimRight(dashboardURL, "/")
+	e.updateClient = &http.Client{
+		Timeout:   10 * time.Minute, // large binary over a possibly slow link
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
+	}
+}
+
+// downloadUpdateBinary fetches the agent binary from the dashboard over a
+// separate HTTP request. path is dashboard-relative (e.g.
+// /api/agent/binary/{id}?version=...); the checksum is verified afterwards by
+// VerifyAndReplaceBinary, so a corrupted download is caught before install.
+func (e *Executor) downloadUpdateBinary(ctx context.Context, path string) ([]byte, error) {
+	if e.updateClient == nil || e.dashboardURL == "" {
+		return nil, fmt.Errorf("update source not configured")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.dashboardURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.updateClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("dashboard returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return io.ReadAll(resp.Body)
 }
 
 // NewExecutorWithClient creates an executor with a specific Docker client (for testing).
@@ -165,7 +208,7 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 	case "key.backups":
 		err = e.executeKeyBackups(msg.Payload, result)
 	case "agent.update":
-		err = e.executeAgentUpdate(msg.Payload, result)
+		err = e.executeAgentUpdate(ctx, msg.Payload, result)
 	case "agent.restart":
 		// Nothing to do here — the main loop re-execs the agent after this
 		// returns a successful result. We just need to ack.
@@ -685,7 +728,7 @@ func (e *Executor) executeKeyBackups(payload any, result *models.CommandResult) 
 	return nil
 }
 
-func (e *Executor) executeAgentUpdate(payload any, result *models.CommandResult) error {
+func (e *Executor) executeAgentUpdate(ctx context.Context, payload any, result *models.CommandResult) error {
 	m, ok := payload.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid update payload")
@@ -693,16 +736,30 @@ func (e *Executor) executeAgentUpdate(payload any, result *models.CommandResult)
 
 	version := extractStringFromMap(m, "version")
 	checksum := extractStringFromMap(m, "checksum")
+	downloadPath := extractStringFromMap(m, "download_path")
 	dataB64 := extractStringFromMap(m, "data")
 
-	if version == "" || checksum == "" || dataB64 == "" {
-		return fmt.Errorf("version, checksum, and data are required")
+	if version == "" || checksum == "" {
+		return fmt.Errorf("version and checksum are required")
 	}
 
-	// Decode base64 binary
-	binaryData, err := base64Decode(dataB64)
-	if err != nil {
-		return fmt.Errorf("decode binary: %w", err)
+	// Obtain the new binary: prefer an HTTP download (keeps the ~15 MB off the
+	// WebSocket), fall back to the inline base64 payload from older dashboards.
+	var binaryData []byte
+	var err error
+	switch {
+	case downloadPath != "":
+		binaryData, err = e.downloadUpdateBinary(ctx, downloadPath)
+		if err != nil {
+			return fmt.Errorf("download binary: %w", err)
+		}
+	case dataB64 != "":
+		binaryData, err = base64Decode(dataB64)
+		if err != nil {
+			return fmt.Errorf("decode binary: %w", err)
+		}
+	default:
+		return fmt.Errorf("either download_path or data is required")
 	}
 
 	// Get agent config dir from executable path

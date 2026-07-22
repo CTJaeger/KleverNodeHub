@@ -168,10 +168,11 @@ func (a *Agent) Register(dashboardURL, token string) error {
 func (a *Agent) BuildAgentInfo(publicIP string) *models.AgentInfo {
 	hostname, _ := os.Hostname()
 	return &models.AgentInfo{
-		Version:  version.Version,
-		OS:       runtime.GOOS + "/" + runtime.GOARCH,
-		Hostname: hostname,
-		PublicIP: publicIP,
+		Version:      version.Version,
+		OS:           runtime.GOOS + "/" + runtime.GOARCH,
+		Hostname:     hostname,
+		PublicIP:     publicIP,
+		Capabilities: []string{models.CapabilityHTTPUpdate},
 	}
 }
 

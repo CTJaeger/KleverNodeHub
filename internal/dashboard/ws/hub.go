@@ -16,6 +16,7 @@ type AgentConn struct {
 	ServerID      string
 	SendCh        chan []byte
 	lastHeartbeat time.Time
+	capabilities  map[string]bool
 	mu            sync.Mutex
 }
 
@@ -31,6 +32,23 @@ func (ac *AgentConn) LastHeartbeat() time.Time {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 	return ac.lastHeartbeat
+}
+
+// SetCapabilities records the capabilities the agent reported in agent.info.
+func (ac *AgentConn) SetCapabilities(caps []string) {
+	ac.mu.Lock()
+	defer ac.mu.Unlock()
+	ac.capabilities = make(map[string]bool, len(caps))
+	for _, c := range caps {
+		ac.capabilities[c] = true
+	}
+}
+
+// HasCapability reports whether the agent advertised the given capability.
+func (ac *AgentConn) HasCapability(cap string) bool {
+	ac.mu.Lock()
+	defer ac.mu.Unlock()
+	return ac.capabilities[cap]
 }
 
 // pendingCommand tracks a command awaiting a response from an agent.
@@ -213,6 +231,26 @@ func (h *Hub) IsConnected(serverID string) bool {
 	defer h.mu.RUnlock()
 	_, ok := h.connections[serverID]
 	return ok
+}
+
+// SetAgentCapabilities records the capabilities reported by a connected agent.
+func (h *Hub) SetAgentCapabilities(serverID string, caps []string) {
+	h.mu.RLock()
+	conn, ok := h.connections[serverID]
+	h.mu.RUnlock()
+	if ok {
+		conn.SetCapabilities(caps)
+	}
+}
+
+// AgentHasCapability reports whether the connected agent advertised the given
+// capability. Returns false for an unknown/disconnected agent — so callers
+// transparently fall back to the pre-capability behavior (backward compatible).
+func (h *Hub) AgentHasCapability(serverID, cap string) bool {
+	h.mu.RLock()
+	conn, ok := h.connections[serverID]
+	h.mu.RUnlock()
+	return ok && conn.HasCapability(cap)
 }
 
 // ConnectedCount returns the number of connected agents.

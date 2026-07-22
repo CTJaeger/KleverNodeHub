@@ -9,13 +9,21 @@ type Message struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
+// CapabilityHTTPUpdate signals that the agent can fetch its update binary over
+// a separate HTTP(S) request instead of receiving it base64-encoded inside the
+// WebSocket command. The dashboard picks the transport per agent based on this,
+// so old agents (which don't send it) keep getting the base64 payload — the
+// change is fully backward compatible in both directions.
+const CapabilityHTTPUpdate = "http-update"
+
 // AgentInfo is sent by the agent on first connect.
 type AgentInfo struct {
-	Version  string `json:"version"`
-	OS       string `json:"os"`
-	Hostname string `json:"hostname"`
-	IP       string `json:"ip"`
-	PublicIP string `json:"public_ip,omitempty"`
+	Version      string   `json:"version"`
+	OS           string   `json:"os"`
+	Hostname     string   `json:"hostname"`
+	IP           string   `json:"ip"`
+	PublicIP     string   `json:"public_ip,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // HeartbeatPayload is sent periodically by the agent.

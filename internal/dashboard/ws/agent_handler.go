@@ -476,6 +476,10 @@ func (h *AgentHandler) handleAgentInfo(ctx context.Context, serverID string, msg
 		}
 	}
 
+	// Record capabilities so the update handler can pick the right transport
+	// (HTTP download vs. base64-over-WebSocket) per agent.
+	h.hub.SetAgentCapabilities(serverID, info.Capabilities)
+
 	if info.PublicIP == "" {
 		return
 	}

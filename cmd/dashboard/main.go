@@ -352,6 +352,10 @@ func main() {
 	mux.Handle("POST /api/agent/upload", authMw(http.HandlerFunc(updateHandler.HandleUploadBinary)))
 	mux.Handle("GET /api/agent/binaries", authMw(http.HandlerFunc(updateHandler.HandleListBinaries)))
 	mux.Handle("GET /api/agent/version", authMw(http.HandlerFunc(updateHandler.HandleLatestVersion)))
+	// Agent-facing binary download (no browser-session auth — the agent has none;
+	// validated by server_id like the WS upgrade). Lets capable agents pull the
+	// update over HTTP instead of base64-over-WebSocket.
+	mux.HandleFunc("GET /api/agent/binary/{server_id}", updateHandler.HandleAgentBinary)
 	mux.Handle("POST /api/agent/update/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleUpdateAgent)))
 	mux.Handle("POST /api/agent/update/all", authMw(http.HandlerFunc(updateHandler.HandleUpdateAll)))
 	mux.Handle("POST /api/agent/restart/{server_id}", authMw(http.HandlerFunc(updateHandler.HandleRestartAgent)))
