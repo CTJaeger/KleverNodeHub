@@ -50,6 +50,15 @@ const (
 	pingInterval = 25 * time.Second
 	pingTimeout  = 10 * time.Second
 
+	// A single missed pong must not tear down a connection that is still
+	// carrying data. On a busy host (Docker contention) or while the read loop
+	// is pulling a ~15 MB agent-update binary, the pong can arrive late even
+	// though the link is healthy — closing on the first miss dropped agents
+	// mid-update ("failed"). Tolerate this many consecutive misses before
+	// treating the connection as dead; a genuinely half-open link is still
+	// caught within ~maxPingFailures × pingInterval (~60-75s).
+	maxPingFailures = 3
+
 	// If a connection held for at least this long, treat the next disconnect
 	// as a fresh failure and reset the reconnect backoff to the base delay.
 	connStableThreshold = 5 * time.Minute
@@ -257,6 +266,9 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		// Cancelling loopCtx on writer exit propagates the disconnect to the
 		// read loop and to all the other goroutines (poller, discovery).
 		defer loopCancel()
+		// Consecutive ping failures — reset on any successful ping. Only a run
+		// of maxPingFailures closes the connection (see maxPingFailures).
+		pingFailures := 0
 		for {
 			select {
 			case <-loopCtx.Done():
@@ -286,8 +298,17 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 				err := conn.Ping(pingCtx)
 				cancel()
 				if err != nil {
-					log.Printf("ping failed: %v — closing connection", err)
-					return
+					pingFailures++
+					if pingFailures >= maxPingFailures {
+						log.Printf("ping failed %d× in a row: %v — closing connection", pingFailures, err)
+						return
+					}
+					// Transient: the link is likely still carrying data (busy
+					// host or a large agent-update transfer). Tolerate and retry
+					// on the next tick rather than dropping mid-operation.
+					log.Printf("ping failed (%d/%d): %v — tolerating, connection still live", pingFailures, maxPingFailures, err)
+				} else {
+					pingFailures = 0
 				}
 			case msg := <-discoveryMsgCh:
 				if err := writeMessage(loopCtx, conn, msg); err != nil {
