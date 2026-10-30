@@ -29,6 +29,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"config.backups":         {Description: "List backups of a configuration file", RequiresContainer: false},
 	"config.restore":         {Description: "Restore a configuration file from backup", RequiresContainer: false},
 	"config.upgrade":         {Description: "Download and apply new Klever configs during upgrade", RequiresContainer: false},
+	"config.preview":         {Description: "Compare current configs with the new Klever download (read-only)", RequiresContainer: false},
 	"config.version-backups": {Description: "List version-labeled config backups", RequiresContainer: false},
 	"config.version-restore": {Description: "Restore config from a version backup", RequiresContainer: false},
 	"node.logs":              {Description: "Fetch historical logs from a container", RequiresContainer: true},

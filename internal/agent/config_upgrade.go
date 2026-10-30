@@ -32,6 +32,55 @@ type ConfigUpgradeResult struct {
 	MergedFiles    []string `json:"merged_files"`
 	SkippedFiles   []string `json:"skipped_files,omitempty"`
 	DownloadSource string   `json:"download_source"` // "primary" or "fallback"
+	// KeptValues lists the operator's local values written back over the new
+	// defaults; UnappliedKeeps lists requested ones that no longer matched.
+	KeptValues     []string `json:"kept_values,omitempty"`
+	UnappliedKeeps []string `json:"unapplied_keeps,omitempty"`
+}
+
+// PreviewConfigUpgrade downloads the new configs and compares them with the
+// node's current ones without touching anything, so the operator can decide
+// which local values to keep before UpgradeConfigs runs.
+func PreviewConfigUpgrade(ctx context.Context, dataDir, network string) (*ConfigPreview, error) {
+	configDir := filepath.Join(dataDir, "config")
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config directory does not exist: %s", configDir)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "klever-config-preview-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	source, err := downloadNewConfigs(ctx, network, tmpDir)
+	if err != nil {
+		return nil, fmt.Errorf("download configs: %w", err)
+	}
+
+	preview := &ConfigPreview{Items: []ConfigDiffItem{}, DownloadSource: source}
+	files := append(append([]string{}, systemConfigFiles...), userConfigFiles...)
+	for _, fileName := range files {
+		oldData, err := os.ReadFile(filepath.Join(configDir, fileName))
+		if err != nil {
+			continue
+		}
+		newData, err := os.ReadFile(filepath.Join(tmpDir, fileName))
+		if err != nil {
+			continue
+		}
+		entries, added := diffConfigFile(fileName, string(oldData), string(newData))
+		for _, e := range entries {
+			preview.Items = append(preview.Items, e.item)
+		}
+		if added > 0 {
+			if preview.AddedByFile == nil {
+				preview.AddedByFile = map[string]int{}
+			}
+			preview.AddedByFile[fileName] = added
+		}
+	}
+	return preview, nil
 }
 
 // UpgradeConfigs downloads new config files and replaces system configs while
@@ -40,9 +89,10 @@ type ConfigUpgradeResult struct {
 // Steps:
 //  1. Backup all current configs into a version-labeled directory
 //  2. Download new configs (primary: Klever backup server, fallback: GitHub)
-//  3. Replace system configs (yaml, json) completely
+//  3. Replace system configs (yaml, json) with the download, writing back the
+//     local values the operator chose to keep (ids from PreviewConfigUpgrade)
 //  4. Merge config.toml: new defaults + preserved user values
-func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string) (*ConfigUpgradeResult, error) {
+func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string, keep []string) (*ConfigUpgradeResult, error) {
 	configDir := filepath.Join(dataDir, "config")
 	if _, err := os.Stat(configDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("config directory does not exist: %s", configDir)
@@ -76,6 +126,26 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string) 
 	}
 	result.DownloadSource = source
 
+	keepSet := make(map[string]bool, len(keep))
+	for _, id := range keep {
+		keepSet[id] = true
+	}
+	// keepLocal writes the operator's chosen local values back over the
+	// downloaded text; without a choice for the file it returns it untouched.
+	keepLocal := func(fileName string, downloaded []byte) []byte {
+		if len(keepSet) == 0 {
+			return downloaded
+		}
+		oldData, err := os.ReadFile(filepath.Join(configDir, fileName))
+		if err != nil {
+			return downloaded
+		}
+		patched, applied, missed := applyConfigKeeps(fileName, string(oldData), string(downloaded), keepSet)
+		result.KeptValues = append(result.KeptValues, applied...)
+		result.UnappliedKeeps = append(result.UnappliedKeeps, missed...)
+		return []byte(patched)
+	}
+
 	// Step 4: Replace system configs
 	for _, fileName := range systemConfigFiles {
 		srcPath := filepath.Join(tmpDir, fileName)
@@ -87,6 +157,7 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string) 
 			result.SkippedFiles = append(result.SkippedFiles, fileName)
 			continue
 		}
+		srcData = keepLocal(fileName, srcData)
 
 		if err := os.WriteFile(dstPath, srcData, 0644); err != nil {
 			return nil, fmt.Errorf("replace %s: %w", fileName, err)
@@ -106,7 +177,7 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string) 
 			continue
 		}
 
-		content := string(newData)
+		content := string(keepLocal(fileName, newData))
 
 		// Write back user-specific values
 		for key, value := range userValues {

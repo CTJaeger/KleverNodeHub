@@ -34,6 +34,7 @@ var longRunningTimeouts = map[string]time.Duration{
 	// node.provision covers full-DB mode, which downloads tens of GB.
 	"node.provision":   6 * time.Hour,
 	"config.upgrade":   10 * time.Minute,
+	"config.preview":   5 * time.Minute,
 	"server.benchmark": 10 * time.Minute,
 	"node.upgrade":     15 * time.Minute,
 	"node.restore-db":  6 * time.Hour,
@@ -189,6 +190,8 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 		err = e.executeConfigRestore(msg.Payload, result)
 	case "config.upgrade":
 		err = e.executeConfigUpgrade(ctx, msg.Payload, result)
+	case "config.preview":
+		err = e.executeConfigPreview(ctx, msg.Payload, result)
 	case "config.version-backups":
 		err = e.executeConfigVersionBackups(msg.Payload, result)
 	case "config.version-restore":
@@ -803,12 +806,36 @@ func (e *Executor) executeConfigUpgrade(ctx context.Context, payload any, result
 		versionLabel = "unknown"
 	}
 
-	upgradeResult, err := UpgradeConfigs(ctx, dataDir, network, versionLabel)
+	// "keep" is optional: dashboards that predate the preview never send it and
+	// get the plain replace-everything behaviour.
+	keep := extractStringSlice(payload, "keep")
+
+	upgradeResult, err := UpgradeConfigs(ctx, dataDir, network, versionLabel, keep)
 	if err != nil {
 		return err
 	}
 
 	jsonBytes, _ := json.Marshal(upgradeResult)
+	result.Output = string(jsonBytes)
+	return nil
+}
+
+func (e *Executor) executeConfigPreview(ctx context.Context, payload any, result *models.CommandResult) error {
+	dataDir := extractStringField(payload, "data_dir")
+	network := extractStringField(payload, "network")
+	if dataDir == "" {
+		return fmt.Errorf("data_dir is required")
+	}
+	if network == "" {
+		network = "mainnet"
+	}
+
+	preview, err := PreviewConfigUpgrade(ctx, dataDir, network)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, _ := json.Marshal(preview)
 	result.Output = string(jsonBytes)
 	return nil
 }
