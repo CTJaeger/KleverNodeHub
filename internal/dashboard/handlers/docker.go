@@ -321,6 +321,8 @@ func (h *DockerHandler) HandleConfigUpgrade(w http.ResponseWriter, r *http.Reque
 	var req struct {
 		VersionLabel string `json:"version_label"`
 		Network      string `json:"network"`
+		// Keep lists the preview ids of local values the operator chose to keep.
+		Keep []string `json:"keep"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -339,14 +341,74 @@ func (h *DockerHandler) HandleConfigUpgrade(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	payload := map[string]any{
+		"data_dir":      node.DataDirectory,
+		"network":       req.Network,
+		"version_label": req.VersionLabel,
+	}
+	// Only sent when something was chosen, so the payload is unchanged for
+	// agents that predate the keep list.
+	if len(req.Keep) > 0 {
+		payload["keep"] = req.Keep
+	}
+
 	msg := &models.Message{
-		ID:     fmt.Sprintf("cmd-config-upgrade-%d", time.Now().UnixNano()),
+		ID:        fmt.Sprintf("cmd-config-upgrade-%d", time.Now().UnixNano()),
+		Type:      "command",
+		Action:    "config.upgrade",
+		Payload:   payload,
+		Timestamp: time.Now().Unix(),
+	}
+
+	result, err := h.hub.SendCommand(node.ServerID, msg, 3*time.Minute)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleConfigPreview handles POST /api/nodes/{id}/config/preview
+// Compares the node's current configs with the new Klever download (read-only)
+// so the operator can choose which local values to keep. Agents that predate
+// the preview answer {"unsupported": true} and the caller falls back to the
+// plain config upgrade.
+func (h *DockerHandler) HandleConfigPreview(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node, err := h.nodeStore.GetByID(nodeID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "node not found"})
+		return
+	}
+
+	var req struct {
+		Network string `json:"network"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Network == "" {
+		req.Network = "mainnet"
+	}
+
+	if !h.hub.IsConnected(node.ServerID) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent offline"})
+		return
+	}
+	if !h.hub.AgentHasCapability(node.ServerID, models.CapabilityConfigPreview) {
+		writeJSON(w, http.StatusOK, map[string]any{"unsupported": true})
+		return
+	}
+
+	msg := &models.Message{
+		ID:     fmt.Sprintf("cmd-config-preview-%d", time.Now().UnixNano()),
 		Type:   "command",
-		Action: "config.upgrade",
+		Action: "config.preview",
 		Payload: map[string]string{
-			"data_dir":      node.DataDirectory,
-			"network":       req.Network,
-			"version_label": req.VersionLabel,
+			"data_dir": node.DataDirectory,
+			"network":  req.Network,
 		},
 		Timestamp: time.Now().Unix(),
 	}

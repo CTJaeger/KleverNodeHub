@@ -16,6 +16,12 @@ type Message struct {
 // change is fully backward compatible in both directions.
 const CapabilityHTTPUpdate = "http-update"
 
+// CapabilityConfigPreview signals that the agent understands config.preview
+// (compare current vs. new configs) and the "keep" list on config.upgrade. The
+// dashboard only offers the keep/overwrite dialog for agents that advertise it;
+// older agents keep the plain replace-everything config upgrade.
+const CapabilityConfigPreview = "config-preview"
+
 // AgentInfo is sent by the agent on first connect.
 type AgentInfo struct {
 	Version      string   `json:"version"`

@@ -306,6 +306,7 @@ func main() {
 	mux.Handle("GET /api/docker/tags", authMw(http.HandlerFunc(dockerHandler.HandleListTags)))
 	mux.Handle("POST /api/nodes/{id}/restore-db", authMw(http.HandlerFunc(dockerHandler.HandleRestoreDB)))
 	mux.Handle("POST /api/nodes/{id}/reset-db", authMw(http.HandlerFunc(dockerHandler.HandleResetDB)))
+	mux.Handle("POST /api/nodes/{id}/config/preview", authMw(http.HandlerFunc(dockerHandler.HandleConfigPreview)))
 	mux.Handle("POST /api/nodes/{id}/config/upgrade", authMw(http.HandlerFunc(dockerHandler.HandleConfigUpgrade)))
 	mux.Handle("GET /api/nodes/{id}/config/version-backups", authMw(http.HandlerFunc(dockerHandler.HandleConfigVersionBackups)))
 	mux.Handle("POST /api/nodes/{id}/config/version-restore", authMw(http.HandlerFunc(dockerHandler.HandleConfigVersionRestore)))

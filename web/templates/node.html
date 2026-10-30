@@ -476,6 +476,7 @@
     <script src="/static/js/ws.js"></script>
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/agent-update-check.js"></script>
+    <script src="/static/js/config-upgrade.js"></script>
     <script src="/static/js/version.js"></script>
     <script>
         let nodeId = '';
@@ -1478,6 +1479,17 @@
             const action = tag < currentTag ? 'downgrade' : 'upgrade';
             const endpoint = '/api/nodes/' + nodeId + '/' + action;
 
+            // Let the operator keep local config values before anything is replaced.
+            let keepIds = [];
+            let reviewUnsupported = false;
+            if (document.getElementById('upgrade-update-configs').checked) {
+                const review = await ConfigUpgrade.review(
+                    [{ id: nodeId, name: (node && (node.display_name || node.name)) || nodeId }], 'mainnet');
+                if (review.cancelled) return;
+                keepIds = review.keep[nodeId] || [];
+                reviewUnsupported = review.unsupported.length > 0;
+            }
+
             // Show progress
             const progressEl = document.getElementById('upgrade-progress');
             const barEl = document.getElementById('upgrade-bar');
@@ -1509,12 +1521,16 @@
                     statusEl.textContent = 'Updating config files...';
                     const cfgResult = await API.postJSON('/api/nodes/' + nodeId + '/config/upgrade', {
                         version_label: tag,
-                        network: 'mainnet'
+                        network: 'mainnet',
+                        keep: keepIds
                     });
                     if (cfgResult && cfgResult.ok && cfgResult.data && cfgResult.data.success) {
                         try {
                             const detail = JSON.parse(cfgResult.data.output);
-                            statusEl.textContent = 'Configs updated: ' + (detail.replaced_files || []).length + ' replaced, ' + (detail.merged_files || []).length + ' merged (source: ' + (detail.download_source || '?') + ')';
+                            statusEl.textContent = 'Configs updated: ' + (detail.replaced_files || []).length + ' replaced, ' + (detail.merged_files || []).length + ' merged, ' + (detail.kept_values || []).length + ' local values kept (source: ' + (detail.download_source || '?') + ')';
+                            if (reviewUnsupported) {
+                                statusEl.textContent += ' - agent too old to compare configs, all files were replaced';
+                            }
                         } catch(e) {
                             statusEl.textContent = 'Config update completed.';
                         }

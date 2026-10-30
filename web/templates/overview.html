@@ -551,6 +551,7 @@
     <script src="/static/js/ws.js"></script>
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/agent-update-check.js"></script>
+    <script src="/static/js/config-upgrade.js"></script>
     <script src="/static/js/datatable.js"></script>
     <script src="/static/js/version.js"></script>
     <script>
@@ -1725,6 +1726,18 @@
             var nodeNameMap = {};
             (nodes || []).forEach(function(n) { nodeNameMap[n.id] = n.display_name || n.name || n.container_name || n.id; });
 
+            // Let the operator keep local config values before anything is replaced.
+            var keepByNode = {};
+            var reviewUnsupported = [];
+            if (upgradeConfig) {
+                var review = await ConfigUpgrade.review(nodeIds.map(function(id) {
+                    return { id: id, name: nodeNameMap[id] || id };
+                }), 'mainnet');
+                if (review.cancelled) return;
+                keepByNode = review.keep;
+                reviewUnsupported = review.unsupported;
+            }
+
             var btn = document.getElementById('batch-upgrade-btn');
             var progressWrap = document.getElementById('batch-upgrade-progress');
             var progressBar = document.getElementById('batch-upgrade-progress-bar');
@@ -1779,7 +1792,7 @@
                     var sid = succeeded[j];
                     updateProgress(j, nodeNameMap[sid] || sid, 'Config update');
                     try {
-                        await API.postJSON('/api/nodes/' + sid + '/config/upgrade', { version_label: tag });
+                        await API.postJSON('/api/nodes/' + sid + '/config/upgrade', { version_label: tag, keep: keepByNode[sid] || [] });
                     } catch (e) { /* best effort */ }
                 }
                 updateProgress(succeeded.length, null);
@@ -1801,6 +1814,9 @@
             }
             if (upgradeConfig && succeeded.length > 0) {
                 html += '<br>Config update complete.';
+                if (reviewUnsupported.length > 0) {
+                    html += '<br>' + reviewUnsupported.length + ' node(s) run an agent that cannot compare configs yet; all their config files were replaced.';
+                }
             }
             statusEl.innerHTML = html;
             statusEl.classList.remove('hidden');

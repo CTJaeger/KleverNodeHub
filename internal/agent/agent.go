@@ -172,7 +172,7 @@ func (a *Agent) BuildAgentInfo(publicIP string) *models.AgentInfo {
 		OS:           runtime.GOOS + "/" + runtime.GOARCH,
 		Hostname:     hostname,
 		PublicIP:     publicIP,
-		Capabilities: []string{models.CapabilityHTTPUpdate},
+		Capabilities: []string{models.CapabilityHTTPUpdate, models.CapabilityConfigPreview},
 	}
 }
 
