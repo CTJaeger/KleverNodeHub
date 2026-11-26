@@ -227,12 +227,17 @@ func main() {
 	regressionDetector := alerting.NewRegressionDetector(versionHistoryStore, metricsStore, nodeStore, alertStore, notifyManager)
 	regressionDetector.Start()
 	updateStore := dashboard.NewUpdateStore(*dataDir)
-	versionChecker := dashboard.NewVersionChecker("CTJaeger", "KleverNodeHub")
+	// Development continues at Test0rMaik/KleverNodeHub: the dashboard updates
+	// from there. The releases here stay listed for the bridge step (agents
+	// before v0.3.93 trust only this repository's key, see agentBridgeVersion).
+	versionChecker := dashboard.NewVersionChecker("Test0rMaik", "KleverNodeHub")
+	versionChecker.AddReleaseSource("CTJaeger", "KleverNodeHub")
 	versionChecker.Start()
 	updateHandler := handlers.NewUpdateHandler(hub, updateStore, serverStore, versionChecker)
 	updateHandler.SetAllowUnsignedBinaries(*allowUnsignedAgents)
 	settingsHandler := handlers.NewSettingsHandler(settingsStore)
 	systemHandler := handlers.NewSystemHandler(versionChecker)
+	systemHandler.SetServerStore(serverStore)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 

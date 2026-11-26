@@ -1,5 +1,7 @@
 # Klever Node Hub
 
+> **Development has moved to [Test0rMaik/KleverNodeHub](https://github.com/Test0rMaik/KleverNodeHub).** v0.3.93 is the last release here. Dashboards and agents on v0.3.93 update from the new repository; new installs should use it directly.
+
 [![CI](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml/badge.svg)](https://github.com/CTJaeger/KleverNodeHub/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Docker Hub](https://img.shields.io/docker/v/ctjaeger/klever-node-hub?label=Docker&logo=docker)](https://hub.docker.com/r/ctjaeger/klever-node-hub)

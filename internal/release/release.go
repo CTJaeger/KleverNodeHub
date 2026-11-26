@@ -20,9 +20,15 @@ import (
 	"testing"
 )
 
-// PublicKeyHex is the release signing public key (hex, 32 bytes). The private
-// key exists only as the RELEASE_SIGNING_KEY secret of the release workflow.
+// PublicKeyHex is the release signing public key of CTJaeger/KleverNodeHub
+// (hex, 32 bytes). The private key exists only as the RELEASE_SIGNING_KEY
+// secret of that repository's release workflow.
 const PublicKeyHex = "09c49585f3d0c468847a0f5522f762f89782ab8b67a0b71760c339c78d7b32d5"
+
+// SuccessorKeyHex is the release signing public key of Test0rMaik/KleverNodeHub,
+// where development continues. Releases signed with it are accepted too, so
+// dashboards and agents move there through a normal update.
+const SuccessorKeyHex = "816dd6ccbf7e03bdf54e72fa38e2837ec05655605d828f16eed788f198a4a134"
 
 // ChecksumsFile and SignatureFile are the release asset names. The signature
 // name must not contain "checksums": dashboards up to v0.3.88 pick the first
@@ -35,8 +41,19 @@ const (
 // ErrUnsigned means there is no signature to check against.
 var ErrUnsigned = errors.New("release is not signed")
 
-// publicKey is a variable so tests can substitute their own key.
-var publicKey = mustParseKey(PublicKeyHex)
+// publicKeys are the trusted release keys; a variable so tests can substitute
+// their own key.
+var publicKeys = trustedKeys(PublicKeyHex, SuccessorKeyHex)
+
+func trustedKeys(hexKeys ...string) []ed25519.PublicKey {
+	var keys []ed25519.PublicKey
+	for _, h := range hexKeys {
+		if k := mustParseKey(h); k != nil {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
 
 func mustParseKey(h string) ed25519.PublicKey {
 	b, err := hex.DecodeString(h)
@@ -51,17 +68,19 @@ func VerifyChecksums(checksums, sigB64 []byte) error {
 	if len(bytes.TrimSpace(sigB64)) == 0 {
 		return ErrUnsigned
 	}
-	if publicKey == nil {
+	if len(publicKeys) == 0 {
 		return errors.New("no release public key compiled into this binary")
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigB64)))
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return errors.New("malformed release signature")
 	}
-	if !ed25519.Verify(publicKey, checksums, sig) {
-		return errors.New("release signature does not match")
+	for _, k := range publicKeys {
+		if ed25519.Verify(k, checksums, sig) {
+			return nil
+		}
 	}
-	return nil
+	return errors.New("release signature does not match")
 }
 
 // ExpectedHash returns the sha256 listed for asset in a checksums.txt file.
@@ -134,7 +153,7 @@ func SwapPublicKeyForTest(pub ed25519.PublicKey) (restore func()) {
 	if !testing.Testing() {
 		panic("release.SwapPublicKeyForTest called outside a test")
 	}
-	old := publicKey
-	publicKey = pub
-	return func() { publicKey = old }
+	old := publicKeys
+	publicKeys = []ed25519.PublicKey{pub}
+	return func() { publicKeys = old }
 }
