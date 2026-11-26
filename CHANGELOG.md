@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (v0.3.91)
+- **Security Check in Settings → Security**: "Run Check" lists findings from the dashboard data — login methods, servers whose agent reports a version that is not a release, stored agent binaries without a release signature. "Check Servers" asks every connected agent (v0.3.91+) to look for files known from intrusions and to report the checksum of its own program, which the dashboard compares with the signed release. The check only reads and reports: the dashboard removes or changes nothing on its own, what to do about a finding is the operator's decision. An agent that was replaced can lie, so this complements `scripts/check-compromise.sh`, it does not replace it.
+- **Agents prove who they are**: an agent signs every WebSocket connect with the key from its registration (timestamp + nonce, replay-protected). Until now the server ID alone was enough to connect as an agent. Agents that predate this keep working; after an agent has connected signed once, unsigned connects for that server are refused.
+- **Stored agent binaries without a release signature are no longer handed to agents** (unless the dashboard runs with `--allow-unsigned-agent-binaries`). They stay on disk; download the release again in Agent Update to get a signed copy.
+- The dashboard logs a warning when an agent reports a version that is not a release.
+
+  **Both sides change** (agent + dashboard). Update the dashboard first, then the agents.
+
 ### 2026-11-26 (compromise check)
 - **New `scripts/check-compromise.sh`**: a read-only check for operators whose dashboard was reachable from the internet before v0.3.89. Run it as root on the dashboard host and on every node server (`curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/check-compromise.sh | sudo bash`). It searches for attacker files, compares the running dashboard/agent programs and the agent binaries stored in the dashboard with the official release checksums, lists passkeys, the linked wallet and registered servers from the dashboard database (flagging agents that report a non-release version) and scans the dashboard and agent logs for non-release agent builds. Exit code 1 if anything is flagged. A clean result is not proof, and updating alone does not remove someone who already got in.
 

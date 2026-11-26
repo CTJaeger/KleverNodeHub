@@ -310,4 +310,10 @@ var migrations = []string{
 		evaluated   INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX IF NOT EXISTS idx_node_version_history_node ON node_version_history(node_id, detected_at);`,
+
+	// Migration 9: signed_auth — set once an agent has connected with a valid
+	// signed WebSocket upgrade. From then on unsigned connects for that server
+	// are rejected (agent-impersonation protection, with a smooth upgrade path
+	// for agents that do not sign yet).
+	`ALTER TABLE servers ADD COLUMN signed_auth INTEGER NOT NULL DEFAULT 0;`,
 }

@@ -38,6 +38,7 @@ var longRunningTimeouts = map[string]time.Duration{
 	"node.provision":   6 * time.Hour,
 	"config.upgrade":   10 * time.Minute,
 	"config.preview":   5 * time.Minute,
+	"security.check":   3 * time.Minute,
 	"server.benchmark": 10 * time.Minute,
 	"node.upgrade":     15 * time.Minute,
 	"node.restore-db":  6 * time.Hour,
@@ -226,6 +227,9 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 		err = e.executeConfigUpgrade(ctx, msg.Payload, result)
 	case "config.preview":
 		err = e.executeConfigPreview(ctx, msg.Payload, result)
+	case "security.check":
+		jsonBytes, _ := json.Marshal(RunSecurityCheck(ctx))
+		result.Output = string(jsonBytes)
 	case "config.version-backups":
 		err = e.executeConfigVersionBackups(msg.Payload, result)
 	case "config.version-restore":

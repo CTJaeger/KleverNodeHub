@@ -22,6 +22,20 @@ const CapabilityHTTPUpdate = "http-update"
 // older agents keep the plain replace-everything config upgrade.
 const CapabilityConfigPreview = "config-preview"
 
+// CapabilitySecurityCheck signals that the agent understands security.check
+// (look for known attacker files, report the checksum of its own program).
+const CapabilitySecurityCheck = "security-check"
+
+// SecurityCheckReport is the agent's answer to security.check.
+type SecurityCheckReport struct {
+	Files     []string `json:"files"`
+	ExeSHA256 string   `json:"exe_sha256"`
+	Version   string   `json:"version"`
+	GOOS      string   `json:"goos"`
+	GOARCH    string   `json:"goarch"`
+	Truncated bool     `json:"truncated,omitempty"`
+}
+
 // AgentInfo is sent by the agent on first connect.
 type AgentInfo struct {
 	Version      string   `json:"version"`

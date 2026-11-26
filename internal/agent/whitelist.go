@@ -41,6 +41,7 @@ var AllowedCommands = map[string]CommandSpec{
 	"key.backups":            {Description: "List validator key backups", RequiresContainer: false},
 	"agent.update":           {Description: "Update agent binary", RequiresContainer: false},
 	"agent.restart":          {Description: "Restart the agent process", RequiresContainer: false},
+	"security.check":         {Description: "Look for known attacker files and report the agent's own checksum (read-only)", RequiresContainer: false},
 	"server.benchmark":       {Description: "Run server hardware benchmark", RequiresContainer: false},
 }
 

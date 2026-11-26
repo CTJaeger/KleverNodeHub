@@ -2,18 +2,27 @@ package ws
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
+
+// releaseVersion matches release tags; an agent reporting anything else was not
+// installed from a release.
+var releaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 
 // AgentHandler handles WebSocket connections from agents.
 type AgentHandler struct {
@@ -23,6 +32,11 @@ type AgentHandler struct {
 	metricsStore *store.MetricsStore
 	versionStore *store.VersionHistoryStore
 	geoResolver  *dashboard.GeoIPResolver
+
+	requireSigned func() bool
+	authMu        sync.Mutex
+	seenNonces    map[string]time.Time // serverID|nonce → expiry (replay cache)
+	lastAuthLog   map[string]time.Time // per-server auth log throttle
 }
 
 // NewAgentHandler creates a new WebSocket handler for agent connections.
@@ -47,14 +61,19 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify server exists
-	if _, err := h.serverStore.GetByID(serverID); err != nil {
-		http.Error(w, "unknown server", http.StatusUnauthorized)
+	srv, err := h.serverStore.GetByID(serverID)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized) // same body as a failed signature: no server-ID oracle
+		return
+	}
+	if !h.authenticateAgent(r, srv) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	// Upgrade to WebSocket
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // We validate via server_id; mTLS will be added later
+		InsecureSkipVerify: true, // origin check off: agents are non-browser clients, authenticated by signature (authenticateAgent)
 	})
 	if err != nil {
 		log.Printf("websocket upgrade failed for %s: %v", serverID, err)
@@ -104,6 +123,107 @@ func (h *AgentHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	_ = conn.Close(websocket.StatusNormalClosure, "closing")
 	log.Printf("agent WebSocket disconnected: %s", serverID)
 }
+
+// authenticateAgent proves the connecting client owns the server's private key.
+// The agent signs "server_id + timestamp + nonce" with the key issued at
+// registration; we verify against the public key in the certificate stored for
+// that server and remember the nonce so a captured header can't be replayed.
+// Works identically with and without a TLS-terminating reverse proxy (unlike
+// client-cert checks). Agents that predate signing are still accepted until
+// their first signed connect (or until the operator sets
+// require_signed_agent_auth), after which unsigned connects are refused so the
+// server_id alone can never be used to impersonate an upgraded agent.
+func (h *AgentHandler) authenticateAgent(r *http.Request, srv *models.Server) bool {
+	sigB64 := r.Header.Get("X-Agent-Signature")
+	signedOnly, err := h.serverStore.RequiresSignedAuth(srv.ID)
+	if err != nil {
+		log.Printf("agent %s: rejected upgrade (fail closed): %v", srv.ID, err)
+		return false
+	}
+
+	if sigB64 == "" {
+		if signedOnly || (h.requireSigned != nil && h.requireSigned()) {
+			h.logAuthEvent(srv.ID, "rejected unsigned WebSocket upgrade (signed auth required)")
+			return false
+		}
+		h.logAuthEvent(srv.ID, "unsigned WebSocket upgrade accepted (legacy agent — update it to enable signed auth)")
+		return true
+	}
+
+	ts, err := strconv.ParseInt(r.Header.Get("X-Agent-Timestamp"), 10, 64)
+	if err != nil {
+		h.logAuthEvent(srv.ID, "rejected upgrade: bad timestamp header")
+		return false
+	}
+	nonce := r.Header.Get("X-Agent-Nonce")
+	cert, err := crypto.DecodeCertPEM(srv.Certificate)
+	if err != nil {
+		h.logAuthEvent(srv.ID, "rejected upgrade: stored certificate unusable: "+err.Error())
+		return false
+	}
+	pub, ok := cert.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		h.logAuthEvent(srv.ID, "rejected upgrade: certificate key is not Ed25519")
+		return false
+	}
+	now := time.Now()
+	if err := crypto.VerifyAgentAuth(pub, srv.ID, ts, nonce, sigB64, now); err != nil {
+		h.logAuthEvent(srv.ID, "rejected upgrade: "+err.Error())
+		return false
+	}
+	if !h.rememberNonce(srv.ID, nonce, now) {
+		h.logAuthEvent(srv.ID, "rejected upgrade: replayed nonce")
+		return false
+	}
+	if !signedOnly {
+		if err := h.serverStore.MarkSignedAuth(srv.ID); err != nil {
+			log.Printf("agent %s: %v", srv.ID, err)
+		}
+	}
+	return true
+}
+
+// rememberNonce records a nonce and reports false if it was already used within
+// the validity window (replay). Entries are pruned as they expire.
+func (h *AgentHandler) rememberNonce(serverID, nonce string, now time.Time) bool {
+	h.authMu.Lock()
+	defer h.authMu.Unlock()
+	if h.seenNonces == nil {
+		h.seenNonces = make(map[string]time.Time)
+	}
+	for k, exp := range h.seenNonces {
+		if now.After(exp) {
+			delete(h.seenNonces, k)
+		}
+	}
+	key := serverID + "|" + nonce
+	if _, dup := h.seenNonces[key]; dup {
+		return false
+	}
+	h.seenNonces[key] = now.Add(2 * crypto.AgentAuthMaxSkew)
+	return true
+}
+
+// logAuthEvent logs an auth decision at most once per server per minute so a
+// flood of connection attempts can't flood the log.
+func (h *AgentHandler) logAuthEvent(serverID, msg string) {
+	h.authMu.Lock()
+	if h.lastAuthLog == nil {
+		h.lastAuthLog = make(map[string]time.Time)
+	}
+	last := h.lastAuthLog[serverID]
+	if time.Since(last) < time.Minute {
+		h.authMu.Unlock()
+		return
+	}
+	h.lastAuthLog[serverID] = time.Now()
+	h.authMu.Unlock()
+	log.Printf("agent %s: %s", serverID, msg)
+}
+
+// SetRequireSignedAuth installs a predicate (typically a settings lookup) that,
+// when true, refuses unsigned agent connections for every server.
+func (h *AgentHandler) SetRequireSignedAuth(fn func() bool) { h.requireSigned = fn }
 
 // readLoop reads messages from the WebSocket and dispatches them.
 //
@@ -473,6 +593,9 @@ func (h *AgentHandler) handleAgentInfo(ctx context.Context, serverID string, msg
 			srv.AgentVersion = info.Version
 			_ = h.serverStore.Update(srv)
 			log.Printf("agent %s version updated to %s", serverID, info.Version)
+			if !releaseVersion.MatchString(info.Version) {
+				log.Printf("WARNING: agent %s reports version %q, which is not a release — check this server", serverID, info.Version)
+			}
 		}
 	}
 

@@ -236,6 +236,8 @@ func main() {
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
+	securityHandler := handlers.NewSecurityHandler(authHandler, serverStore, updateStore, hub)
+
 	// First-run wizard token: only someone who can read this log may claim
 	// a fresh install. A new one is made on every start until setup is done.
 	if setupToken, err := crypto.RandomHex(16); err != nil {
@@ -327,6 +329,8 @@ func main() {
 	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
 	mux.Handle("PUT /api/auth/password", authMw(http.HandlerFunc(authHandler.HandleChangePassword)))
 	mux.Handle("POST /api/auth/logout-all", authMw(http.HandlerFunc(authHandler.HandleLogoutAll)))
+	mux.Handle("GET /api/security/check", authMw(http.HandlerFunc(securityHandler.HandleCheck)))
+	mux.Handle("POST /api/security/check/servers", authMw(http.HandlerFunc(securityHandler.HandleCheckServers)))
 	mux.Handle("GET /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverStatus)))
 	mux.Handle("POST /api/setup/klever/challenge", authMw(http.HandlerFunc(authHandler.HandleKleverSetupChallenge)))
 	mux.Handle("POST /api/setup/klever", authMw(http.HandlerFunc(authHandler.HandleKleverSetup)))
