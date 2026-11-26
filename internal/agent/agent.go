@@ -10,11 +10,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
@@ -31,6 +34,15 @@ type Config struct {
 	KeyPEM       string `json:"key_pem"`
 	CACertPEM    string `json:"ca_cert_pem"`
 	AgentPort    int    `json:"agent_port,omitempty"`
+
+	// AllowUnsignedUpdates lets the hub install agent binaries that are not
+	// part of a signed release. Only set by hand on the agent host: no hub
+	// command can write this file, so a compromised hub cannot enable it.
+	AllowUnsignedUpdates bool `json:"allow_unsigned_updates,omitempty"`
+
+	// AllowedDataRoots, if set, limits the node data directories the hub may
+	// use (config writes, key operations, container mounts). Local-only too.
+	AllowedDataRoots []string `json:"allowed_data_roots,omitempty"`
 }
 
 // Agent is the main agent process.
@@ -132,7 +144,9 @@ func (a *Agent) IsRegistered() bool {
 }
 
 // Register performs initial registration with the dashboard.
-func (a *Agent) Register(dashboardURL, token string) error {
+// caFingerprint (SHA-256 of the hub CA, from the install command) pins the hub
+// when its certificate is not publicly trusted, i.e. a direct connection.
+func (a *Agent) Register(dashboardURL, token, caFingerprint string) error {
 	a.config = &Config{
 		DashboardURL: dashboardURL,
 	}
@@ -146,9 +160,15 @@ func (a *Agent) Register(dashboardURL, token string) error {
 		IP:       "", // Will be filled by dashboard from connection
 	}
 
-	resp, err := registerWithDashboard(dashboardURL, req)
+	resp, err := registerWithDashboard(dashboardURL, req, caFingerprint)
 	if err != nil {
 		return fmt.Errorf("registration failed: %w", err)
+	}
+	if caFingerprint != "" {
+		ca, err := crypto.DecodeCertPEM([]byte(resp.CACertPEM))
+		if err != nil || !strings.EqualFold(crypto.Fingerprint(ca), caFingerprint) {
+			return fmt.Errorf("dashboard returned a CA that does not match --ca-fingerprint")
+		}
 	}
 
 	a.config.ServerID = resp.ServerID
@@ -241,8 +261,63 @@ func (a *Agent) BuildDiscoveryMessage(report *models.DiscoveryReport) *models.Me
 	}
 }
 
+// registrationTLSConfig verifies the dashboard before the token is sent: either
+// its certificate is publicly trusted for the URL's host (reverse proxy with a
+// real certificate), or the chain contains the CA pinned by caFingerprint and
+// the leaf is signed by it (direct connection to the self-signed dashboard).
+func registrationTLSConfig(dashboardURL, caFingerprint string) (*tls.Config, error) {
+	u, err := url.Parse(dashboardURL)
+	if err != nil || u.Hostname() == "" {
+		return nil, fmt.Errorf("invalid dashboard URL %q", dashboardURL)
+	}
+	host := u.Hostname()
+	sysPool, _ := x509.SystemCertPool()
+	if sysPool == nil {
+		sysPool = x509.NewCertPool()
+	}
+	return &tls.Config{
+		ServerName:         host,
+		MinVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: true, //nolint:gosec // VerifyPeerCertificate below enforces trust
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return fmt.Errorf("dashboard sent no certificate")
+			}
+			certs := make([]*x509.Certificate, 0, len(rawCerts))
+			for _, raw := range rawCerts {
+				c, err := x509.ParseCertificate(raw)
+				if err != nil {
+					return fmt.Errorf("parse dashboard certificate: %w", err)
+				}
+				certs = append(certs, c)
+			}
+			inter := x509.NewCertPool()
+			for _, c := range certs[1:] {
+				inter.AddCert(c)
+			}
+			if _, err := certs[0].Verify(x509.VerifyOptions{Roots: sysPool, Intermediates: inter, DNSName: host}); err == nil {
+				return nil
+			}
+			if caFingerprint == "" {
+				return fmt.Errorf("dashboard certificate is not publicly trusted for %q: pass --ca-fingerprint from the dashboard's install command", host)
+			}
+			for _, c := range certs[1:] {
+				if !strings.EqualFold(crypto.Fingerprint(c), caFingerprint) {
+					continue
+				}
+				roots := x509.NewCertPool()
+				roots.AddCert(c)
+				if _, err := certs[0].Verify(x509.VerifyOptions{Roots: roots, DNSName: "localhost"}); err == nil {
+					return nil
+				}
+			}
+			return fmt.Errorf("dashboard certificate does not match --ca-fingerprint: refusing to send the registration token")
+		},
+	}, nil
+}
+
 // registerWithDashboard performs the HTTP-based registration with the dashboard.
-func registerWithDashboard(dashboardURL string, req *models.RegistrationRequest) (*models.RegistrationResponse, error) {
+func registerWithDashboard(dashboardURL string, req *models.RegistrationRequest, caFingerprint string) (*models.RegistrationResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -250,12 +325,13 @@ func registerWithDashboard(dashboardURL string, req *models.RegistrationRequest)
 
 	url := dashboardURL + "/api/agent/register"
 
-	// Skip TLS verification for initial registration (dashboard uses self-signed cert)
+	tlsCfg, err := registrationTLSConfig(dashboardURL, caFingerprint)
+	if err != nil {
+		return nil, err
+	}
 	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed cert during registration
-		},
+		Timeout:   30 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
 	}
 
 	httpResp, err := client.Post(url, "application/json", bytes.NewReader(body))

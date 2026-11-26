@@ -76,9 +76,14 @@ func TestKleverChallengeNoAddress(t *testing.T) {
 
 func TestKleverChallengeMismatch(t *testing.T) {
 	km := NewKleverAuthManager("klv1qqqqqqqqqqqqqpgq0khua5d0eqte54nyelum6veygkl6unjc64fsu2fxfp")
-	_, err := km.CreateChallenge("klv1v9mcl3m25tymxzs2tu3zztp7y5ceg3yy9z2glj5wykywanf564fsd5djjt")
-	if err != ErrAddressMismatch {
-		t.Errorf("expected ErrAddressMismatch, got %v", err)
+	// A wrong address must look like a right one (no admin-wallet oracle),
+	// but its challenge is never stored, so it can't be used to log in.
+	nonce, err := km.CreateChallenge("klv1v9mcl3m25tymxzs2tu3zztp7y5ceg3yy9z2glj5wykywanf564fsd5djjt")
+	if err != nil || nonce == "" {
+		t.Fatalf("expected an indistinguishable challenge, got %q, %v", nonce, err)
+	}
+	if len(km.challenges) != 0 {
+		t.Error("challenge for a non-admin address was stored")
 	}
 }
 

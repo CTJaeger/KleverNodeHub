@@ -152,3 +152,14 @@ func TestNewHub_CreatesDBFile(t *testing.T) {
 	}
 	_ = hub
 }
+
+func TestDisconnectBrowsers(t *testing.T) {
+	hub := NewHub(nil, nil)
+	c := hub.RegisterBrowser("b1")
+	hub.DisconnectBrowsers()
+	if _, open := <-c.SendCh; open {
+		t.Error("browser channel still open after DisconnectBrowsers")
+	}
+	hub.UnregisterBrowser("b1")       // handler cleanup afterwards must not double-close
+	hub.BroadcastToBrowsers("x", nil) // and nothing is left to send to
+}

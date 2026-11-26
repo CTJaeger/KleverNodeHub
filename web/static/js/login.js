@@ -27,19 +27,12 @@ async function init() {
     }
 }
 
-// Setup wizard step 1 → step 2 (password)
-async function setupDashboardName() {
-    const name = document.getElementById('setup-dashboard-name').value.trim() || 'Klever Node Hub';
+// Setup wizard step 1 → step 2 (password). The name is saved once the
+// password step has logged us in: settings need a session.
+let setupName = 'Klever Node Hub';
+function setupDashboardName() {
+    setupName = document.getElementById('setup-dashboard-name').value.trim() || 'Klever Node Hub';
     clearAlerts();
-    try {
-        await fetch('/api/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dashboard_name: name })
-        });
-    } catch (_) {
-        // Settings save is best-effort during setup (no JWT yet)
-    }
     hide('setup-name-section');
     show('setup-password-section');
 }
@@ -59,9 +52,16 @@ async function setupPassword() {
         return;
     }
 
-    const result = await API.postJSON('/api/setup/password', { password });
+    const setupToken = document.getElementById('setup-token').value.trim();
+    if (!setupToken) {
+        showError('Enter the setup token from the dashboard log');
+        return;
+    }
+
+    const result = await API.postJSON('/api/setup/password', { password, setup_token: setupToken });
     if (result && result.ok) {
         API.setToken(result.data.access_token);
+        await API.put('/api/settings', { dashboard_name: setupName }); // best-effort
         hide('setup-password-section');
         // Show passkey setup only if WebAuthn is available
         if (Passkey.isSupported()) {

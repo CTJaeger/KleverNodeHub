@@ -38,7 +38,57 @@ type WebAuthnManager struct {
 	credentials []PasskeyCredential
 	instanceID  string // Unique per-dashboard instance; prevents passkey collisions on same RP ID
 	// Session data for ongoing ceremonies (in-memory, short-lived)
-	sessions map[string]*webauthn.SessionData
+	sessions map[string]ceremony
+}
+
+// A begun ceremony must be finished within ceremonyTTL; at most maxCeremonies
+// may be pending, so unauthenticated begin calls can't fill memory.
+const (
+	ceremonyTTL   = 5 * time.Minute
+	maxCeremonies = 1000
+)
+
+type ceremony struct {
+	data    *webauthn.SessionData
+	expires time.Time
+}
+
+// putSession stores a begun ceremony and returns its ID. Lock must be held.
+func (wm *WebAuthnManager) putSession(data *webauthn.SessionData) string {
+	now := time.Now()
+	for id, c := range wm.sessions {
+		if now.After(c.expires) {
+			delete(wm.sessions, id)
+		}
+	}
+	// Full: drop the oldest instead of refusing, so flooding the public begin
+	// routes can't lock the owner out of passkey login.
+	if len(wm.sessions) >= maxCeremonies {
+		var oldestID string
+		var oldest time.Time
+		for id, c := range wm.sessions {
+			if oldestID == "" || c.expires.Before(oldest) {
+				oldestID, oldest = id, c.expires
+			}
+		}
+		delete(wm.sessions, oldestID)
+	}
+	id := generateSessionID()
+	wm.sessions[id] = ceremony{data: data, expires: now.Add(ceremonyTTL)}
+	return id
+}
+
+// takeSession removes and returns an unexpired ceremony. Lock must be held.
+func (wm *WebAuthnManager) takeSession(id string) (*webauthn.SessionData, bool) {
+	c, ok := wm.sessions[id]
+	if !ok {
+		return nil, false
+	}
+	delete(wm.sessions, id)
+	if time.Now().After(c.expires) {
+		return nil, false
+	}
+	return c.data, true
 }
 
 // WebAuthnConfig holds configuration for WebAuthn initialization.
@@ -89,7 +139,7 @@ func NewWebAuthnManager(config WebAuthnConfig, credentials []PasskeyCredential) 
 		wa:          wa,
 		credentials: credentials,
 		instanceID:  instanceID,
-		sessions:    make(map[string]*webauthn.SessionData),
+		sessions:    make(map[string]ceremony),
 	}, nil
 }
 
@@ -106,10 +156,7 @@ func (wm *WebAuthnManager) BeginRegistration(passkeyName string) (*protocol.Cred
 		return nil, "", fmt.Errorf("begin registration: %w", err)
 	}
 
-	sessionID := generateSessionID()
-	wm.sessions[sessionID] = session
-
-	return options, sessionID, nil
+	return options, wm.putSession(session), nil
 }
 
 // FinishRegistration completes a passkey registration ceremony.
@@ -117,11 +164,10 @@ func (wm *WebAuthnManager) FinishRegistration(sessionID string, response *protoc
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	session, ok := wm.sessions[sessionID]
+	session, ok := wm.takeSession(sessionID)
 	if !ok {
 		return fmt.Errorf("invalid or expired session")
 	}
-	delete(wm.sessions, sessionID)
 
 	user := wm.buildUser()
 
@@ -159,10 +205,7 @@ func (wm *WebAuthnManager) BeginLogin() (*protocol.CredentialAssertion, string, 
 		return nil, "", fmt.Errorf("begin login: %w", err)
 	}
 
-	sessionID := generateSessionID()
-	wm.sessions[sessionID] = session
-
-	return options, sessionID, nil
+	return options, wm.putSession(session), nil
 }
 
 // FinishLogin completes a passkey authentication ceremony.
@@ -170,11 +213,10 @@ func (wm *WebAuthnManager) FinishLogin(sessionID string, response *protocol.Pars
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	session, ok := wm.sessions[sessionID]
+	session, ok := wm.takeSession(sessionID)
 	if !ok {
 		return fmt.Errorf("invalid or expired session")
 	}
-	delete(wm.sessions, sessionID)
 
 	user := wm.buildUser()
 

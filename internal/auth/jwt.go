@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,6 +26,7 @@ type TokenPair struct {
 
 // JWTManager handles JWT token creation and validation.
 type JWTManager struct {
+	mu         sync.RWMutex
 	signingKey []byte
 }
 
@@ -37,6 +39,20 @@ func NewJWTManager(signingKey []byte) (*JWTManager, error) {
 	key := make([]byte, len(signingKey))
 	copy(key, signingKey)
 	return &JWTManager{signingKey: key}, nil
+}
+
+// SetSigningKey replaces the signing key. Every token issued with the old key
+// stops validating at once: this is how all sessions are ended.
+func (jm *JWTManager) SetSigningKey(signingKey []byte) error {
+	if len(signingKey) < 32 {
+		return fmt.Errorf("signing key must be at least 32 bytes")
+	}
+	key := make([]byte, len(signingKey))
+	copy(key, signingKey)
+	jm.mu.Lock()
+	jm.signingKey = key
+	jm.mu.Unlock()
+	return nil
 }
 
 // GenerateSigningKey creates a cryptographically random 32-byte signing key.
@@ -187,7 +203,9 @@ func (jm *JWTManager) validateToken(token string) (*JWTClaims, error) {
 }
 
 func (jm *JWTManager) sign(data []byte) []byte {
+	jm.mu.RLock()
 	mac := hmac.New(sha256.New, jm.signingKey)
+	jm.mu.RUnlock()
 	mac.Write(data)
 	return mac.Sum(nil)
 }

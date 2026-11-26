@@ -13,8 +13,14 @@ import (
 
 // BrowserHandler handles WebSocket connections from browser clients.
 type BrowserHandler struct {
-	hub *Hub
+	hub            *Hub
+	originPatterns []string
 }
+
+// SetOriginPatterns lists the hosts (besides the request's own Host) whose
+// pages may open the browser WebSocket, e.g. the public --domain behind a
+// reverse proxy that rewrites Host.
+func (h *BrowserHandler) SetOriginPatterns(p []string) { h.originPatterns = p }
 
 // NewBrowserHandler creates a new WebSocket handler for browser connections.
 func NewBrowserHandler(hub *Hub) *BrowserHandler {
@@ -23,8 +29,10 @@ func NewBrowserHandler(hub *Hub) *BrowserHandler {
 
 // HandleUpgrade upgrades an HTTP connection to WebSocket for browser clients.
 func (h *BrowserHandler) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
+	// Origin is checked (cross-site pages must not ride the session cookie);
+	// same-host origins are always allowed by the library.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
+		OriginPatterns: h.originPatterns,
 	})
 	if err != nil {
 		log.Printf("browser websocket upgrade failed: %v", err)

@@ -188,3 +188,39 @@ func TestUpdateStoreIndexFile(t *testing.T) {
 		t.Error("index.json not created")
 	}
 }
+
+func TestUpdateStoreRejectsPathLikeNames(t *testing.T) {
+	s := NewUpdateStore(t.TempDir())
+	for _, bad := range []string{"../evil", "v1/x", `v1\x`, "..", ""} {
+		if _, err := s.Store(bad, "linux", "amd64", []byte("x")); err == nil {
+			t.Errorf("version %q accepted", bad)
+		}
+		if _, err := s.Store("v1.0.0", bad, "amd64", []byte("x")); err == nil {
+			t.Errorf("os %q accepted", bad)
+		}
+	}
+}
+
+func TestUpdateStoreKeepsReleaseSignature(t *testing.T) {
+	dir := t.TempDir()
+	s := NewUpdateStore(dir)
+	if _, err := s.StoreRelease("v1.0.0", "linux", "amd64", []byte("bin"), "klever-agent-linux-amd64", []byte("sums"), []byte("sig\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store("v1.0.1", "linux", "amd64", []byte("upload")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Survives a restart: agents get the signature from the reloaded index.
+	_, info, err := NewUpdateStore(dir).GetBinaryVersion("v1.0.0", "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Signed() || info.Signature != "sig" || info.Checksums != "sums" || info.Asset != "klever-agent-linux-amd64" {
+		t.Errorf("release provenance lost: %+v", info)
+	}
+	_, upload, _ := NewUpdateStore(dir).GetBinaryVersion("v1.0.1", "linux", "amd64")
+	if upload == nil || upload.Signed() {
+		t.Error("uploaded binary must not count as signed")
+	}
+}

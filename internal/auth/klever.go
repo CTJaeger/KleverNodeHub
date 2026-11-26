@@ -91,9 +91,6 @@ func (k *KleverAuthManager) CreateChallenge(address string) (string, error) {
 	if k.address == "" {
 		return "", ErrNoKleverAddress
 	}
-	if !strings.EqualFold(address, k.address) {
-		return "", ErrAddressMismatch
-	}
 
 	// Generate random nonce
 	nonceBytes := make([]byte, challengeBytes)
@@ -110,6 +107,23 @@ func (k *KleverAuthManager) CreateChallenge(address string) (string, error) {
 		}
 	}
 
+	// A wrong address gets a nonce that is never stored, through the same
+	// steps, so this public endpoint doesn't confirm guesses of the admin
+	// wallet; the signature check fails later as for any unknown challenge.
+	if !strings.EqualFold(address, k.address) {
+		return nonce, nil
+	}
+
+	if len(k.challenges) >= maxPendingChallenges { // drop the oldest, never refuse the owner
+		var oldestID string
+		var oldest time.Time
+		for id, ch := range k.challenges {
+			if oldestID == "" || ch.expiresAt.Before(oldest) {
+				oldestID, oldest = id, ch.expiresAt
+			}
+		}
+		delete(k.challenges, oldestID)
+	}
 	k.challenges[nonce] = &kleverChallenge{
 		nonce:     nonce,
 		address:   address,
@@ -118,6 +132,9 @@ func (k *KleverAuthManager) CreateChallenge(address string) (string, error) {
 
 	return nonce, nil
 }
+
+// maxPendingChallenges bounds unexpired login challenges held in memory.
+const maxPendingChallenges = 1000
 
 // CreateSetupChallenge generates a nonce for any valid klv1... address (no registered address required).
 // Used during wallet linking in settings to prove ownership before saving.

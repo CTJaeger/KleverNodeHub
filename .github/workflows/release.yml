@@ -146,6 +146,9 @@ jobs:
     name: Create Release
     needs: [build]
     runs-on: ubuntu-latest
+    # RELEASE_SIGNING_KEY lives in this environment (v* tags only), not as a
+    # repository secret, so no other workflow run can read it.
+    environment: release
     steps:
       - uses: actions/checkout@v6
 
@@ -158,7 +161,26 @@ jobs:
 
       - name: Generate checksums
         working-directory: artifacts
-        run: sha256sum * > checksums.txt
+        # The release line is signed with the checksums: agents refuse versions
+        # older than their own, and hubs check it matches the tag they asked for.
+        run: |
+          sha256sum * > checksums.txt
+          echo "# release ${GITHUB_REF_NAME}" >> checksums.txt
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+
+      # Hubs and agents only install binaries listed in a checksums.txt signed
+      # with this key (release.sig); without the secret the step fails and the
+      # release is not published.
+      - name: Sign checksums
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: go run ./cmd/releasesign sign artifacts/checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

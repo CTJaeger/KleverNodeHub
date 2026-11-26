@@ -1,22 +1,26 @@
 package handlers
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard/ws"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
+	"github.com/CTJaeger/KleverNodeHub/internal/release"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
 )
+
+// releaseDownloadPrefix is the only place agent and dashboard binaries are
+// downloaded from: <prefix><tag>/<asset>.
+const releaseDownloadPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
 
 // UpdateHandler handles agent binary update API requests.
 type UpdateHandler struct {
@@ -24,6 +28,11 @@ type UpdateHandler struct {
 	updateStore    *dashboard.UpdateStore
 	serverStore    *store.ServerStore
 	versionChecker *dashboard.VersionChecker
+
+	// allowUnsigned enables binary upload. Off by default: an uploaded binary
+	// carries no release signature, so agents refuse it unless their own
+	// config allows unsigned updates.
+	allowUnsigned bool
 }
 
 // NewUpdateHandler creates a new UpdateHandler.
@@ -36,6 +45,13 @@ func NewUpdateHandler(hub *ws.Hub, updateStore *dashboard.UpdateStore, serverSto
 	}
 }
 
+// SetAllowUnsignedBinaries enables agent binary upload
+// (--allow-unsigned-agent-binaries).
+func (h *UpdateHandler) SetAllowUnsignedBinaries(v bool) { h.allowUnsigned = v }
+
+// errUnsignedDisabled is returned by the upload route.
+const errUnsignedDisabled = "custom agent binaries are disabled: only signed releases can be installed (start the dashboard with --allow-unsigned-agent-binaries to enable)"
+
 // buildAgentUpdatePayload chooses the update transport per agent. If the agent
 // advertised the http-update capability it gets a download_path and pulls the
 // binary over a separate HTTP request (keeping the ~15 MB off the WebSocket);
@@ -46,6 +62,13 @@ func (h *UpdateHandler) buildAgentUpdatePayload(serverID string, binaryData []by
 		"version":  info.Version,
 		"checksum": info.Checksum,
 		"size":     info.Size,
+	}
+	// Agents that verify release signatures check these themselves; older
+	// agents ignore the extra fields and keep relying on the checksum.
+	if info.Signed() {
+		payload["release_asset"] = info.Asset
+		payload["release_checksums"] = info.Checksums
+		payload["release_signature"] = info.Signature
 	}
 	if h.hub.AgentHasCapability(serverID, models.CapabilityHTTPUpdate) {
 		payload["download_path"] = fmt.Sprintf("/api/agent/binary/%s?version=%s", serverID, url.QueryEscape(info.Version))
@@ -58,6 +81,10 @@ func (h *UpdateHandler) buildAgentUpdatePayload(serverID string, binaryData []by
 // HandleUploadBinary handles POST /api/agent/upload
 // Expects multipart form: version, os, arch, binary (file)
 func (h *UpdateHandler) HandleUploadBinary(w http.ResponseWriter, r *http.Request) {
+	if !h.allowUnsigned {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": errUnsignedDisabled})
+		return
+	}
 	// Limit to 100MB
 	r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
 
@@ -475,8 +502,7 @@ func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http
 	}
 
 	// SSRF protection: only allow GitHub release downloads from our repo
-	const allowedPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
-	if !strings.HasPrefix(req.URL, allowedPrefix) {
+	if !validReleaseURL(req.URL) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL must be a KleverNodeHub GitHub release asset"})
 		return
 	}
@@ -501,22 +527,20 @@ func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Try to verify checksum if checksums file is available
-	// URL format: https://github.com/CTJaeger/KleverNodeHub/releases/download/v0.3.3/agent-linux-amd64
-	urlParts := strings.Split(req.URL, "/")
-	if len(urlParts) >= 2 {
-		tag := urlParts[len(urlParts)-2]
-		filename := urlParts[len(urlParts)-1]
-		checksumURL := allowedPrefix + tag + "/checksums.txt"
-		actualHash := sha256hex(data)
-		if err := verifyAgentChecksum(client, checksumURL, filename, actualHash); err != nil {
-			// Checksum verification is best-effort — log but don't block
-			// (older releases may not have checksums file)
-			_ = err
-		}
+	// Only a binary listed in the signed checksums of its release is stored.
+	// URL format: <releaseDownloadPrefix><tag>/<asset>
+	rest := strings.TrimPrefix(req.URL, releaseDownloadPrefix)
+	tag, asset, _ := strings.Cut(rest, "/")
+	sums, sig, err := fetchSignedChecksums(client, tag)
+	if err == nil {
+		err = release.VerifyAsset(sums, sig, asset, data)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "release verification failed: " + err.Error()})
+		return
 	}
 
-	info, err := h.updateStore.Store(req.Version, req.OS, req.Arch, data)
+	info, err := h.updateStore.StoreRelease(req.Version, req.OS, req.Arch, data, asset, sums, sig)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -579,7 +603,6 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 	}
 
 	// Download each needed binary
-	const allowedPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
 	client := &http.Client{Timeout: 5 * time.Minute}
 
 	type dlResult struct {
@@ -589,6 +612,12 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 		Error   string `json:"error,omitempty"`
 	}
 	var results []dlResult
+
+	sums, sig, sumErr := fetchSignedChecksums(client, targetRelease.TagName)
+	if sumErr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "release verification failed: " + sumErr.Error()})
+		return
+	}
 
 	for _, asset := range targetRelease.Assets {
 		osName, arch, isAgent := parseAgentAssetName(asset.Name)
@@ -601,7 +630,7 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 		}
 
 		// SSRF protection
-		if !strings.HasPrefix(asset.BrowserDownloadURL, allowedPrefix) {
+		if !validReleaseURL(asset.BrowserDownloadURL) {
 			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: "invalid URL"})
 			continue
 		}
@@ -618,7 +647,12 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 			continue
 		}
 
-		_, err = h.updateStore.Store(req.Tag, osName, arch, data)
+		if verr := release.VerifyAsset(sums, sig, asset.Name, data); verr != nil {
+			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: verr.Error()})
+			continue
+		}
+
+		_, err = h.updateStore.StoreRelease(req.Tag, osName, arch, data, asset.Name, sums, sig)
 		if err != nil {
 			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: err.Error()})
 			continue
@@ -630,37 +664,57 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
-func sha256hex(data []byte) string {
-	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:])
+// validReleaseURL reports whether u is exactly an asset download URL of our
+// releases: right host/owner/repo, no query/fragment, no dot segments.
+func validReleaseURL(u string) bool {
+	if !strings.HasPrefix(u, releaseDownloadPrefix) {
+		return false
+	}
+	pu, err := url.Parse(u)
+	if err != nil || pu.Host != "github.com" || pu.RawQuery != "" || pu.Fragment != "" {
+		return false
+	}
+	if path.Clean(pu.Path) != pu.Path {
+		return false
+	}
+	rest := strings.TrimPrefix(u, releaseDownloadPrefix)
+	return strings.Count(rest, "/") == 1 // <tag>/<asset>
 }
 
-// verifyAgentChecksum downloads the checksums file and verifies the binary hash.
-func verifyAgentChecksum(client *http.Client, checksumURL, filename, actualHash string) error {
-	resp, err := client.Get(checksumURL)
-	if err != nil {
-		return fmt.Errorf("download checksums: %w", err)
+// fetchSignedChecksums downloads a release's checksums.txt and its signature
+// and verifies the signature. Both files are required: an unsigned release
+// is never installed.
+func fetchSignedChecksums(client *http.Client, tag string) (sums, sig []byte, err error) {
+	if tag == "" || strings.ContainsAny(tag, "/?#") || tag != path.Clean(tag) {
+		return nil, nil, fmt.Errorf("invalid release tag %q", tag)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("checksums returned %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("read checksums: %w", err)
-	}
-
-	for _, line := range strings.Split(string(body), "\n") {
-		parts := strings.Fields(line)
-		if len(parts) == 2 && parts[1] == filename {
-			if parts[0] != actualHash {
-				return fmt.Errorf("checksum mismatch: expected %s, got %s", parts[0], actualHash)
-			}
-			return nil // Match found, checksum valid
+	get := func(name string) ([]byte, error) {
+		resp, err := client.Get(releaseDownloadPrefix + tag + "/" + name)
+		if err != nil {
+			return nil, fmt.Errorf("download %s: %w", name, err)
 		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode == http.StatusNotFound && name == release.SignatureFile {
+			return nil, fmt.Errorf("release %s is not signed (releases before v0.3.89 carry no signature)", tag)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("download %s: HTTP %d", name, resp.StatusCode)
+		}
+		return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	}
-
-	return fmt.Errorf("file %s not found in checksums", filename)
+	if sums, err = get(release.ChecksumsFile); err != nil {
+		return nil, nil, err
+	}
+	if sig, err = get(release.SignatureFile); err != nil {
+		return nil, nil, err
+	}
+	if err := release.VerifyChecksums(sums, sig); err != nil {
+		return nil, nil, err
+	}
+	// The signed version line must name this tag, or an older release's
+	// signed files could be served under a new tag.
+	if got := release.Tag(sums); got != tag {
+		return nil, nil, fmt.Errorf("signed checksums are for release %q, not %q", got, tag)
+	}
+	return sums, sig, nil
 }

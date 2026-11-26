@@ -9,6 +9,11 @@ AGENT_CONFIG_DIR="/etc/klever-agent"
 AGENT_USER="klever-agent"
 SERVICE_NAME="klever-agent"
 
+# Release signing public key (SubjectPublicKeyInfo, base64) — the same key as
+# internal/release.PublicKeyHex. Downloads are installed only if they are listed
+# in a checksums.txt carrying this key's signature.
+RELEASE_PUBKEY_B64="MCowBQYDK2VwAyEACcSVhfPQxGiEeg9VIvdi+JeCq4tnoLcXYMM5x417MtU="
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -21,12 +26,14 @@ error() { echo -e "${RED}[✗]${RESET} $*" >&2; exit 1; }
 # Parse arguments
 TOKEN=""
 DASHBOARD_URL=""
+CA_FINGERPRINT=""   # SHA-256 of the dashboard CA, pins the dashboard during registration
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --token)    TOKEN="$2"; shift 2 ;;
-        --dashboard) DASHBOARD_URL="$2"; shift 2 ;;
-        *)          error "Unknown argument: $1" ;;
+        --token)           TOKEN="$2"; shift 2 ;;
+        --dashboard)       DASHBOARD_URL="$2"; shift 2 ;;
+        --ca-fingerprint)  CA_FINGERPRINT="$2"; shift 2 ;;
+        *)                 error "Unknown argument: $1" ;;
     esac
 done
 
@@ -96,15 +103,64 @@ else
 fi
 
 # Download agent binary
-RELEASE_URL="https://github.com/CTJaeger/KleverNodeHub/releases/latest/download/klever-agent-${GOOS}-${GOARCH}"
+# Resolve "latest" once, so binary and checksums come from the same release.
+RELEASE_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/CTJaeger/KleverNodeHub/releases/latest" | sed 's#.*/tag/##')
+[[ "$RELEASE_TAG" =~ ^v[0-9A-Za-z.-]+$ ]] || error "Could not determine the latest release (got: ${RELEASE_TAG})"
+RELEASE_BASE="https://github.com/CTJaeger/KleverNodeHub/releases/download/${RELEASE_TAG}"
+ASSET="klever-agent-${GOOS}-${GOARCH}"
+RELEASE_URL="${RELEASE_BASE}/${ASSET}"
 
-log "Downloading agent binary..."
-if ! curl -sSL -o /tmp/klever-agent "$RELEASE_URL"; then
-    error "Failed to download agent binary"
+log "Downloading agent binary (${RELEASE_TAG})..."
+AGENT_TMP=$(mktemp) # private file: a fixed /tmp path could be swapped between verify and install
+if ! curl -fsSL -o "$AGENT_TMP" "$RELEASE_URL"; then
+    error "Failed to download agent binary from: ${RELEASE_URL}"
 fi
 
-chmod +x /tmp/klever-agent
-mv /tmp/klever-agent "$AGENT_BIN"
+# Verify the download is actually an ELF binary, not an HTML error page.
+MAGIC=$(head -c 4 "$AGENT_TMP" | od -A n -t x1 | tr -d ' \n')
+if [[ "$MAGIC" != "7f454c46" ]]; then
+    rm -f "$AGENT_TMP"
+    error "Downloaded file is not a valid ELF binary. Check: ${RELEASE_URL}"
+fi
+
+# Verify the download against the signed release checksums. The checksum is
+# always checked; the Ed25519 signature over checksums.txt needs OpenSSL 3
+# (pkeyutl -rawin). On older systems the script warns and continues with the
+# checksum only — the agent itself verifies the signature on every later update.
+verify_release() {
+    local bin="$1" dir expected actual ossl_major
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' RETURN
+    curl -fsSL -o "$dir/checksums.txt" "${RELEASE_BASE}/checksums.txt" || error "Failed to download release checksums"
+
+    ossl_major=0
+    if command -v openssl &>/dev/null; then
+        ossl_major=$(openssl version | awk '{print $2}' | cut -d. -f1)
+        [[ "$ossl_major" =~ ^[0-9]+$ ]] || ossl_major=0
+    fi
+    if [[ "$ossl_major" -ge 3 ]]; then
+        curl -fsSL -o "$dir/release.sig" "${RELEASE_BASE}/release.sig" || error "Release ${RELEASE_TAG} is not signed (no release.sig) — not installing"
+        printf -- '-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n' "$RELEASE_PUBKEY_B64" > "$dir/release.pub"
+        base64 -d "$dir/release.sig" > "$dir/sig.bin" 2>/dev/null || error "Malformed release signature"
+        openssl pkeyutl -verify -pubin -inkey "$dir/release.pub" -rawin \
+            -in "$dir/checksums.txt" -sigfile "$dir/sig.bin" &>/dev/null \
+            || error "Release signature verification FAILED — not installing"
+        grep -Fqx "# release ${RELEASE_TAG}" "$dir/checksums.txt" || error "Signed checksums are not for release ${RELEASE_TAG}"
+        log "Release ${RELEASE_TAG}: signature verified"
+    else
+        warn "OpenSSL 3 not found: the release signature cannot be checked here, verifying the checksum only"
+    fi
+
+    expected=$(awk -v a="$ASSET" '$2 == a || $2 == "*" a {print tolower($1)}' "$dir/checksums.txt")
+    actual=$(sha256sum "$bin" | awk '{print $1}')
+    [[ -n "$expected" && "$expected" == "$actual" ]] || error "Agent binary does not match the release checksum — not installing"
+    log "Release ${RELEASE_TAG}: checksum verified"
+}
+
+verify_release "$AGENT_TMP"
+
+chmod 755 "$AGENT_TMP"
+mv "$AGENT_TMP" "$AGENT_BIN"
 log "Agent installed to ${AGENT_BIN}"
 
 # Create config directory
@@ -136,7 +192,13 @@ log "Systemd service created and enabled"
 
 # Register with dashboard
 log "Registering with dashboard..."
-if ! "${AGENT_BIN}" --register-token "$TOKEN" --dashboard-url "$DASHBOARD_URL" --config-dir "$AGENT_CONFIG_DIR"; then
+REGISTER_ARGS=(--register-token "$TOKEN" --dashboard-url "$DASHBOARD_URL" --config-dir "$AGENT_CONFIG_DIR")
+[[ -n "$CA_FINGERPRINT" ]] && REGISTER_ARGS+=(--ca-fingerprint "$CA_FINGERPRINT")
+if ! "${AGENT_BIN}" "${REGISTER_ARGS[@]}"; then
+    if [[ -z "$CA_FINGERPRINT" ]]; then
+        warn "No --ca-fingerprint in the install command: it comes from dashboards v0.3.89 and newer."
+        warn "Update the dashboard, generate a new install command there and run it again."
+    fi
     error "Registration failed"
 fi
 

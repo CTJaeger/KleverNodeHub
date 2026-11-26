@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
+	"github.com/CTJaeger/KleverNodeHub/internal/release"
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
 func base64Decode(s string) ([]byte, error) {
@@ -53,7 +56,26 @@ type Executor struct {
 	docker       *DockerClient
 	dashboardURL string
 	updateClient *http.Client
+
+	allowUnsignedUpdates bool     // from the local agent config, never from the hub
+	allowedDataRoots     []string // agent.json allowed_data_roots; empty = any non-system dir
+	agentConfigDir       string   // never usable as or under a data_dir
 }
+
+// SetAgentConfigDir protects the agent's own config dir (keys, agent.json).
+func (e *Executor) SetAgentConfigDir(dir string) {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	e.agentConfigDir = filepath.Clean(dir)
+}
+
+// SetAllowedDataRoots limits the data directories the hub may use.
+func (e *Executor) SetAllowedDataRoots(roots []string) { e.allowedDataRoots = roots }
+
+// SetAllowUnsignedUpdates sets whether binaries outside a signed release may be
+// installed (agent.json allow_unsigned_updates).
+func (e *Executor) SetAllowUnsignedUpdates(v bool) { e.allowUnsignedUpdates = v }
 
 // NewExecutor creates a new command executor.
 func NewExecutor(dockerSocket string) *Executor {
@@ -121,6 +143,18 @@ func (e *Executor) Execute(msg *models.Message, onProgress ProgressFunc) *models
 	if err := ValidateCommand(msg.Action, containerName); err != nil {
 		result.Error = err.Error()
 		return result
+	}
+
+	// Every command that touches the filesystem takes data_dir from the hub.
+	if dataDir := extractStringField(msg.Payload, "data_dir"); dataDir != "" {
+		if err := ValidateDataDir(dataDir, e.allowedDataRoots); err != nil {
+			result.Error = err.Error()
+			return result
+		}
+		if cd := e.agentConfigDir; cd != "" && cd != "." && (dataDir == cd || strings.HasPrefix(dataDir, cd+"/") || strings.HasPrefix(cd, dataDir+"/")) {
+			result.Error = "data_dir overlaps the agent config directory"
+			return result
+		}
 	}
 
 	// Execute with timeout — long-running actions get an extended deadline.
@@ -403,6 +437,7 @@ func (e *Executor) executeProvision(ctx context.Context, payload any, result *mo
 	// Progress is reported via the result output for now
 	// In future, this will be sent via WebSocket events
 	provisioner := NewProvisioner(e.docker, req, jobID, nil)
+	provisioner.allowedDataRoots = e.allowedDataRoots
 
 	if err := provisioner.Run(ctx); err != nil {
 		return err
@@ -765,6 +800,10 @@ func (e *Executor) executeAgentUpdate(ctx context.Context, payload any, result *
 		return fmt.Errorf("either download_path or data is required")
 	}
 
+	if err := e.verifyUpdateBinary(m, binaryData); err != nil {
+		return err
+	}
+
 	// Get agent config dir from executable path
 	execPath, err := os.Executable()
 	if err != nil {
@@ -790,6 +829,32 @@ func (e *Executor) executeAgentUpdate(ctx context.Context, payload any, result *
 
 	log.Printf("agent binary updated to %s — restart required", version)
 	return nil
+}
+
+// verifyUpdateBinary accepts only the agent asset of a signed release for this
+// platform. The asset name is derived locally, not taken from the hub, so a hub
+// can't pass off another signed binary (e.g. the dashboard) as the agent.
+func (e *Executor) verifyUpdateBinary(m map[string]any, binaryData []byte) error {
+	sums := extractStringFromMap(m, "release_checksums")
+	sig := extractStringFromMap(m, "release_signature")
+	err := release.VerifyAsset([]byte(sums), []byte(sig), release.AgentAssetName(runtime.GOOS, runtime.GOARCH), binaryData)
+	if err == nil {
+		// Signed but older (known-vulnerable) releases are refused as well.
+		tag := release.Tag([]byte(sums))
+		switch {
+		case tag == "":
+			err = fmt.Errorf("signed checksums carry no release version")
+		case version.Version != "dev" && version.Compare(tag, version.Version) < 0:
+			err = fmt.Errorf("downgrade from %s to %s", version.Version, tag)
+		default:
+			return nil
+		}
+	}
+	if e.allowUnsignedUpdates {
+		log.Printf("agent update: installing a binary outside a signed release (%v) — allowed by allow_unsigned_updates", err)
+		return nil
+	}
+	return fmt.Errorf("refusing agent update: %w (only signed releases are installed; set allow_unsigned_updates in agent.json on this host to override)", err)
 }
 
 func (e *Executor) executeConfigUpgrade(ctx context.Context, payload any, result *models.CommandResult) error {

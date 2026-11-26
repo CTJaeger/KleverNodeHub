@@ -50,6 +50,8 @@ type Provisioner struct {
 	progressFn func(progress *models.ProvisionProgress)
 	nodeDir    string
 	steps      []ProvisionStep
+
+	allowedDataRoots []string // agent.json allowed_data_roots
 }
 
 // NewProvisioner creates a new provisioner for a given request.
@@ -138,6 +140,15 @@ func (p *Provisioner) reportProgress(step, total int, name, status, errMsg strin
 
 // stepPreflight verifies Docker is running and port is available.
 func (p *Provisioner) stepPreflight(ctx context.Context) error {
+	// The node name becomes a path element of the node directory: a name like
+	// "../../root/.ssh" must not escape the base dir.
+	if !containerNamePattern.MatchString(p.req.NodeName) {
+		return fmt.Errorf("invalid node name %q", p.req.NodeName)
+	}
+	if err := ValidateDataDir(p.nodeDir, p.allowedDataRoots); err != nil {
+		return err
+	}
+
 	// Verify Docker connectivity
 	if _, err := p.docker.DiscoverNodes(ctx); err != nil {
 		return fmt.Errorf("docker not accessible: %w", err)
@@ -151,11 +162,6 @@ func (p *Provisioner) stepPreflight(ctx context.Context) error {
 	port = FindAvailablePort(port)
 	p.req.Port = port
 	log.Printf("provisioning: using REST API port %d", port)
-
-	// Check node name is not empty
-	if p.req.NodeName == "" {
-		return fmt.Errorf("node name is required")
-	}
 
 	// Check network is valid
 	if p.req.Network != "mainnet" && p.req.Network != "testnet" {
@@ -264,7 +270,7 @@ func chownRecursive(dir string, uid, gid int) error {
 		if err != nil {
 			return err
 		}
-		return os.Chown(path, uid, gid)
+		return os.Lchown(path, uid, gid) // never follow a symlink out of the tree
 	})
 }
 

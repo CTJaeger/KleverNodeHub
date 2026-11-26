@@ -102,8 +102,10 @@ Any Device (Browser)
 | Layer | Technology |
 |---|---|
 | Dashboard Login | Password (Argon2id) + WebAuthn Passkey + Klever Extension (Ed25519 challenge-response) |
-| Rate Limiting | 5 attempts per 15 min per IP, then HTTP 429 |
+| Rate Limiting | 5 failed attempts per 15 min per IP (50 across all IPs for password login), then HTTP 429 |
 | Account Recovery | Single-use recovery codes (Argon2id hashed) |
+| Sessions | Ended on password change, passkey deletion and "Log Out All Other Sessions" |
+| Updates | Releases are signed (Ed25519); agents verify every update themselves and refuse downgrades |
 | Config Encryption | AES-256-GCM (encrypted at rest) |
 | Agent Communication | mTLS with Ed25519 certificates |
 | Agent Command Whitelist | Only known commands accepted (no shell access) |
@@ -159,7 +161,7 @@ docker run -d \
 
 > **One-click updates:** Mounting `/var/run/docker.sock` lets the dashboard pull a new image and recreate its own container when you click **Update Now** in the update banner. Leave the mount off if you'd rather update manually with `docker pull` + `docker run` — the dashboard will then just show the `docker pull` command instead of the button. The socket grants root-equivalent control of the Docker daemon, so only mount it if you trust the dashboard accordingly.
 
-On first access (`https://your-server:9443`), a setup wizard will guide you through setting a password and optionally registering a Passkey. Recovery codes are printed to the log on first run.
+On first access (`https://your-server:9443`), a setup wizard will guide you through setting a password and optionally registering a Passkey. The wizard asks for the **setup token** that the dashboard prints to its log at startup (`journalctl -u klever-node-hub`, `docker logs klever-node-hub`, or your log file). The initial recovery codes are written to `recovery-codes.txt` in the data directory (readable by the service user only): save them, then delete the file.
 
 > **Trusted HTTPS / PWA:** The dashboard uses a self-signed certificate by default. To get a trusted certificate (required for mobile PWA install), place a reverse proxy with Let's Encrypt in front of it. See the **[Reverse Proxy Setup Guide](docs/reverse-proxy.md)** for Apache, Nginx, and Caddy configurations.
 
@@ -173,6 +175,8 @@ On first access (`https://your-server:9443`), a setup wizard will guide you thro
 | `--domain` | `localhost` | Domain for WebAuthn RP ID and TLS (optional, only needed for Passkey login) |
 | `--data-dir` | `~/.klever-node-hub` | Data directory for DB, certs, config |
 | `--reset-recovery-codes` | — | Generate new recovery codes and exit |
+| `--trusted-proxy` | — | Comma-separated CIDRs of reverse proxies (besides loopback) whose `X-Forwarded-For` is trusted for login rate limiting, e.g. `172.17.0.0/16` when the dashboard runs in Docker behind a proxy on the host |
+| `--allow-unsigned-agent-binaries` | off | Enable agent binary upload (`POST /api/agent/upload`). Agents still refuse such builds unless their `agent.json` has `"allow_unsigned_updates": true` |
 
 ### Agent (on each validator server)
 
@@ -191,12 +195,14 @@ SSH into your node server and paste the copied command. It looks like this:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh \
-  | sudo bash -s -- --token <YOUR_TOKEN> --dashboard https://<DASHBOARD_IP>:9443
+  | sudo bash -s -- --token <YOUR_TOKEN> --dashboard https://<DASHBOARD_IP>:9443 --ca-fingerprint <HUB_CA_SHA256>
 ```
+
+`--ca-fingerprint` pins your dashboard's certificate authority, so the agent never sends its token to an impostor. It is part of the generated command; it is only optional when the dashboard is reached through a reverse proxy with a publicly trusted certificate.
 
 The script will:
 1. Install Docker if not present
-2. Download the latest agent binary
+2. Download the latest agent binary and verify it against the signed release checksums
 3. Register with your dashboard using the one-time token
 4. Create and start a `klever-agent` systemd service
 5. Auto-discover existing Klever nodes on the server
@@ -342,7 +348,17 @@ git tag v0.1.0
 git push --tags
 ```
 
-This creates a GitHub Release with pre-built binaries for all platforms and SHA256 checksums.
+This creates a GitHub Release with pre-built binaries for all platforms, SHA256 checksums (`checksums.txt`) and their Ed25519 signature (`release.sig`).
+
+### Signed releases
+
+The release workflow signs `checksums.txt` with a key that only exists as the `RELEASE_SIGNING_KEY` secret of the `release` environment; the public half is compiled into the dashboard and the agent (`internal/release`).
+
+- **Agents** verify every update themselves — signature, checksum, their own asset name and that the release is not older than the running one. A dashboard cannot make an agent install anything else.
+- **The dashboard** verifies agent downloads and its own self-update the same way; `install-agent.sh` checks the signature too (needs OpenSSL 3, otherwise it falls back to the checksum with a warning).
+- **Custom builds** are opt-in twice: start the dashboard with `--allow-unsigned-agent-binaries` **and** set `"allow_unsigned_updates": true` in `/etc/klever-agent/agent.json` on each server that should accept them. No dashboard command can write that file.
+- **Data directories**: agents refuse dashboard-supplied node directories inside system locations (`/etc`, `/usr`, `/var/lib/docker`, SSH directories, …); `"allowed_data_roots": ["/opt/klever-node"]` in `agent.json` restricts them further.
+- Releases before v0.3.89 are not signed and can no longer be installed through the dashboard.
 
 ## Documentation
 

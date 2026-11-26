@@ -145,6 +145,8 @@ scp bin/dashboard-linux-amd64 user@your-server:/opt/klever/klever-node-hub
 | `--domain` | `localhost` | Domain for TLS cert and Passkey RP ID |
 | `--data-dir` | `~/.klever-node-hub` | Data directory (DB, certs, backups) |
 | `--reset-recovery-codes` | — | Generate new recovery codes and exit |
+| `--trusted-proxy` | — | CIDRs of reverse proxies (besides loopback) whose `X-Forwarded-For` is trusted for login rate limiting |
+| `--allow-unsigned-agent-binaries` | off | Enable agent binary upload (unsigned builds) |
 
 After starting, the dashboard generates a self-signed TLS certificate and is accessible at `https://your-server:9443`.
 
@@ -232,7 +234,9 @@ When you open `https://your-server:9443` for the first time, you'll see the **Se
 
 ### Step 1: Set a Password
 
-Choose a strong password (minimum 8 characters). This is your primary login method.
+Enter the **setup token** and choose a strong password (minimum 8 characters). This is your primary login method.
+
+The setup token is printed to the dashboard log at startup while setup is not completed (`journalctl -u klever-node-hub`, `docker logs klever-node-hub`, or your log file).
 
 ### Step 2: Register a Passkey (optional)
 
@@ -247,6 +251,8 @@ Passkeys require a valid domain (not just an IP). If you started the dashboard w
 The wizard generates **8 single-use recovery codes**. These are your fallback if you lose your password and all passkeys.
 
 **Save these codes in a safe place.** Each code can only be used once.
+
+The initial codes are also written to `recovery-codes.txt` in the data directory (not to the log). Delete that file once you have stored them.
 
 <!-- 📸 IMAGE: Screenshot of the recovery codes display -->
 
@@ -707,8 +713,8 @@ Each agent shows its update progress inline:
 - ✅ **v0.x.x** — successfully updated
 - ❌ **Failed** — update failed
 
-The dashboard sends the binary over the WebSocket connection. The agent:
-1. Verifies the SHA-256 checksum
+The dashboard hands the binary to the agent together with the signed checksums of its release. The agent:
+1. Verifies the release signature and the SHA-256 checksum itself, and refuses versions older than its own
 2. Creates a backup of the current binary
 3. Replaces the binary atomically
 4. Restarts itself
@@ -717,7 +723,7 @@ The dashboard waits up to 15 seconds for the agent to reconnect with the new ver
 
 ### Rollback
 
-If an update causes issues, you can update to a previous version — all downloaded versions remain available in the dropdown.
+Agents only install signed releases (v0.3.89 and newer) and do not downgrade. If an update causes issues, install a newer fixed release; in an emergency replace the agent binary on the server by hand.
 
 ---
 
@@ -728,7 +734,7 @@ The dashboard can update itself:
 1. Go to **Settings** or check the version indicator in the sidebar
 2. Click **"Check for Updates"**
 3. If a new version is available, click **"Update"**
-4. The dashboard downloads the new binary, replaces itself, and restarts
+4. The dashboard downloads the new binary, verifies the release signature, replaces itself, and restarts
 
 > **Note:** When running in Docker, use `docker pull` instead to update the container image.
 
