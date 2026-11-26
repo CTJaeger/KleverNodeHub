@@ -168,3 +168,25 @@ func TestHandleResetDefaults_InvalidCategory(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
+
+func TestHandleGetSingle_InternalKeysHidden(t *testing.T) {
+	h := setupSettingsHandler(t)
+	if err := h.settings.Set("jwt_signing_key", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/jwt_signing_key", nil)
+	req.SetPathValue("key", "jwt_signing_key")
+	w := httptest.NewRecorder()
+	h.HandleGetSingle(w, req)
+	if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "secret") {
+		t.Errorf("internal key exposed: status %d, body %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/settings/dashboard_name", nil)
+	req.SetPathValue("key", "dashboard_name")
+	w = httptest.NewRecorder()
+	h.HandleGetSingle(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("user setting: status %d", w.Code)
+	}
+}

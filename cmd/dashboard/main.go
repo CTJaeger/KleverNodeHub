@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +37,8 @@ func main() {
 	domain := flag.String("domain", "localhost", "Domain for WebAuthn RP ID and TLS (e.g. localhost, myserver.local, node.example.com)")
 	dataDir := flag.String("data-dir", defaultDataDir(), "Data directory for DB, certs, config")
 	resetRecoveryCodes := flag.Bool("reset-recovery-codes", false, "Generate new recovery codes and exit")
+	trustedProxy := flag.String("trusted-proxy", "", "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For is trusted for rate limiting, besides loopback (e.g. 172.17.0.0/16 when running in Docker behind a host proxy)")
+	allowUnsignedAgents := flag.Bool("allow-unsigned-agent-binaries", false, "Enable agent binary upload (unsigned builds; agents still refuse them unless their own agent.json allows unsigned updates)")
 	// Internal flags used by the Docker self-update flow. The orchestrator container
 	// spawns a sidecar that re-execs this binary with these flags to finish the
 	// container swap after the orchestrator has stopped itself.
@@ -142,11 +146,18 @@ func main() {
 			log.Fatalf("generate recovery codes: %v", err)
 		}
 		saveRecoveryCodes(settingsStore, recoveryMgr.Codes())
-		log.Println("=== INITIAL RECOVERY CODES (save these!) ===")
+		// Not into the log: the journal is readable by more users than the
+		// data dir, and kept long after the codes were saved elsewhere.
+		codesFile := filepath.Join(*dataDir, "recovery-codes.txt")
+		content := "Klever Node Hub recovery codes — store them safely, then delete this file.\n"
 		for i, code := range plaintextCodes {
-			log.Printf("  %d: %s", i+1, code)
+			content += fmt.Sprintf("%d: %s\n", i+1, code)
 		}
-		log.Println("=============================================")
+		_ = os.Remove(codesFile) // WriteFile keeps an existing file's mode
+		if err := os.WriteFile(codesFile, []byte(content), 0o600); err != nil {
+			log.Fatalf("write recovery codes: %v", err)
+		}
+		log.Printf("initial recovery codes written to %s — save them and delete the file", codesFile)
 	}
 
 	// --- Auth: Password ---
@@ -155,6 +166,7 @@ func main() {
 
 	// --- Auth: Rate Limiter ---
 	loginLimiter := auth.NewRateLimiter(15*time.Minute, 5)
+	loginLimiter.SetGlobalLimit(50) // per 15 min across all IPs; passkey/wallet login unaffected
 
 	// --- Auth: Klever Extension ---
 	kleverAddress, _ := settingsStore.Get("klever_admin_address")
@@ -218,12 +230,41 @@ func main() {
 	versionChecker := dashboard.NewVersionChecker("CTJaeger", "KleverNodeHub")
 	versionChecker.Start()
 	updateHandler := handlers.NewUpdateHandler(hub, updateStore, serverStore, versionChecker)
+	updateHandler.SetAllowUnsignedBinaries(*allowUnsignedAgents)
 	settingsHandler := handlers.NewSettingsHandler(settingsStore)
 	systemHandler := handlers.NewSystemHandler(versionChecker)
 	tokenManager := dashboard.NewTokenManager()
 	regHandler := handlers.NewRegistrationHandler(tokenManager, serverStore, ca)
 
+	// First-run wizard token: only someone who can read this log may claim
+	// a fresh install. A new one is made on every start until setup is done.
+	if setupToken, err := crypto.RandomHex(16); err != nil {
+		log.Fatalf("setup token: %v", err)
+	} else {
+		authHandler.SetSetupToken(setupToken)
+		if !passwordMgr.HasPassword() && !webauthnMgr.HasCredentials() && !kleverMgr.HasAddress() {
+			log.Printf("setup not completed — setup token for the first-run wizard: %s", setupToken)
+		}
+	}
+	authHandler.SetOnRecoveryCodesChanged(func(codes []auth.RecoveryCode) {
+		saveRecoveryCodes(settingsStore, codes)
+	})
+	authHandler.SetOnSessionsEnded(hub.DisconnectBrowsers)
+	if *trustedProxy != "" {
+		var nets []*net.IPNet
+		for _, c := range strings.Split(*trustedProxy, ",") {
+			_, n, err := net.ParseCIDR(strings.TrimSpace(c))
+			if err != nil {
+				log.Fatalf("--trusted-proxy: %v", err)
+			}
+			nets = append(nets, n)
+		}
+		handlers.SetTrustedProxies(nets)
+	}
 	// Persist passkey credentials when they change
+	authHandler.SetSigningKeySaver(func(key []byte) error {
+		return settingsStore.Set("jwt_signing_key", hex.EncodeToString(key))
+	})
 	authHandler.SetOnCredentialsChanged(func(creds []auth.PasskeyCredential) {
 		savePasskeyCredentials(settingsStore, creds)
 	})
@@ -253,20 +294,20 @@ func main() {
 
 	// Public routes (no auth required)
 	mux.HandleFunc("GET /api/setup/status", authHandler.HandleSetupStatus)
-	mux.HandleFunc("POST /api/auth/passkey/register/begin", authHandler.HandlePasskeyBeginRegister)
-	mux.HandleFunc("POST /api/auth/passkey/register/finish", authHandler.HandlePasskeyFinishRegister)
-	mux.HandleFunc("POST /api/auth/passkey/login/begin", authHandler.HandlePasskeyBeginLogin)
-	mux.HandleFunc("POST /api/auth/passkey/login/finish", authHandler.HandlePasskeyFinishLogin)
-	mux.HandleFunc("POST /api/auth/password", authHandler.HandlePasswordLogin)
-	mux.HandleFunc("POST /api/setup/password", authHandler.HandleSetupPassword)
-	mux.HandleFunc("POST /api/auth/recovery", authHandler.HandleRecoveryLogin)
+	mux.HandleFunc("POST /api/auth/passkey/register/begin", limitBody(authHandler.HandlePasskeyBeginRegister))
+	mux.HandleFunc("POST /api/auth/passkey/register/finish", limitBody(authHandler.HandlePasskeyFinishRegister))
+	mux.HandleFunc("POST /api/auth/passkey/login/begin", limitBody(authHandler.HandlePasskeyBeginLogin))
+	mux.HandleFunc("POST /api/auth/passkey/login/finish", limitBody(authHandler.HandlePasskeyFinishLogin))
+	mux.HandleFunc("POST /api/auth/password", limitBody(authHandler.HandlePasswordLogin))
+	mux.HandleFunc("POST /api/setup/password", limitBody(authHandler.HandleSetupPassword))
+	mux.HandleFunc("POST /api/auth/recovery", limitBody(authHandler.HandleRecoveryLogin))
 	mux.HandleFunc("GET /api/auth/klever/challenge", authHandler.HandleKleverChallenge)
-	mux.HandleFunc("POST /api/auth/klever/verify", authHandler.HandleKleverVerify)
-	mux.HandleFunc("POST /api/auth/refresh", authHandler.HandleRefresh)
-	mux.HandleFunc("POST /api/auth/logout", authHandler.HandleLogout)
+	mux.HandleFunc("POST /api/auth/klever/verify", limitBody(authHandler.HandleKleverVerify))
+	mux.HandleFunc("POST /api/auth/refresh", limitBody(authHandler.HandleRefresh))
+	mux.HandleFunc("POST /api/auth/logout", limitBody(authHandler.HandleLogout))
 
 	// Agent registration (token-based, no JWT required)
-	mux.HandleFunc("POST /api/agent/register", regHandler.HandleRegisterAgent)
+	mux.HandleFunc("POST /api/agent/register", limitBody(regHandler.HandleRegisterAgent))
 
 	// GeoIP resolver for server region detection
 	geoResolver := dashboard.NewGeoIPResolver()
@@ -277,12 +318,14 @@ func main() {
 
 	// WebSocket endpoint for browser clients (authenticated via JWT cookie)
 	browserWsHandler := ws.NewBrowserHandler(hub)
+	browserWsHandler.SetOriginPatterns([]string{*domain, *domain + ":*"})
 	mux.Handle("GET /ws", authMw(http.HandlerFunc(browserWsHandler.HandleUpgrade)))
 
 	// Protected routes (JWT required)
 	mux.Handle("GET /api/auth/passkeys", authMw(http.HandlerFunc(authHandler.HandleListPasskeys)))
 	mux.Handle("DELETE /api/auth/passkeys/{id}", authMw(http.HandlerFunc(authHandler.HandleDeletePasskey)))
 	mux.Handle("PUT /api/auth/password", authMw(http.HandlerFunc(authHandler.HandleChangePassword)))
+	mux.Handle("POST /api/auth/logout-all", authMw(http.HandlerFunc(authHandler.HandleLogoutAll)))
 	mux.Handle("GET /api/auth/klever", authMw(http.HandlerFunc(authHandler.HandleKleverStatus)))
 	mux.Handle("POST /api/setup/klever/challenge", authMw(http.HandlerFunc(authHandler.HandleKleverSetupChallenge)))
 	mux.Handle("POST /api/setup/klever", authMw(http.HandlerFunc(authHandler.HandleKleverSetup)))
@@ -401,6 +444,17 @@ func defaultDataDir() string {
 	return filepath.Join(home, ".klever-node-hub")
 }
 
+// publicBodyLimit caps request bodies on the unauthenticated routes: none of
+// them needs more, and anything larger is only good for exhausting memory.
+const publicBodyLimit = 64 << 10
+
+func limitBody(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, publicBodyLimit)
+		h(w, r)
+	}
+}
+
 // loadOrCreateJWTKey loads the JWT signing key from the settings store,
 // or generates a new one on first run.
 func loadOrCreateJWTKey(settings *store.SettingsStore) ([]byte, error) {
@@ -409,7 +463,15 @@ func loadOrCreateJWTKey(settings *store.SettingsStore) ([]byte, error) {
 		return nil, fmt.Errorf("read JWT key: %w", err)
 	}
 
-	if keyHex != "" {
+	// Keys created by versions up to v0.3.88 are replaced once on the first
+	// start of a newer version, which ends all sessions. Everyone has to log
+	// in again.
+	rotated, err := settings.Get(jwtKeyRotatedSetting)
+	if err != nil {
+		return nil, fmt.Errorf("read JWT key state: %w", err)
+	}
+
+	if keyHex != "" && rotated != "" {
 		key, err := hex.DecodeString(keyHex)
 		if err != nil {
 			return nil, fmt.Errorf("decode JWT key: %w", err)
@@ -425,9 +487,20 @@ func loadOrCreateJWTKey(settings *store.SettingsStore) ([]byte, error) {
 	if err := settings.Set("jwt_signing_key", hex.EncodeToString(key)); err != nil {
 		return nil, fmt.Errorf("save JWT key: %w", err)
 	}
-	log.Println("generated new JWT signing key")
+	if err := settings.Set(jwtKeyRotatedSetting, "1"); err != nil {
+		return nil, fmt.Errorf("save JWT key state: %w", err)
+	}
+	if keyHex != "" {
+		log.Println("JWT signing key replaced after the security update: all sessions were ended, please log in again")
+	} else {
+		log.Println("generated new JWT signing key")
+	}
 	return key, nil
 }
+
+// jwtKeyRotatedSetting marks that the signing key was created or replaced by
+// v0.3.89 or newer (see loadOrCreateJWTKey).
+const jwtKeyRotatedSetting = "jwt_signing_key_rotated"
 
 // loadPasskeyCredentials loads stored passkey credentials from settings.
 func loadPasskeyCredentials(settings *store.SettingsStore) []auth.PasskeyCredential {

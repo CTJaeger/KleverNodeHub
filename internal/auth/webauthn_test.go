@@ -2,6 +2,7 @@ package auth
 
 import (
 	"testing"
+	"time"
 )
 
 func newTestWebAuthnManager(t *testing.T) *WebAuthnManager {
@@ -170,5 +171,34 @@ func TestFinishLogin_InvalidSession(t *testing.T) {
 	err := wm.FinishLogin("nonexistent-session", nil)
 	if err == nil {
 		t.Error("expected error for invalid session")
+	}
+}
+
+func TestCeremonies_ExpireAndAreCapped(t *testing.T) {
+	wm := newTestWebAuthnManager(t)
+
+	_, id, err := wm.BeginRegistration("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wm.mu.Lock()
+	c := wm.sessions[id]
+	c.expires = time.Now().Add(-time.Second)
+	wm.sessions[id] = c
+	wm.mu.Unlock()
+	if err := wm.FinishRegistration(id, nil, "x"); err == nil {
+		t.Error("expired ceremony accepted")
+	}
+
+	for i := 0; i < maxCeremonies; i++ {
+		if _, _, err := wm.BeginRegistration("x"); err != nil {
+			t.Fatalf("begin %d: %v", i, err)
+		}
+	}
+	if _, _, err := wm.BeginRegistration("x"); err != nil {
+		t.Errorf("a new ceremony must evict the oldest, not fail: %v", err)
+	}
+	if n := len(wm.sessions); n > maxCeremonies {
+		t.Errorf("%d pending ceremonies, cap is %d", n, maxCeremonies)
 	}
 }

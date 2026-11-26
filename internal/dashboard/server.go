@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	kvcrypto "github.com/CTJaeger/KleverNodeHub/internal/crypto"
-	"github.com/CTJaeger/KleverNodeHub/internal/version"
 	"github.com/CTJaeger/KleverNodeHub/web"
 )
 
@@ -117,17 +115,10 @@ func (s *Server) servePage(templatePath string) http.HandlerFunc {
 
 // handleHealth returns build info and uptime. Unauthenticated, used for monitoring.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	resp := struct {
-		Status string       `json:"status"`
-		Uptime string       `json:"uptime"`
-		Build  version.Info `json:"build"`
-	}{
-		Status: "ok",
-		Uptime: version.Uptime().Round(time.Second).String(),
-		Build:  version.Get(),
-	}
+	// Public, so only liveness: version and uptime would tell a scanner which
+	// fixes are missing and when the last restart was. Both are shown after login.
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
 }
 
 // setSecurityHeaders adds security headers to the response.

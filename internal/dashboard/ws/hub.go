@@ -190,6 +190,19 @@ func (h *Hub) RegisterBrowser(clientID string) *BrowserConn {
 }
 
 // UnregisterBrowser removes a browser client connection.
+// DisconnectBrowsers closes every browser WebSocket. Used when all sessions are
+// ended: an open socket would otherwise keep streaming to a revoked session.
+// Browsers with a valid session reconnect on their own.
+func (h *Hub) DisconnectBrowsers() {
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+
+	for id, conn := range h.browserConns {
+		close(conn.SendCh)
+		delete(h.browserConns, id)
+	}
+}
+
 func (h *Hub) UnregisterBrowser(clientID string) {
 	h.browserMu.Lock()
 	defer h.browserMu.Unlock()

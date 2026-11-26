@@ -5,8 +5,10 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -26,8 +28,10 @@ func DashboardTLSConfig(ca *CA) (*tls.Config, error) {
 		return nil, fmt.Errorf("create server cert: %w", err)
 	}
 
+	// The CA goes into the chain so a new agent can check it against the
+	// fingerprint from its install command before sending its token.
 	serverCert := tls.Certificate{
-		Certificate: [][]byte{serverCertDER},
+		Certificate: [][]byte{serverCertDER, ca.Certificate.Raw},
 		PrivateKey:  serverKey,
 	}
 
@@ -41,6 +45,13 @@ func DashboardTLSConfig(ca *CA) (*tls.Config, error) {
 		ClientCAs:    clientCAs,
 		MinVersion:   tls.VersionTLS13,
 	}, nil
+}
+
+// Fingerprint returns the SHA-256 hex digest of a certificate (DER), the form
+// used for --ca-fingerprint.
+func Fingerprint(cert *x509.Certificate) string {
+	sum := sha256.Sum256(cert.Raw)
+	return hex.EncodeToString(sum[:])
 }
 
 // AgentTLSConfig creates a TLS config for the agent client.
@@ -102,4 +113,13 @@ func createServerCertificate(
 	}
 
 	return certDER, nil
+}
+
+// RandomHex returns n random bytes as hex.
+func RandomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

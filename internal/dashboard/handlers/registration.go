@@ -37,7 +37,11 @@ func (h *RegistrationHandler) HandleGenerateToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	resp := map[string]string{"token": token}
+	if h.ca != nil {
+		resp["ca_fingerprint"] = crypto.Fingerprint(h.ca.Certificate)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleRegisterAgent processes an incoming agent registration.

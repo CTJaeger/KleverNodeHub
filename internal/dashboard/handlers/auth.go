@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/auth"
@@ -25,6 +30,23 @@ type AuthHandler struct {
 	onPasswordChanged func(string)
 	// onKleverAddressChanged is called when the Klever admin address changes.
 	onKleverAddressChanged func(string)
+	// saveSigningKey persists a new JWT signing key (ending all sessions).
+	saveSigningKey func([]byte) error
+	// onRecoveryCodesChanged persists the codes after one was used.
+	onRecoveryCodesChanged func([]auth.RecoveryCode)
+	// setupToken authorises the first-run wizard (see SetSetupToken).
+	setupToken string
+	// onSessionsEnded runs after all sessions were ended (closes live sockets).
+	onSessionsEnded func()
+	rotateMu        sync.Mutex
+}
+
+// SetOnSessionsEnded sets what else to cut off when all sessions end.
+func (h *AuthHandler) SetOnSessionsEnded(fn func()) { h.onSessionsEnded = fn }
+
+// SetOnRecoveryCodesChanged sets the callback that persists recovery codes.
+func (h *AuthHandler) SetOnRecoveryCodesChanged(fn func([]auth.RecoveryCode)) {
+	h.onRecoveryCodesChanged = fn
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -58,11 +80,73 @@ func (h *AuthHandler) SetOnKleverAddressChanged(fn func(string)) {
 // GET /api/setup/status
 func (h *AuthHandler) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"setup_complete": h.password.HasPassword() || h.webauthn.HasCredentials(),
+		"setup_complete": h.setupComplete(),
 		"has_password":   h.password.HasPassword(),
 		"passkey_count":  h.webauthn.CredentialCount(),
-		"has_klever":     h.klever.HasAddress(),
+		"has_klever":     h.klever != nil && h.klever.HasAddress(),
 	})
+}
+
+// SetSigningKeySaver sets how a new JWT signing key is persisted.
+func (h *AuthHandler) SetSigningKeySaver(fn func([]byte) error) { h.saveSigningKey = fn }
+
+// endAllSessions invalidates every issued token by replacing the JWT signing
+// key, then logs the caller back in so that only this session survives. Used
+// after a credential change, so a stolen session can't outlive it.
+func (h *AuthHandler) endAllSessions(w http.ResponseWriter) (*auth.TokenPair, error) {
+	// One at a time, so the persisted key is always the one in use.
+	h.rotateMu.Lock()
+	defer h.rotateMu.Unlock()
+	key, err := auth.GenerateSigningKey()
+	if err != nil {
+		return nil, err
+	}
+	// Persist first: a key that only lives in memory would bring the old
+	// sessions back after a restart.
+	if h.saveSigningKey != nil {
+		if err := h.saveSigningKey(key); err != nil {
+			return nil, fmt.Errorf("save signing key: %w", err)
+		}
+	}
+	if err := h.jwt.SetSigningKey(key); err != nil {
+		return nil, err
+	}
+	tokens, err := h.jwt.IssueTokenPair("admin")
+	if err != nil {
+		return nil, err
+	}
+	setAuthCookies(w, tokens)
+	if h.onSessionsEnded != nil {
+		h.onSessionsEnded()
+	}
+	log.Println("auth: all sessions ended (JWT signing key rotated)")
+	return tokens, nil
+}
+
+// HandleLogoutAll ends every session except the caller's.
+// POST /api/auth/logout-all
+func (h *AuthHandler) HandleLogoutAll(w http.ResponseWriter, _ *http.Request) {
+	tokens, err := h.endAllSessions(w)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "all other sessions ended", "access_token": tokens.AccessToken})
+}
+
+// setupComplete reports whether any login method is configured.
+func (h *AuthHandler) setupComplete() bool {
+	return h.password.HasPassword() || h.webauthn.HasCredentials() || (h.klever != nil && h.klever.HasAddress())
+}
+
+// SetSetupToken sets the one-time token the first-run wizard must present
+// (printed to the dashboard log at startup). Whoever reaches a fresh install
+// first would otherwise own it.
+func (h *AuthHandler) SetSetupToken(token string) { h.setupToken = token }
+
+// validSetupToken compares in constant time; with no token configured it fails.
+func (h *AuthHandler) validSetupToken(given string) bool {
+	return h.setupToken != "" && subtle.ConstantTimeCompare([]byte(given), []byte(h.setupToken)) == 1
 }
 
 // HandleSetupPassword sets the initial password during first-time setup.
@@ -72,13 +156,29 @@ func (h *AuthHandler) HandleSetupPassword(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "password already configured"})
 		return
 	}
-
 	var req struct {
-		Password string `json:"password"`
+		Password   string `json:"password"`
+		SetupToken string `json:"setup_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
 		return
+	}
+
+	// This route is public, so it must not let anyone add a login method:
+	// after setup only a logged-in user may (e.g. a passkey-only hub adding a
+	// password), before setup only the holder of the setup token.
+	// 403, not 401: the browser treats 401 as an expired session and would
+	// refresh-and-redirect instead of showing the message.
+	if !auth.Authenticated(h.jwt, r) {
+		if h.setupComplete() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "setup already completed: log in to set a password"})
+			return
+		}
+		if !h.validSetupToken(req.SetupToken) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid setup token: use the token printed in the dashboard log at startup"})
+			return
+		}
 	}
 
 	hash, err := h.password.SetPassword(req.Password)
@@ -171,36 +271,59 @@ func (h *AuthHandler) HandleChangePassword(w http.ResponseWriter, r *http.Reques
 		h.onPasswordChanged(hash)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "password changed"})
+	tokens, err := h.endAllSessions(w)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "password changed, but ending other sessions failed: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "password changed", "access_token": tokens.AccessToken})
 }
 
-// extractIP returns the client IP from the request, stripping the port.
+// trustedProxies are extra reverse-proxy networks (--trusted-proxy), e.g. the
+// Docker bridge when the hub runs in a container behind a host proxy.
+var trustedProxies []*net.IPNet
+
+// SetTrustedProxies sets the networks whose X-Forwarded-For is believed.
+func SetTrustedProxies(nets []*net.IPNet) { trustedProxies = nets }
+
+func isTrustedProxy(ip net.IP) bool {
+	for _, n := range trustedProxies {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractIP returns the client IP used for rate limiting. X-Forwarded-For is
+// trusted only when the request comes from a local reverse proxy, and then only
+// its rightmost entry (added by the proxy): anything left of it was sent by the
+// client and can be forged to dodge the limiter.
 func extractIP(r *http.Request) string {
-	// Check X-Forwarded-For first (reverse proxy)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP
-		if idx := len(xff); idx > 0 {
-			for i, c := range xff {
-				if c == ',' {
-					return xff[:i]
-				}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || isTrustedProxy(ip)) {
+		if vals := r.Header.Values("X-Forwarded-For"); len(vals) > 0 {
+			parts := strings.Split(vals[len(vals)-1], ",")
+			if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+				return last
 			}
-			return xff
 		}
 	}
-	// Strip port from RemoteAddr
-	addr := r.RemoteAddr
-	for i := len(addr) - 1; i >= 0; i-- {
-		if addr[i] == ':' {
-			return addr[:i]
-		}
-	}
-	return addr
+	return host
 }
 
 // HandlePasskeyBeginRegister starts the WebAuthn registration ceremony.
 // POST /api/auth/passkey/register/begin
 func (h *AuthHandler) HandlePasskeyBeginRegister(w http.ResponseWriter, r *http.Request) {
+	// Public route, so a session is required: the setup wizard registers its
+	// passkey after the password step, when it already has one.
+	if !auth.Authenticated(h.jwt, r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
 	var req struct {
 		Name string `json:"name"`
 	}
@@ -227,6 +350,12 @@ func (h *AuthHandler) HandlePasskeyBeginRegister(w http.ResponseWriter, r *http.
 // HandlePasskeyFinishRegister completes the WebAuthn registration ceremony.
 // POST /api/auth/passkey/register/finish
 func (h *AuthHandler) HandlePasskeyFinishRegister(w http.ResponseWriter, r *http.Request) {
+	// Checked again here, not only at begin: this is the step that stores the
+	// credential.
+	if !auth.Authenticated(h.jwt, r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
 	sessionID := r.URL.Query().Get("session_id")
 	name := r.URL.Query().Get("name")
 	if sessionID == "" {
@@ -334,9 +463,26 @@ func (h *AuthHandler) HandleRecoveryLogin(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Rate-limited like password login: each attempt runs up to ten Argon2id
+	// hashes, so without a limit it is also a cheap way to load the server.
+	ip := extractIP(r)
+	if h.limiter != nil && !h.limiter.AllowIP(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many failed attempts, try again later"})
+		return
+	}
 	if !h.recovery.Verify(req.Code) {
+		if h.limiter != nil {
+			h.limiter.RecordFailure(ip)
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid recovery code"})
 		return
+	}
+	if h.limiter != nil {
+		h.limiter.Reset(ip)
+	}
+	// Persist that the code is used, or it would work again after a restart.
+	if h.onRecoveryCodesChanged != nil {
+		h.onRecoveryCodesChanged(h.recovery.Codes())
 	}
 
 	// Issue JWT tokens
@@ -445,6 +591,13 @@ func (h *AuthHandler) HandleDeletePasskey(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Never delete the last login method: with none left the hub counts as
+	// not set up, and the public setup routes would let anyone enroll.
+	if h.webauthn.CredentialCount() <= 1 && !h.password.HasPassword() && (h.klever == nil || !h.klever.HasAddress()) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot delete the last login method: add a password or another passkey first"})
+		return
+	}
+
 	if err := h.webauthn.DeletePasskey(passkeyID); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -454,7 +607,13 @@ func (h *AuthHandler) HandleDeletePasskey(w http.ResponseWriter, r *http.Request
 		h.onCredentialsChanged(h.webauthn.Credentials())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	// Sessions opened with the removed passkey must not outlive it.
+	tokens, err := h.endAllSessions(w)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey deleted, but ending other sessions failed: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "access_token": tokens.AccessToken})
 }
 
 // HandleKleverChallenge generates a challenge nonce for Klever Extension login.
@@ -561,6 +720,11 @@ func (h *AuthHandler) HandleKleverSetup(w http.ResponseWriter, r *http.Request) 
 // HandleKleverRemove removes the registered Klever admin address (protected).
 // DELETE /api/auth/klever
 func (h *AuthHandler) HandleKleverRemove(w http.ResponseWriter, r *http.Request) {
+	// Same rule as HandleDeletePasskey: never remove the last login method.
+	if !h.password.HasPassword() && !h.webauthn.HasCredentials() {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot remove the last login method: add a password or passkey first"})
+		return
+	}
 	h.klever.RemoveAddress()
 
 	if h.onKleverAddressChanged != nil {

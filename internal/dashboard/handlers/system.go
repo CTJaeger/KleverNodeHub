@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
+	"github.com/CTJaeger/KleverNodeHub/internal/release"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
@@ -123,15 +123,6 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 
-	// Find checksum file
-	checksumURL := ""
-	for _, a := range latest.Assets {
-		if strings.Contains(a.Name, "checksums") {
-			checksumURL = a.BrowserDownloadURL
-			break
-		}
-	}
-
 	log.Printf("self-update: downloading %s from %s", latest.TagName, downloadURL)
 
 	// Download binary
@@ -154,15 +145,16 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 
-	// Verify checksum if available
-	actualHash := sha256Sum(newBinary)
-	if checksumURL != "" {
-		if err := verifyChecksum(client, checksumURL, downloadURL, actualHash); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "checksum verification failed: " + err.Error()})
-			return
-		}
-		log.Printf("self-update: checksum verified (%s)", actualHash[:12])
+	// Only a binary listed in the signed checksums of this release is installed.
+	sums, sig, err := fetchSignedChecksums(client, latest.TagName)
+	if err == nil {
+		err = release.VerifyAsset(sums, sig, release.HubAssetName(runtime.GOOS, runtime.GOARCH), newBinary)
 	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "release verification failed: " + err.Error()})
+		return
+	}
+	log.Printf("self-update: release signature and checksum verified (%s)", sha256Sum(newBinary)[:12])
 
 	// Get current executable path
 	execPath, err := os.Executable()
@@ -220,33 +212,4 @@ func (h *SystemHandler) HandleCheckUpdate(w http.ResponseWriter, _ *http.Request
 func sha256Sum(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
-}
-
-func verifyChecksum(client *http.Client, checksumURL, binaryURL, actualHash string) error {
-	resp, err := client.Get(checksumURL)
-	if err != nil {
-		return fmt.Errorf("download checksums: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("read checksums: %w", err)
-	}
-
-	// Parse checksum file: "hash  filename" per line
-	// Find the line matching our binary
-	binaryName := binaryURL[strings.LastIndex(binaryURL, "/")+1:]
-	for _, line := range strings.Split(string(body), "\n") {
-		parts := strings.Fields(line)
-		if len(parts) >= 2 && parts[1] == binaryName {
-			expectedHash := parts[0]
-			if !strings.EqualFold(actualHash, expectedHash) {
-				return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("binary %s not found in checksum file", binaryName)
 }

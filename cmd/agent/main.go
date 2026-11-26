@@ -85,6 +85,7 @@ func main() {
 	configDir := flag.String("config-dir", defaultConfigDir(), "Config directory")
 	dashboardURL := flag.String("dashboard-url", "", "Dashboard URL for registration (e.g. https://192.168.1.10:9443)")
 	registerToken := flag.String("register-token", "", "One-time registration token")
+	caFingerprint := flag.String("ca-fingerprint", "", "SHA-256 of the dashboard CA (from the install command); required unless the dashboard has a publicly trusted certificate")
 	dockerSocket := flag.String("docker-socket", "/var/run/docker.sock", "Docker socket path")
 	flag.Parse()
 
@@ -102,7 +103,7 @@ func main() {
 		}
 
 		log.Printf("registering with dashboard at %s...", *dashboardURL)
-		if err := ag.Register(*dashboardURL, *registerToken); err != nil {
+		if err := ag.Register(*dashboardURL, *registerToken, *caFingerprint); err != nil {
 			log.Fatalf("registration failed: %v", err)
 		}
 		log.Println("registration successful")
@@ -117,6 +118,9 @@ func main() {
 
 	// --- Executor ---
 	executor := agent.NewExecutor(*dockerSocket)
+	executor.SetAllowUnsignedUpdates(config.AllowUnsignedUpdates)
+	executor.SetAllowedDataRoots(config.AllowedDataRoots)
+	executor.SetAgentConfigDir(*configDir)
 	// Configure the HTTP update source so a capable dashboard can hand us the
 	// update binary via a download URL instead of base64-over-WebSocket. Uses
 	// the same TLS client config as the WebSocket, so it trusts the dashboard

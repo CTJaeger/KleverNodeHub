@@ -41,5 +41,6 @@ Klever Node Hub follows [Kerckhoffs's principle](https://en.wikipedia.org/wiki/K
 - **Argon2id** password hashing
 - **Command whitelist** on agents (no arbitrary shell access)
 - **Rate limiting** on authentication endpoints
+- **Signed releases** (Ed25519) — agents verify every update themselves
 
 For more details, see the [README](README.md#security).

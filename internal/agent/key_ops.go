@@ -126,6 +126,12 @@ func (d *DockerClient) GenerateKey(ctx context.Context, dataDir, imageTag string
 	}
 
 	// Move key
+	if err := checkConfigTarget(dataDir, destKey); err != nil {
+		return nil, err
+	}
+	if fi, err := os.Lstat(generatedKey); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("refusing to follow symlink %s", generatedKey)
+	}
 	data, err := os.ReadFile(generatedKey)
 	if err != nil {
 		return nil, fmt.Errorf("read generated key: %w", err)
@@ -186,6 +192,9 @@ func ImportKey(dataDir, pemContent string) (*KeyInfo, error) {
 
 	configDir := filepath.Join(dataDir, "config")
 	destKey := filepath.Join(configDir, validatorKeyFile)
+	if err := checkConfigTarget(dataDir, destKey); err != nil {
+		return nil, err
+	}
 
 	// Backup existing key if present
 	if _, err := os.Stat(destKey); err == nil {
@@ -205,6 +214,9 @@ func ImportKey(dataDir, pemContent string) (*KeyInfo, error) {
 func ExportKey(dataDir string) (string, error) {
 	configDir := filepath.Join(dataDir, "config")
 	keyPath := filepath.Join(configDir, validatorKeyFile)
+	if err := checkConfigTarget(dataDir, keyPath); err != nil { // a symlink could expose any host file
+		return "", err
+	}
 
 	data, err := os.ReadFile(keyPath)
 	if err != nil {
@@ -218,6 +230,9 @@ func ExportKey(dataDir string) (string, error) {
 func BackupKey(dataDir string) error {
 	configDir := filepath.Join(dataDir, "config")
 	keyPath := filepath.Join(configDir, validatorKeyFile)
+	if err := checkConfigTarget(dataDir, keyPath); err != nil {
+		return err
+	}
 
 	data, err := os.ReadFile(keyPath)
 	if err != nil {

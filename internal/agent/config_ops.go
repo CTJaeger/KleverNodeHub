@@ -64,8 +64,11 @@ func ListConfigFiles(dataDir string) ([]ConfigFile, error) {
 
 // ReadConfigFile reads a configuration file's contents.
 func ReadConfigFile(dataDir, fileName string) (string, error) {
+	if err := plainName(fileName); err != nil {
+		return "", err
+	}
 	filePath := filepath.Join(dataDir, "config", fileName)
-	if err := validateConfigPath(dataDir, filePath); err != nil {
+	if err := checkConfigTarget(dataDir, filePath); err != nil {
 		return "", err
 	}
 	if err := validateConfigExtension(fileName); err != nil {
@@ -82,8 +85,11 @@ func ReadConfigFile(dataDir, fileName string) (string, error) {
 
 // WriteConfigFile writes content to a configuration file, creating a backup first.
 func WriteConfigFile(dataDir, fileName, content string) error {
+	if err := plainName(fileName); err != nil {
+		return err
+	}
 	filePath := filepath.Join(dataDir, "config", fileName)
-	if err := validateConfigPath(dataDir, filePath); err != nil {
+	if err := checkConfigTarget(dataDir, filePath); err != nil {
 		return err
 	}
 	if err := validateWriteExtension(fileName); err != nil {
@@ -106,9 +112,16 @@ func WriteConfigFile(dataDir, fileName, content string) error {
 
 // BackupConfigFile creates a timestamped backup of a configuration file.
 func BackupConfigFile(dataDir, fileName string) error {
-	srcPath := filepath.Join(dataDir, "config", fileName)
-	if err := validateConfigPath(dataDir, srcPath); err != nil {
+	if err := plainName(fileName); err != nil {
 		return err
+	}
+	srcPath := filepath.Join(dataDir, "config", fileName)
+	if err := checkConfigTarget(dataDir, srcPath); err != nil {
+		return err
+	}
+	// Validate before MkdirAll: a failed call must not leave directories behind.
+	if _, err := os.Stat(srcPath); err != nil {
+		return fmt.Errorf("read for backup: %w", err)
 	}
 
 	backupDir := filepath.Join(dataDir, "config", "backups")
@@ -124,6 +137,9 @@ func BackupConfigFile(dataDir, fileName string) error {
 	timestamp := time.Now().Format("20060102-150405")
 	backupName := fmt.Sprintf("%s.%s.bak", fileName, timestamp)
 	backupPath := filepath.Join(backupDir, backupName)
+	if err := checkConfigTarget(dataDir, backupPath); err != nil {
+		return err
+	}
 
 	if err := os.WriteFile(backupPath, data, 0644); err != nil {
 		return fmt.Errorf("write backup: %w", err)
@@ -170,9 +186,12 @@ func ListConfigBackups(dataDir, fileName string) ([]ConfigFile, error) {
 
 // RestoreConfigBackup restores a config file from a backup.
 func RestoreConfigBackup(dataDir, backupName string) error {
+	if err := plainName(backupName); err != nil {
+		return err
+	}
 	backupDir := filepath.Join(dataDir, "config", "backups")
 	backupPath := filepath.Join(backupDir, backupName)
-	if err := validateConfigPath(dataDir, backupPath); err != nil {
+	if err := checkConfigTarget(dataDir, backupPath); err != nil {
 		return err
 	}
 
@@ -180,6 +199,14 @@ func RestoreConfigBackup(dataDir, backupName string) error {
 	originalName := extractOriginalName(backupName)
 	if originalName == "" {
 		return fmt.Errorf("cannot determine original filename from backup: %q", backupName)
+	}
+	// The destination is derived from a hub-supplied name: check it as
+	// strictly as the source.
+	if err := plainName(originalName); err != nil {
+		return err
+	}
+	if err := validateConfigExtension(originalName); err != nil {
+		return err
 	}
 
 	data, err := os.ReadFile(backupPath)
@@ -189,6 +216,9 @@ func RestoreConfigBackup(dataDir, backupName string) error {
 
 	// Backup current before restoring
 	destPath := filepath.Join(dataDir, "config", originalName)
+	if err := checkConfigTarget(dataDir, destPath); err != nil {
+		return err
+	}
 	if _, err := os.Stat(destPath); err == nil {
 		if err := BackupConfigFile(dataDir, originalName); err != nil {
 			return fmt.Errorf("backup current before restore: %w", err)
@@ -199,6 +229,31 @@ func RestoreConfigBackup(dataDir, backupName string) error {
 		return fmt.Errorf("restore config: %w", err)
 	}
 
+	return nil
+}
+
+// plainName accepts only a single file name. These names come from the hub;
+// a "/" or ".." in one must never reach outside the node's config directory.
+func plainName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || filepath.Base(name) != name {
+		return fmt.Errorf("invalid file name %q", name)
+	}
+	return nil
+}
+
+// checkConfigTarget is validateConfigPath plus a symlink check: the target,
+// the config dir and its backups dir must not be symlinks, or a planted link
+// could redirect a read or write anywhere on the host.
+func checkConfigTarget(dataDir, target string) error {
+	if err := validateConfigPath(dataDir, target); err != nil {
+		return err
+	}
+	configDir := filepath.Join(dataDir, "config")
+	for _, p := range []string{configDir, filepath.Join(configDir, "backups"), filepath.Join(configDir, "key-backups"), target} {
+		if fi, err := os.Lstat(p); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to follow symlink %s", p)
+		}
+	}
 	return nil
 }
 

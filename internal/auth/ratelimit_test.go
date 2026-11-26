@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -73,5 +74,16 @@ func TestRateLimiterWindowExpiry(t *testing.T) {
 
 	if !rl.Allow("1.2.3.4") {
 		t.Error("should be allowed after window expiry")
+	}
+}
+
+func TestRateLimiter_GlobalLimitAcrossIPs(t *testing.T) {
+	rl := NewRateLimiter(time.Minute, 5)
+	rl.SetGlobalLimit(3)
+	for i := 0; i < 3; i++ {
+		rl.RecordFailure(fmt.Sprintf("10.0.0.%d", i))
+	}
+	if rl.Allow("10.0.0.99") {
+		t.Error("fresh IP allowed although the global limit is reached")
 	}
 }

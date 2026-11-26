@@ -159,6 +159,9 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string, 
 		}
 		srcData = keepLocal(fileName, srcData)
 
+		if err := checkConfigTarget(dataDir, dstPath); err != nil {
+			return nil, err
+		}
 		if err := os.WriteFile(dstPath, srcData, 0644); err != nil {
 			return nil, fmt.Errorf("replace %s: %w", fileName, err)
 		}
@@ -184,6 +187,9 @@ func UpgradeConfigs(ctx context.Context, dataDir, network, versionLabel string, 
 			content = replaceConfigValue(content, key, value)
 		}
 
+		if err := checkConfigTarget(dataDir, dstPath); err != nil {
+			return nil, err
+		}
 		if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
 			return nil, fmt.Errorf("merge %s: %w", fileName, err)
 		}
@@ -214,7 +220,10 @@ func backupConfigsWithVersion(configDir, versionLabel string) (string, error) {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		// Regular files only: the node container can plant symlinks in
+		// config/, and following one would copy any host file into a
+		// backup the container can read.
+		if !entry.Type().IsRegular() {
 			continue
 		}
 		srcPath := filepath.Join(configDir, entry.Name())
@@ -399,6 +408,9 @@ type ConfigVersionBackup struct {
 
 // RestoreConfigVersion restores all config files from a version backup.
 func RestoreConfigVersion(dataDir, backupName string) error {
+	if err := plainName(backupName); err != nil {
+		return err
+	}
 	configDir := filepath.Join(dataDir, "config")
 	backupDir := filepath.Join(configDir, "backups", backupName)
 
@@ -406,8 +418,8 @@ func RestoreConfigVersion(dataDir, backupName string) error {
 		return fmt.Errorf("backup not found: %s", backupName)
 	}
 
-	// Validate path
-	if err := validateConfigPath(dataDir, backupDir); err != nil {
+	// Validate path (and that the backup dir itself is no symlink)
+	if err := checkConfigTarget(dataDir, backupDir); err != nil {
 		return err
 	}
 
@@ -423,8 +435,11 @@ func RestoreConfigVersion(dataDir, backupName string) error {
 
 	restored := 0
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if !entry.Type().IsRegular() { // skip dirs and symlinks
 			continue
+		}
+		if err := checkConfigTarget(dataDir, filepath.Join(configDir, entry.Name())); err != nil {
+			return err
 		}
 		data, err := os.ReadFile(filepath.Join(backupDir, entry.Name()))
 		if err != nil {

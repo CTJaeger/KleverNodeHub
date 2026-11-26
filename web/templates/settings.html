@@ -285,6 +285,11 @@
                         <button class="btn btn-primary btn-sm" onclick="registerNewPasskey()">+ Register New Passkey</button>
                     </div>
                     <div class="settings-section" style="margin-top:16px;">
+                        <h4>Sessions</h4>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Log out every other browser and device. Happens automatically when you change the password or delete a passkey.</p>
+                        <button class="btn btn-secondary btn-sm" onclick="logoutAllSessions()">Log Out All Other Sessions</button>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
                         <h4>Klever Wallet</h4>
                         <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Link a Klever wallet address for passwordless login via the Klever Extension browser extension.</p>
                         <div id="klever-status"></div>
@@ -703,13 +708,35 @@
                 new_password: newPw
             });
             if (resp && resp.ok) {
-                showStatus('Password changed successfully');
+                await adoptNewSession(resp);
+                showStatus('Password changed successfully — other sessions were logged out');
                 document.getElementById('pw-current').value = '';
                 document.getElementById('pw-new').value = '';
                 document.getElementById('pw-confirm').value = '';
             } else {
                 const data = resp ? await resp.json() : {};
                 showStatus('Error: ' + (data.error || 'failed to change password'), true);
+            }
+        }
+
+        // The server ends all other sessions on credential changes and hands
+        // this one a fresh token.
+        async function adoptNewSession(resp) {
+            try {
+                const data = await resp.json();
+                if (data.access_token) API.setToken(data.access_token);
+            } catch (_) { /* cookie was refreshed server-side anyway */ }
+        }
+
+        async function logoutAllSessions() {
+            if (!confirm('Log out all other browsers and devices?')) return;
+            const resp = await API.post('/api/auth/logout-all');
+            if (resp && resp.ok) {
+                await adoptNewSession(resp);
+                showStatus('All other sessions were logged out');
+            } else {
+                const data = resp ? await resp.json() : {};
+                showStatus('Error: ' + (data.error || 'failed'), true);
             }
         }
 
@@ -779,7 +806,8 @@
             if (!confirm('Delete passkey "' + name + '"? This cannot be undone.')) return;
             const resp = await API.delete('/api/auth/passkeys/' + encodeURIComponent(id));
             if (resp && resp.ok) {
-                showStatus('Passkey deleted');
+                await adoptNewSession(resp);
+                showStatus('Passkey deleted — other sessions were logged out');
                 await loadPasskeys();
             } else {
                 const data = resp ? await resp.json() : {};

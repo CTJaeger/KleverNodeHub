@@ -1846,7 +1846,11 @@
             if (result && result.ok) {
                 const token = result.data.token;
                 const dashboardURL = window.location.origin;
-                const cmd = 'curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh | sudo bash -s -- --token ' + token + ' --dashboard ' + dashboardURL;
+                let cmd = 'curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/install-agent.sh | sudo bash -s -- --token ' + token + ' --dashboard ' + dashboardURL;
+                // Pins this dashboard's CA so the agent never sends its token to an impostor.
+                if (result.data.ca_fingerprint) {
+                    cmd += ' --ca-fingerprint ' + result.data.ca_fingerprint;
+                }
                 document.getElementById('install-command').textContent = cmd;
                 document.getElementById('token-display').classList.remove('hidden');
             }

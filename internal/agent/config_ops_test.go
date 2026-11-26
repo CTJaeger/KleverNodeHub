@@ -70,7 +70,7 @@ func TestReadConfigFile_PathTraversal(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for path traversal")
 	}
-	if !strings.Contains(err.Error(), "traversal") && !strings.Contains(err.Error(), "extension") {
+	if !strings.Contains(err.Error(), "traversal") && !strings.Contains(err.Error(), "extension") && !strings.Contains(err.Error(), "invalid file name") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -259,5 +259,44 @@ func TestValidateConfigExtension(t *testing.T) {
 		if (err != nil) != tt.wantErr {
 			t.Errorf("validateConfigExtension(%q) error = %v, wantErr = %v", tt.name, err, tt.wantErr)
 		}
+	}
+}
+
+// config.write a file outside config/ via "../", then
+// config.restore it with a "../" backup name so the destination escapes.
+func TestConfigOps_NoEscapeViaRestore(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "node")
+	if err := os.MkdirAll(filepath.Join(dataDir, "config", "backups"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteConfigFile(dataDir, "../evil.json", "x"); err == nil {
+		t.Error("config.write accepted a name with ../")
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "evil.json"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestoreConfigBackup(dataDir, "../../evil.json"); err == nil {
+		t.Error("config.restore accepted a backup name with ../")
+	}
+	if _, err := os.Stat(filepath.Join(root, "evil")); err == nil {
+		t.Error("restore wrote outside the node directory")
+	}
+}
+
+func TestConfigOps_RefuseSymlinks(t *testing.T) {
+	dataDir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "target.toml"), filepath.Join(dataDir, "config", "link.toml")); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	if err := WriteConfigFile(dataDir, "link.toml", "x"); err == nil {
+		t.Error("write followed a symlink out of the config dir")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "target.toml")); err == nil {
+		t.Error("file created through symlink")
 	}
 }

@@ -187,27 +187,7 @@ func isNewer(remote, local string) bool {
 
 // compareVersions compares two semver strings (without 'v' prefix).
 // Returns 1 if a > b, -1 if a < b, 0 if equal.
-func compareVersions(a, b string) int {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
-
-	for i := 0; i < 3; i++ {
-		var aNum, bNum int
-		if i < len(aParts) {
-			_, _ = fmt.Sscanf(aParts[i], "%d", &aNum)
-		}
-		if i < len(bParts) {
-			_, _ = fmt.Sscanf(bParts[i], "%d", &bNum)
-		}
-		if aNum > bNum {
-			return 1
-		}
-		if aNum < bNum {
-			return -1
-		}
-	}
-	return 0
-}
+func compareVersions(a, b string) int { return version.Compare(a, b) }
 
 // FindAsset returns the download URL for a specific binary type.
 // Supports both legacy (klever-node-hub-, klever-agent-) and short (dashboard-, agent-) prefixes.

@@ -45,7 +45,6 @@ type BenchmarkProgress func(step, total int, status string)
 
 // RunBenchmark runs the klever-go benchmark tool in a one-shot Docker container.
 func (d *DockerClient) RunBenchmark(ctx context.Context, onProgress BenchmarkProgress) (*BenchmarkResult, error) {
-	benchDir := "/tmp/klever-benchmark"
 	report := func(step int, status string) {
 		if onProgress != nil {
 			onProgress(step, 8, status)
@@ -54,7 +53,10 @@ func (d *DockerClient) RunBenchmark(ctx context.Context, onProgress BenchmarkPro
 
 	// 1. Create benchmark directory with permissions for container user (UID 999)
 	report(1, "Preparing benchmark directory...")
-	if err := os.MkdirAll(benchDir, 0777); err != nil {
+	// A fresh private dir: a fixed /tmp path could be pre-planted by a local
+	// user as a symlink, and the chown below would follow it.
+	benchDir, err := os.MkdirTemp("", "klever-benchmark-")
+	if err != nil {
 		return nil, fmt.Errorf("create benchmark dir: %w", err)
 	}
 	_ = os.Chown(benchDir, 999, 999)

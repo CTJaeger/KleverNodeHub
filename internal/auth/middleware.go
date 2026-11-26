@@ -34,6 +34,17 @@ func Middleware(jm *JWTManager) func(http.Handler) http.Handler {
 	}
 }
 
+// Authenticated reports whether r carries a valid access token, for public
+// routes whose behaviour depends on whether the caller is logged in.
+func Authenticated(jm *JWTManager, r *http.Request) bool {
+	token := extractToken(r)
+	if token == "" {
+		return false
+	}
+	_, err := jm.ValidateAccessToken(token)
+	return err == nil
+}
+
 // ClaimsFromContext extracts JWT claims from the request context.
 // Returns nil if no claims are present.
 func ClaimsFromContext(ctx context.Context) *JWTClaims {
