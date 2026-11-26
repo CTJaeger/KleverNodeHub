@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (later)
+- **Fix: dashboard not reachable in the browser after updating to v0.3.89 (`ERR_CERT_INVALID`)**. v0.3.89 added the dashboard's CA certificate to the TLS chain so that new agents could check it during registration. The CA uses Ed25519, which browsers can't verify — with the CA in the chain Chrome refuses the page outright, without the usual "proceed anyway" for self-signed certificates. Dashboards opened directly (`https://<host>:9443`) were affected; dashboards behind a reverse proxy with its own certificate were not. The dashboard now presents only its (ECDSA) server certificate again, exactly as up to v0.3.88. Agents fetch the CA from the new public endpoint `GET /api/agent/ca`, compare it with the `--ca-fingerprint` from the install command and only then verify the dashboard and send their token. **If you are locked out on v0.3.89**: replace the dashboard binary / image with v0.3.90 on the server — no data is affected. Agents don't need to be touched for this fix; agents installed with v0.3.89 keep working.
+
 ### 2026-11-26
 - **Security release — please update the dashboard first, then the agents.** This release hardens login, session handling and the update path. Details will be published once users had time to update.
   - **Login & sessions**: everyone has to log in again after the update. New **Log Out All Other Sessions** button in Settings; sessions also end on password change and passkey deletion. On a fresh install the setup wizard asks for a **setup token** that the dashboard prints to its log at startup, and the initial recovery codes are written to `recovery-codes.txt` in the data directory instead of the log. The last login method can't be removed.

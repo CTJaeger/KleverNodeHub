@@ -44,6 +44,19 @@ func (h *RegistrationHandler) HandleGenerateToken(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// HandleCACert returns the dashboard CA certificate (PEM). Public: a new agent
+// fetches it before registering and checks it against the fingerprint from
+// its install command, then verifies the dashboard's certificate with it.
+// GET /api/agent/ca
+func (h *RegistrationHandler) HandleCACert(w http.ResponseWriter, _ *http.Request) {
+	if h.ca == nil {
+		http.Error(w, "no CA configured", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	_, _ = w.Write(crypto.EncodeCertPEM(h.ca.Certificate.Raw))
+}
+
 // HandleRegisterAgent processes an incoming agent registration.
 // POST /api/agent/register
 func (h *RegistrationHandler) HandleRegisterAgent(w http.ResponseWriter, r *http.Request) {

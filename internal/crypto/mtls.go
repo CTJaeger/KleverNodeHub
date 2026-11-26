@@ -28,10 +28,12 @@ func DashboardTLSConfig(ca *CA) (*tls.Config, error) {
 		return nil, fmt.Errorf("create server cert: %w", err)
 	}
 
-	// The CA goes into the chain so a new agent can check it against the
-	// fingerprint from its install command before sending its token.
+	// Only the leaf is sent. The Ed25519 CA must not be part of the chain:
+	// browsers can't verify Ed25519 certificates and then refuse the page
+	// outright (ERR_CERT_INVALID, no way to continue) instead of showing the
+	// usual self-signed warning. Agents fetch the CA from /api/agent/ca.
 	serverCert := tls.Certificate{
-		Certificate: [][]byte{serverCertDER, ca.Certificate.Raw},
+		Certificate: [][]byte{serverCertDER},
 		PrivateKey:  serverKey,
 	}
 

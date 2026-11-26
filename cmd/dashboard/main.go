@@ -308,6 +308,7 @@ func main() {
 
 	// Agent registration (token-based, no JWT required)
 	mux.HandleFunc("POST /api/agent/register", limitBody(regHandler.HandleRegisterAgent))
+	mux.HandleFunc("GET /api/agent/ca", regHandler.HandleCACert)
 
 	// GeoIP resolver for server region detection
 	geoResolver := dashboard.NewGeoIPResolver()
