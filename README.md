@@ -350,6 +350,16 @@ git push --tags
 
 This creates a GitHub Release with pre-built binaries for all platforms, SHA256 checksums (`checksums.txt`) and their Ed25519 signature (`release.sig`).
 
+### Check for compromise
+
+If your dashboard was reachable from the internet before v0.3.89, check the dashboard host and every node server for known traces of an intrusion. The script is read-only:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/check-compromise.sh | sudo bash
+```
+
+It looks for attacker files, compares the running dashboard/agent programs and the stored agent binaries with the official release checksums, lists login methods and registered servers from the dashboard database, and scans the logs for agent builds that are not releases. On the dashboard host add `-s -- --data-dir <dir>` if the data directory is not found, and `--hub-log <file>` if the dashboard logs to a file. Updating alone does not remove someone who already got in: if the script warns and you cannot explain the finding, rebuild the affected servers and rotate the validator keys.
+
 ### Signed releases
 
 The release workflow signs `checksums.txt` with a key that only exists as the `RELEASE_SIGNING_KEY` secret of the `release` environment; the public half is compiled into the dashboard and the agent (`internal/release`).
