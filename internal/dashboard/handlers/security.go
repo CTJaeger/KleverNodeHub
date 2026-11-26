@@ -31,7 +31,7 @@ func NewSecurityHandler(auth *AuthHandler, servers *store.ServerStore, updates *
 	return &SecurityHandler{auth: auth, servers: servers, updates: updates, hub: hub}
 }
 
-var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-knh\.\d+)?$`)
 
 // isReleaseVersion reports whether an agent version looks like a release tag.
 // Anything else (dev, a custom label) was not installed from a release.

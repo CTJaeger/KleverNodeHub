@@ -10,27 +10,92 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/release"
 )
 
 func TestValidReleaseURL(t *testing.T) {
-	base := releaseDownloadPrefix
+	up, next := upstreamDownloadPrefix, successorDownloadPrefix
 	tests := []struct {
 		url  string
 		want bool
 	}{
-		{base + "v0.3.89/klever-agent-linux-amd64", true},
+		{up + "v0.3.93/klever-agent-linux-amd64", true},
+		{next + "v0.3.93-knh.1/klever-agent-linux-amd64", true},
+		{up + "v0.3.93-knh.1/klever-agent-linux-amd64", false}, // knh tags only from the new repository
+		{next + "v0.3.93/klever-agent-linux-amd64", false},     // plain tags only from the old one
 		{"https://github.com/someone-else/KleverNodeHub/releases/download/v0.3.89/klever-agent-linux-amd64", false},
-		{base + "../../../evil/repo/releases/download/v1/klever-agent-linux-amd64", false},
-		{base + "v1/klever-agent-linux-amd64?x=1", false},
-		{base + "v1/klever-agent-linux-amd64#frag", false},
-		{base + "klever-agent-linux-amd64", false}, // missing tag segment
-		{base + "v1/a/b", false},
+		{up + "../../../evil/repo/releases/download/v1/klever-agent-linux-amd64", false},
+		{up + "v1/klever-agent-linux-amd64?x=1", false},
+		{up + "v1/klever-agent-linux-amd64#frag", false},
+		{up + "klever-agent-linux-amd64", false}, // missing tag segment
+		{up + "v1/a/b", false},
 		{"http://github.com/CTJaeger/KleverNodeHub/releases/download/v1/x", false},
 	}
 	for _, tt := range tests {
 		if got := validReleaseURL(tt.url); got != tt.want {
 			t.Errorf("validReleaseURL(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestNeedsBridge(t *testing.T) {
+	tests := []struct {
+		agent, target string
+		want          bool
+	}{
+		{"v0.3.92", "v0.3.93-knh.1", true},
+		{"v0.3.88", "v0.3.93-knh.2", true},
+		{"", "v0.3.93-knh.1", true},
+		{"v0.3.93", "v0.3.93-knh.1", false},
+		{"v0.3.93-knh.1", "v0.3.93-knh.2", false},
+		{"v0.3.92", "v0.3.93", false}, // the bridge itself
+		{"v0.3.90", "v0.3.92", false},
+	}
+	for _, tt := range tests {
+		if got := needsBridge(tt.agent, tt.target); got != tt.want {
+			t.Errorf("needsBridge(%q, %q) = %v, want %v", tt.agent, tt.target, got, tt.want)
+		}
+	}
+}
+
+func TestBinaryForRoutesOldAgentsThroughTheBridge(t *testing.T) {
+	store := dashboard.NewUpdateStore(t.TempDir())
+	for _, v := range []string{agentBridgeVersion, "v0.3.93-knh.1"} {
+		if _, err := store.StoreRelease(v, "linux", "amd64", []byte(v), "klever-agent-linux-amd64", []byte("sums"), []byte("sig")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &UpdateHandler{updateStore: store}
+
+	for agent, want := range map[string]string{"v0.3.90": agentBridgeVersion, "v0.3.93": "v0.3.93-knh.1"} {
+		_, info, err := h.binaryFor(agent, "v0.3.93-knh.1", "linux", "amd64")
+		if err != nil || info.Version != want {
+			t.Errorf("agent %s: got %v / %v, want %s", agent, info, err, want)
+		}
+	}
+	// Without an explicit version the newest stored one is the target.
+	_, info, err := h.binaryFor("v0.3.91", "", "linux", "amd64")
+	if err != nil || info.Version != agentBridgeVersion {
+		t.Errorf("latest for an old agent: got %v / %v, want the bridge", info, err)
+	}
+}
+
+func TestImageForRelease(t *testing.T) {
+	tests := []struct {
+		current, tag, want string
+	}{
+		{"ctjaeger/klever-node-hub:v0.3.93", "v0.3.93-knh.1", "ghcr.io/test0rmaik/klever-node-hub:v0.3.93-knh.1"},
+		{"docker.io/ctjaeger/klever-node-hub:latest", "v0.3.93-knh.1", "ghcr.io/test0rmaik/klever-node-hub:v0.3.93-knh.1"},
+		{"ctjaeger/klever-node-hub", "v0.3.93-knh.2", "ghcr.io/test0rmaik/klever-node-hub:v0.3.93-knh.2"},
+		{"ghcr.io/test0rmaik/klever-node-hub:v0.3.93-knh.1", "v0.3.93-knh.2", "ghcr.io/test0rmaik/klever-node-hub:v0.3.93-knh.2"},
+		{"registry.local:5000/mirror/klever-node-hub:v0.3.93", "v0.3.93-knh.1", "registry.local:5000/mirror/klever-node-hub:v0.3.93-knh.1"},
+		{"ctjaeger/klever-node-hub:v0.3.92", "v0.3.93", "ctjaeger/klever-node-hub:v0.3.93"},
+	}
+	for _, tt := range tests {
+		got, err := imageForRelease(tt.current, tt.tag)
+		if err != nil || got != tt.want {
+			t.Errorf("imageForRelease(%q, %q) = %q, %v; want %q", tt.current, tt.tag, got, err, tt.want)
 		}
 	}
 }

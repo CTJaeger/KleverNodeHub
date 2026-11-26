@@ -57,7 +57,7 @@ func dockerSelfUpdate(targetTag string) error {
 
 	// 3. Determine new image name
 	currentImage := info.Config.Image
-	newImage, err := replaceImageTag(currentImage, targetTag)
+	newImage, err := imageForRelease(currentImage, targetTag)
 	if err != nil {
 		return fmt.Errorf("compute new image name: %w", err)
 	}
@@ -465,23 +465,4 @@ func looksLikeContainerID(s string) bool {
 		}
 	}
 	return true
-}
-
-// replaceImageTag replaces the tag portion of an image reference.
-// e.g. "ctjaeger/klever-node-hub:v0.3.40" → "ctjaeger/klever-node-hub:v0.3.42"
-//
-// Refuses digest-pinned references (`image@sha256:...`) because swapping the
-// tag of a pinned digest is meaningless. A naive LastIndex(":") split also
-// breaks on registry-with-port references like `registry.local:5000/foo` —
-// the tag is the substring after the last `:` that follows the last `/`.
-func replaceImageTag(image, newTag string) (string, error) {
-	if strings.Contains(image, "@") {
-		return "", fmt.Errorf("cannot swap tag on digest-pinned image: %s", image)
-	}
-	lastSlash := strings.LastIndex(image, "/")
-	afterSlash := image[lastSlash+1:]
-	if idx := strings.LastIndex(afterSlash, ":"); idx >= 0 {
-		return image[:lastSlash+1+idx] + ":" + newTag, nil
-	}
-	return image + ":" + newTag, nil
 }

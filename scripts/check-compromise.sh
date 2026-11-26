@@ -17,7 +17,9 @@
 
 set -u
 
-REPO="CTJaeger/KleverNodeHub"
+# Official releases: up to v0.3.93 from CTJaeger, after that from Test0rMaik
+# (tags v*-knh.*).
+REPOS="CTJaeger/KleverNodeHub Test0rMaik/KleverNodeHub"
 DATA_DIR=""
 HUB_LOG=""
 SEARCH_ROOT="/"
@@ -51,7 +53,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # A release version looks like v1.2.3; anything else an agent reports
 # (dev, probe6, ...) was not installed from a release.
-is_release_version() { [[ "$1" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+is_release_version() { [[ "$1" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-knh\.[0-9]+)?$ ]]; }
 
 # ---------------------------------------------------------------------------
 # Official checksums of all releases: "<tag> <sha256> <asset>" per line.
@@ -60,17 +62,19 @@ CHECKSUMS="$TMP/official.txt"
 : > "$CHECKSUMS"
 load_official_checksums() {
     command -v curl >/dev/null 2>&1 || return 1
-    local tags="" page more tag
-    for page in 1 2 3 4 5 6 7 8; do
-        more=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}" 2>/dev/null \
-            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
-        [[ -n "$more" ]] || break
-        tags="${tags} ${more}"
-    done
-    [[ -n "${tags// /}" ]] || return 1
-    for tag in $tags; do
-        curl -fsSL "https://github.com/${REPO}/releases/download/${tag}/checksums.txt" 2>/dev/null \
-            | awk -v t="$tag" 'NF == 2 { sub(/^\*/, "", $2); print t, tolower($1), $2 }' >> "$CHECKSUMS"
+    local repo tags page more tag
+    for repo in $REPOS; do
+        tags=""
+        for page in 1 2 3 4 5 6 7 8; do
+            more=$(curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" 2>/dev/null \
+                | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+            [[ -n "$more" ]] || break
+            tags="${tags} ${more}"
+        done
+        for tag in $tags; do
+            curl -fsSL "https://github.com/${repo}/releases/download/${tag}/checksums.txt" 2>/dev/null \
+                | awk -v t="$tag" 'NF == 2 { sub(/^\*/, "", $2); print t, tolower($1), $2 }' >> "$CHECKSUMS"
+        done
     done
     [[ -s "$CHECKSUMS" ]]
 }
@@ -148,8 +152,9 @@ if command -v docker >/dev/null 2>&1; then
     while read -r name image; do
         [[ -n "$name" ]] || continue
         case "$image" in
-            ctjaeger/klever-node-hub*|ctjaeger/klever-agent*) info "container $name runs image $image" ;;
-            *) note "container $name runs image $image (not an official ctjaeger/ image)" ;;
+            ctjaeger/klever-node-hub*|ctjaeger/klever-agent*|ghcr.io/test0rmaik/klever-node-hub*|ghcr.io/test0rmaik/klever-agent*)
+                info "container $name runs image $image" ;;
+            *) note "container $name runs image $image (not an official image)" ;;
         esac
     done < <(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | grep -iE 'klever-node-hub|klever-agent')
 fi

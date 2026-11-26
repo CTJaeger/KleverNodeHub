@@ -8,7 +8,7 @@ We take the security of Klever Node Hub seriously. If you discover a security vu
 
 ### How to Report
 
-1. Go to the [Security tab](https://github.com/CTJaeger/KleverNodeHub/security) of this repository
+1. Go to the [Security tab](https://github.com/Test0rMaik/KleverNodeHub/security) of [Test0rMaik/KleverNodeHub](https://github.com/Test0rMaik/KleverNodeHub), where development continues
 2. Click **"Report a vulnerability"**
 3. Fill out the form with as much detail as possible
 

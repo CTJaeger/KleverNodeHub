@@ -15,9 +15,9 @@ func withTestKey(t *testing.T) ed25519.PrivateKey {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := publicKey
-	publicKey = pub
-	t.Cleanup(func() { publicKey = old })
+	old := publicKeys
+	publicKeys = []ed25519.PublicKey{pub}
+	t.Cleanup(func() { publicKeys = old })
 	return priv
 }
 
@@ -61,7 +61,7 @@ func TestVerifyChecksums_UnsignedAndNoKey(t *testing.T) {
 		t.Errorf("missing signature: err = %v, want ErrUnsigned", err)
 	}
 
-	publicKey = nil // binary built without a key
+	publicKeys = nil // binary built without a key
 	if err := VerifyChecksums([]byte("x"), []byte("c2ln")); err == nil {
 		t.Error("verification must fail closed without a compiled-in key")
 	}
@@ -81,5 +81,28 @@ func TestAssetNames(t *testing.T) {
 	}
 	if got := HubAssetName("linux", "amd64"); got != "klever-node-hub-linux-amd64" {
 		t.Errorf("HubAssetName = %q", got)
+	}
+}
+
+// Releases of both repositories are accepted; anything else is not.
+func TestVerifyChecksums_TrustsBothRepositories(t *testing.T) {
+	if len(publicKeys) != 2 {
+		t.Fatalf("expected 2 trusted keys, got %d", len(publicKeys))
+	}
+	if hex.EncodeToString(publicKeys[0]) != PublicKeyHex || hex.EncodeToString(publicKeys[1]) != SuccessorKeyHex {
+		t.Fatal("trusted keys are not the two release keys")
+	}
+
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	sums := []byte("abc  klever-agent-linux-amd64\n# release v1\n")
+	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sums))
+	if err := VerifyChecksums(sums, []byte(sig)); err == nil {
+		t.Error("signature of an unknown key accepted")
+	}
+
+	defer func(k []ed25519.PublicKey) { publicKeys = k }(publicKeys)
+	publicKeys = []ed25519.PublicKey{mustParseKey(PublicKeyHex), pub}
+	if err := VerifyChecksums(sums, []byte(sig)); err != nil {
+		t.Errorf("signature of the second trusted key rejected: %v", err)
 	}
 }

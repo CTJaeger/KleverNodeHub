@@ -22,7 +22,7 @@ import (
 
 // releaseVersion matches release tags; an agent reporting anything else was not
 // installed from a release.
-var releaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+var releaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-knh\.\d+)?$`)
 
 // AgentHandler handles WebSocket connections from agents.
 type AgentHandler struct {

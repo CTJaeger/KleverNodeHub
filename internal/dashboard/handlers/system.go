@@ -9,16 +9,49 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/dashboard"
 	"github.com/CTJaeger/KleverNodeHub/internal/release"
+	"github.com/CTJaeger/KleverNodeHub/internal/store"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
 // SystemHandler handles system-level API endpoints.
 type SystemHandler struct {
 	versionChecker *dashboard.VersionChecker
+	serverStore    *store.ServerStore
+}
+
+// SetServerStore gives the handler the registered servers, needed to hold back
+// the move to the new repository while agents still need the bridge release.
+func (h *SystemHandler) SetServerStore(s *store.ServerStore) { h.serverStore = s }
+
+// agentsBlockingMove lists the servers whose agent can no longer be updated
+// once this dashboard runs a release of the new repository: v0.3.89 up to
+// (not including) the bridge release verify updates themselves but only trust
+// the previous release key. Older agents don't verify and can follow later.
+func (h *SystemHandler) agentsBlockingMove(target string) ([]string, error) {
+	if h.serverStore == nil || !isSuccessorTag(target) {
+		return nil, nil
+	}
+	servers, err := h.serverStore.List()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, s := range servers {
+		v := s.AgentVersion
+		if version.Compare(v, "v0.3.89") >= 0 && version.Compare(v, agentBridgeVersion) < 0 {
+			name := s.DisplayName
+			if name == "" {
+				name = s.Name
+			}
+			names = append(names, fmt.Sprintf("%s (%s)", name, v))
+		}
+	}
+	return names, nil
 }
 
 // NewSystemHandler creates a new system handler.
@@ -77,6 +110,22 @@ func (h *SystemHandler) HandleSelfUpdate(w http.ResponseWriter, _ *http.Request)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"success": false,
 			"message": "no update available",
+		})
+		return
+	}
+
+	// Moving to the new repository: agents that would be cut off from updates
+	// have to reach the bridge release first.
+	blocking, err := h.agentsBlockingMove(latest.TagName)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "message": err.Error()})
+		return
+	}
+	if len(blocking) > 0 {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"success": false,
+			"message": fmt.Sprintf("First update the agents to %s (Agent Update), then the dashboard. After the update to %s the dashboard could no longer update these agents: %s. Remove servers you no longer use.",
+				agentBridgeVersion, latest.TagName, strings.Join(blocking, ", ")),
 		})
 		return
 	}

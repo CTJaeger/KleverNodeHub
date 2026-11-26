@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,9 +36,12 @@ type ReleaseAsset struct {
 
 // VersionChecker periodically checks GitHub for new releases.
 type VersionChecker struct {
-	mu       sync.RWMutex
-	owner    string
-	repo     string
+	mu    sync.RWMutex
+	owner string
+	repo  string
+	// extra are further repositories whose releases FetchReleases lists too
+	// (the dashboard's own update always comes from owner/repo).
+	extra    [][2]string
 	latest   *ReleaseInfo
 	interval time.Duration
 	client   *http.Client
@@ -51,6 +55,12 @@ func NewVersionChecker(owner, repo string) *VersionChecker {
 		interval: 30 * time.Minute,
 		client:   &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+// AddReleaseSource lists the releases of another repository in FetchReleases
+// as well (used for the bridge release of the previous home of the project).
+func (vc *VersionChecker) AddReleaseSource(owner, repo string) {
+	vc.extra = append(vc.extra, [2]string{owner, repo})
 }
 
 // Start begins periodic version checking.
@@ -131,9 +141,30 @@ func (vc *VersionChecker) check() {
 	}
 }
 
-// FetchReleases fetches the last N releases from GitHub (on-demand, no caching).
+// FetchReleases fetches the last N releases of every release source
+// (on-demand, no caching), newest version first. The main repository must
+// answer; extra sources are best-effort.
 func (vc *VersionChecker) FetchReleases(limit int) ([]ReleaseInfo, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=%d", vc.owner, vc.repo, limit)
+	releases, err := vc.fetchReleasesFrom(vc.owner, vc.repo, limit)
+	if err != nil {
+		return nil, err
+	}
+	for _, src := range vc.extra {
+		more, err := vc.fetchReleasesFrom(src[0], src[1], limit)
+		if err != nil {
+			log.Printf("version check: releases of %s/%s: %v", src[0], src[1], err)
+			continue
+		}
+		releases = append(releases, more...)
+	}
+	sort.SliceStable(releases, func(i, j int) bool {
+		return compareVersions(releases[i].TagName, releases[j].TagName) > 0
+	})
+	return releases, nil
+}
+
+func (vc *VersionChecker) fetchReleasesFrom(owner, repo string, limit int) ([]ReleaseInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=%d", owner, repo, limit)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

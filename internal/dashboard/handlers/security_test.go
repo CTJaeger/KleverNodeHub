@@ -76,7 +76,7 @@ func TestSecurityCheck_ReportsWithoutChangingAnything(t *testing.T) {
 }
 
 func TestIsReleaseVersion(t *testing.T) {
-	for v, want := range map[string]bool{"v0.3.91": true, "0.3.91": true, "dev": false, "probe6": false, "v0.3.91-x": false, "": false} {
+	for v, want := range map[string]bool{"v0.3.91": true, "0.3.91": true, "v0.3.93-knh.1": true, "dev": false, "probe6": false, "v0.3.91-x": false, "v0.3.93-knh.": false, "": false} {
 		if got := isReleaseVersion(v); got != want {
 			t.Errorf("isReleaseVersion(%q) = %v, want %v", v, got, want)
 		}

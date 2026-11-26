@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (v0.3.93 — moving to Test0rMaik/KleverNodeHub)
+- **Development continues at [Test0rMaik/KleverNodeHub](https://github.com/Test0rMaik/KleverNodeHub).** This is the last release from this repository and the bridge to the new one: dashboards and agents move there through the normal update, nothing has to be reinstalled.
+  - **Release keys**: dashboard and agent accept releases signed with this repository's key and with the key of Test0rMaik/KleverNodeHub.
+  - **Updates come from the new repository**: the update banner, the dashboard's self-update and Agent Update use its releases (tags `v*-knh.*`, e.g. `v0.3.93-knh.1`, which count as newer than `v0.3.93`). Docker installs switch to `ghcr.io/test0rmaik/klever-node-hub`. The Add Server install command uses the new repository's install script.
+  - **Order: agents first.** Agents v0.3.89–v0.3.92 only trust this repository's key. Agent Update therefore moves agents older than v0.3.93 to v0.3.93 first (a second update then brings them to the new release), and the dashboard's own move to the new repository is held back with a message until no registered agent is on v0.3.89–v0.3.92.
+  - The Security Check, the dashboard log and `scripts/check-compromise.sh` recognise the new repository's releases.
+
 ### 2026-11-26 (v0.3.92)
 - **Security Check has its own page**: it moved out of Settings into the sidebar (**Tools → Security Check**) and runs as soon as the page opens. The entry shows a red count on every page while the dashboard check has warnings (for example an agent reporting a version that is not a release, or a passkey with a name known from intrusions), so a finding is visible without opening the page. Still read-only: the dashboard reports, it changes nothing on its own.
 

@@ -16,11 +16,40 @@ import (
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/release"
 	"github.com/CTJaeger/KleverNodeHub/internal/store"
+	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
 
-// releaseDownloadPrefix is the only place agent and dashboard binaries are
-// downloaded from: <prefix><tag>/<asset>.
-const releaseDownloadPrefix = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
+// Agent and dashboard binaries are downloaded only from these two places:
+// <prefix><tag>/<asset>. Development continues at Test0rMaik/KleverNodeHub,
+// whose tags carry "-knh."; CTJaeger/KleverNodeHub keeps the earlier releases
+// up to the bridge release.
+const (
+	upstreamDownloadPrefix  = "https://github.com/CTJaeger/KleverNodeHub/releases/download/"
+	successorDownloadPrefix = "https://github.com/Test0rMaik/KleverNodeHub/releases/download/"
+)
+
+// isSuccessorTag reports whether a release tag belongs to Test0rMaik/KleverNodeHub.
+func isSuccessorTag(tag string) bool { return strings.Contains(tag, "-knh.") }
+
+// downloadPrefixFor returns where the release with this tag is published.
+func downloadPrefixFor(tag string) string {
+	if isSuccessorTag(tag) {
+		return successorDownloadPrefix
+	}
+	return upstreamDownloadPrefix
+}
+
+// agentBridgeVersion is the first agent that trusts the release keys of both
+// repositories. Agents before it only accept releases of CTJaeger/KleverNodeHub
+// (from v0.3.89 on they check the signature themselves), so they are moved to
+// this version first and to the newer releases in a second update.
+const agentBridgeVersion = "v0.3.93"
+
+// needsBridge reports whether an agent running agentVersion has to go through
+// agentBridgeVersion before it can install target.
+func needsBridge(agentVersion, target string) bool {
+	return version.Compare(agentVersion, agentBridgeVersion) < 0 && version.Compare(target, agentBridgeVersion) > 0
+}
 
 // UpdateHandler handles agent binary update API requests.
 type UpdateHandler struct {
@@ -85,6 +114,24 @@ func (h *UpdateHandler) buildAgentUpdatePayload(serverID string, binaryData []by
 		payload["data"] = base64.StdEncoding.EncodeToString(binaryData)
 	}
 	return payload
+}
+
+// binaryFor picks the stored agent binary for one agent: the requested version
+// (or the newest stored one), or the bridge version first if the agent cannot
+// install that yet.
+func (h *UpdateHandler) binaryFor(agentVersion, requested, osName, arch string) ([]byte, *dashboard.AgentBinaryInfo, error) {
+	target := requested
+	if target == "" {
+		info := h.updateStore.Get(osName, arch)
+		if info == nil {
+			return nil, nil, fmt.Errorf("no binary for %s/%s", osName, arch)
+		}
+		target = info.Version
+	}
+	if needsBridge(agentVersion, target) {
+		target = agentBridgeVersion
+	}
+	return h.updateStore.GetBinaryVersion(target, osName, arch)
 }
 
 // HandleUploadBinary handles POST /api/agent/upload
@@ -226,13 +273,7 @@ func (h *UpdateHandler) HandleUpdateAgent(w http.ResponseWriter, r *http.Request
 	}
 
 	osName, arch := parseOSArch(srv.OSInfo)
-	var binaryData []byte
-	var info *dashboard.AgentBinaryInfo
-	if reqBody.Version != "" {
-		binaryData, info, err = h.updateStore.GetBinaryVersion(reqBody.Version, osName, arch)
-	} else {
-		binaryData, info, err = h.updateStore.GetBinary(osName, arch)
-	}
+	binaryData, info, err := h.binaryFor(srv.AgentVersion, reqBody.Version, osName, arch)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("no binary for %s/%s: %v", osName, arch, err)})
 		return
@@ -355,13 +396,7 @@ func (h *UpdateHandler) HandleUpdateAll(w http.ResponseWriter, r *http.Request) 
 		}
 
 		osName, arch := parseOSArch(srv.OSInfo)
-		var binaryData []byte
-		var info *dashboard.AgentBinaryInfo
-		if reqBody.Version != "" {
-			binaryData, info, err = h.updateStore.GetBinaryVersion(reqBody.Version, osName, arch)
-		} else {
-			binaryData, info, err = h.updateStore.GetBinary(osName, arch)
-		}
+		binaryData, info, err := h.binaryFor(srv.AgentVersion, reqBody.Version, osName, arch)
 		if err != nil {
 			results = append(results, updateResult{
 				ServerID: srv.ID, Name: srv.Name,
@@ -552,9 +587,8 @@ func (h *UpdateHandler) HandleDownloadFromRelease(w http.ResponseWriter, r *http
 	}
 
 	// Only a binary listed in the signed checksums of its release is stored.
-	// URL format: <releaseDownloadPrefix><tag>/<asset>
-	rest := strings.TrimPrefix(req.URL, releaseDownloadPrefix)
-	tag, asset, _ := strings.Cut(rest, "/")
+	// URL format: <prefix><tag>/<asset>
+	tag, asset := releaseURLParts(req.URL)
 	sums, sig, err := fetchSignedChecksums(client, tag)
 	if err == nil {
 		err = release.VerifyAsset(sums, sig, asset, data)
@@ -626,83 +660,148 @@ func (h *UpdateHandler) HandleDownloadReleaseAuto(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Download each needed binary
-	client := &http.Client{Timeout: 5 * time.Minute}
-
-	type dlResult struct {
-		OS      string `json:"os"`
-		Arch    string `json:"arch"`
-		Success bool   `json:"success"`
-		Error   string `json:"error,omitempty"`
-	}
-	var results []dlResult
-
-	sums, sig, sumErr := fetchSignedChecksums(client, targetRelease.TagName)
-	if sumErr != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "release verification failed: " + sumErr.Error()})
+	results, err := h.downloadAgentRelease(targetRelease, needed)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "release verification failed: " + err.Error()})
 		return
 	}
 
-	for _, asset := range targetRelease.Assets {
-		osName, arch, isAgent := parseAgentAssetName(asset.Name)
-		if !isAgent {
-			continue
+	// Agents before the bridge version cannot install a newer release yet:
+	// fetch the bridge release for their platforms as well, so "update" can
+	// move them there first.
+	if needsBridgeAny(servers, req.Tag) {
+		bridgeNeeded := map[string]bool{}
+		for _, srv := range servers {
+			if needsBridge(srv.AgentVersion, req.Tag) {
+				osName, arch := parseOSArch(srv.OSInfo)
+				bridgeNeeded[osName+"/"+arch] = true
+			}
 		}
-
-		if !needed[osName+"/"+arch] {
-			continue
+		var bridgeRelease *dashboard.ReleaseInfo
+		for i := range releases {
+			if releases[i].TagName == agentBridgeVersion {
+				bridgeRelease = &releases[i]
+				break
+			}
 		}
-
-		// SSRF protection
-		if !validReleaseURL(asset.BrowserDownloadURL) {
-			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: "invalid URL"})
-			continue
+		if bridgeRelease == nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("release %s (needed for agents older than it) not found", agentBridgeVersion)})
+			return
 		}
-
-		resp, err := client.Get(asset.BrowserDownloadURL)
+		more, err := h.downloadAgentRelease(bridgeRelease, bridgeNeeded)
 		if err != nil {
-			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: err.Error()})
-			continue
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "release verification failed: " + err.Error()})
+			return
 		}
-		data, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20))
-		_ = resp.Body.Close()
-		if err != nil || resp.StatusCode != http.StatusOK {
-			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: fmt.Sprintf("download failed (%d)", resp.StatusCode)})
-			continue
-		}
-
-		if verr := release.VerifyAsset(sums, sig, asset.Name, data); verr != nil {
-			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: verr.Error()})
-			continue
-		}
-
-		_, err = h.updateStore.StoreRelease(req.Tag, osName, arch, data, asset.Name, sums, sig)
-		if err != nil {
-			results = append(results, dlResult{OS: osName, Arch: arch, Success: false, Error: err.Error()})
-			continue
-		}
-
-		results = append(results, dlResult{OS: osName, Arch: arch, Success: true})
+		results = append(results, more...)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
-// validReleaseURL reports whether u is exactly an asset download URL of our
-// releases: right host/owner/repo, no query/fragment, no dot segments.
+// agentDownloadResult reports one per-platform release download.
+type agentDownloadResult struct {
+	Version string `json:"version"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// needsBridgeAny reports whether any registered agent has to go through the
+// bridge version before it can install target.
+func needsBridgeAny(servers []models.Server, target string) bool {
+	for _, srv := range servers {
+		if needsBridge(srv.AgentVersion, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// downloadAgentRelease downloads the agent binaries of rel for the needed
+// os/arch combinations, verifies them against the signed checksums of that
+// release and stores them.
+func (h *UpdateHandler) downloadAgentRelease(rel *dashboard.ReleaseInfo, needed map[string]bool) ([]agentDownloadResult, error) {
+	client := &http.Client{Timeout: 5 * time.Minute}
+	sums, sig, err := fetchSignedChecksums(client, rel.TagName)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []agentDownloadResult
+	for _, asset := range rel.Assets {
+		osName, arch, isAgent := parseAgentAssetName(asset.Name)
+		if !isAgent || !needed[osName+"/"+arch] {
+			continue
+		}
+		res := agentDownloadResult{Version: rel.TagName, OS: osName, Arch: arch}
+
+		// SSRF protection
+		if !validReleaseURL(asset.BrowserDownloadURL) {
+			res.Error = "invalid URL"
+			results = append(results, res)
+			continue
+		}
+
+		resp, err := client.Get(asset.BrowserDownloadURL)
+		if err != nil {
+			res.Error = err.Error()
+			results = append(results, res)
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20))
+		_ = resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK {
+			res.Error = fmt.Sprintf("download failed (%d)", resp.StatusCode)
+			results = append(results, res)
+			continue
+		}
+
+		if verr := release.VerifyAsset(sums, sig, asset.Name, data); verr != nil {
+			res.Error = verr.Error()
+			results = append(results, res)
+			continue
+		}
+
+		if _, err := h.updateStore.StoreRelease(rel.TagName, osName, arch, data, asset.Name, sums, sig); err != nil {
+			res.Error = err.Error()
+			results = append(results, res)
+			continue
+		}
+		res.Success = true
+		results = append(results, res)
+	}
+	return results, nil
+}
+
+// releaseURLParts splits <prefix><tag>/<asset> into tag and asset.
+func releaseURLParts(u string) (tag, asset string) {
+	for _, prefix := range []string{upstreamDownloadPrefix, successorDownloadPrefix} {
+		if rest, ok := strings.CutPrefix(u, prefix); ok {
+			tag, asset, _ = strings.Cut(rest, "/")
+			return tag, asset
+		}
+	}
+	return "", ""
+}
+
+// validReleaseURL reports whether u is exactly an asset download URL of the
+// releases: right host/owner/repo for its tag, no query/fragment, no dot
+// segments.
 func validReleaseURL(u string) bool {
-	if !strings.HasPrefix(u, releaseDownloadPrefix) {
+	tag, asset := releaseURLParts(u)
+	if tag == "" || asset == "" || strings.Contains(asset, "/") {
+		return false
+	}
+	if !strings.HasPrefix(u, downloadPrefixFor(tag)) {
 		return false
 	}
 	pu, err := url.Parse(u)
 	if err != nil || pu.Host != "github.com" || pu.RawQuery != "" || pu.Fragment != "" {
 		return false
 	}
-	if path.Clean(pu.Path) != pu.Path {
-		return false
-	}
-	rest := strings.TrimPrefix(u, releaseDownloadPrefix)
-	return strings.Count(rest, "/") == 1 // <tag>/<asset>
+	return path.Clean(pu.Path) == pu.Path
 }
 
 // fetchSignedChecksums downloads a release's checksums.txt and its signature
@@ -713,7 +812,7 @@ func fetchSignedChecksums(client *http.Client, tag string) (sums, sig []byte, er
 		return nil, nil, fmt.Errorf("invalid release tag %q", tag)
 	}
 	get := func(name string) ([]byte, error) {
-		resp, err := client.Get(releaseDownloadPrefix + tag + "/" + name)
+		resp, err := client.Get(downloadPrefixFor(tag) + tag + "/" + name)
 		if err != nil {
 			return nil, fmt.Errorf("download %s: %w", name, err)
 		}
