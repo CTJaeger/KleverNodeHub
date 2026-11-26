@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (v0.3.92)
+- **Security Check has its own page**: it moved out of Settings into the sidebar (**Tools → Security Check**) and runs as soon as the page opens. The entry shows a red count on every page while the dashboard check has warnings (for example an agent reporting a version that is not a release, or a passkey with a name known from intrusions), so a finding is visible without opening the page. Still read-only: the dashboard reports, it changes nothing on its own.
+
 ### 2026-11-26 (v0.3.91)
 - **Security Check in Settings → Security**: "Run Check" lists findings from the dashboard data — login methods, servers whose agent reports a version that is not a release, stored agent binaries without a release signature. "Check Servers" asks every connected agent (v0.3.91+) to look for files known from intrusions and to report the checksum of its own program, which the dashboard compares with the signed release. The check only reads and reports: the dashboard removes or changes nothing on its own, what to do about a finding is the operator's decision. An agent that was replaced can lie, so this complements `scripts/check-compromise.sh`, it does not replace it.
 - **Agents prove who they are**: an agent signs every WebSocket connect with the key from its registration (timestamp + nonce, replay-protected). Until now the server ID alone was enough to connect as an agent. Agents that predate this keep working; after an agent has connected signed once, unsigned connects for that server are refused.
