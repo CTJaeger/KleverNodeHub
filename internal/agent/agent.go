@@ -261,11 +261,49 @@ func (a *Agent) BuildDiscoveryMessage(report *models.DiscoveryReport) *models.Me
 	}
 }
 
+// fetchDashboardCA downloads the dashboard CA certificate and returns it only
+// if it matches caFingerprint. Nothing secret is sent, so the connection itself
+// needs no verification: the fingerprint check is what makes the result
+// trustworthy. Returns nil if the dashboard doesn't offer the endpoint.
+func fetchDashboardCA(dashboardURL, caFingerprint string) (*x509.Certificate, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // result is checked against the pinned fingerprint
+		},
+	}
+	resp, err := client.Get(strings.TrimRight(dashboardURL, "/") + "/api/agent/ca")
+	if err != nil {
+		return nil, fmt.Errorf("fetch dashboard CA: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch dashboard CA: HTTP %d", resp.StatusCode)
+	}
+	pemData, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return nil, fmt.Errorf("fetch dashboard CA: %w", err)
+	}
+	ca, err := crypto.DecodeCertPEM(pemData)
+	if err != nil {
+		return nil, fmt.Errorf("fetch dashboard CA: %w", err)
+	}
+	if !strings.EqualFold(crypto.Fingerprint(ca), caFingerprint) {
+		return nil, fmt.Errorf("dashboard CA does not match --ca-fingerprint: refusing to send the registration token")
+	}
+	return ca, nil
+}
+
 // registrationTLSConfig verifies the dashboard before the token is sent: either
 // its certificate is publicly trusted for the URL's host (reverse proxy with a
-// real certificate), or the chain contains the CA pinned by caFingerprint and
-// the leaf is signed by it (direct connection to the self-signed dashboard).
-func registrationTLSConfig(dashboardURL, caFingerprint string) (*tls.Config, error) {
+// real certificate), or it is signed by the CA pinned by caFingerprint (direct
+// connection to the self-signed dashboard). pinnedCA is that CA as fetched by
+// fetchDashboardCA; without it the CA is looked for in the presented chain
+// (dashboard v0.3.89).
+func registrationTLSConfig(dashboardURL, caFingerprint string, pinnedCA *x509.Certificate) (*tls.Config, error) {
 	u, err := url.Parse(dashboardURL)
 	if err != nil || u.Hostname() == "" {
 		return nil, fmt.Errorf("invalid dashboard URL %q", dashboardURL)
@@ -301,7 +339,11 @@ func registrationTLSConfig(dashboardURL, caFingerprint string) (*tls.Config, err
 			if caFingerprint == "" {
 				return fmt.Errorf("dashboard certificate is not publicly trusted for %q: pass --ca-fingerprint from the dashboard's install command", host)
 			}
-			for _, c := range certs[1:] {
+			candidates := certs[1:]
+			if pinnedCA != nil {
+				candidates = []*x509.Certificate{pinnedCA}
+			}
+			for _, c := range candidates {
 				if !strings.EqualFold(crypto.Fingerprint(c), caFingerprint) {
 					continue
 				}
@@ -325,7 +367,13 @@ func registerWithDashboard(dashboardURL string, req *models.RegistrationRequest,
 
 	url := dashboardURL + "/api/agent/register"
 
-	tlsCfg, err := registrationTLSConfig(dashboardURL, caFingerprint)
+	var pinnedCA *x509.Certificate
+	if caFingerprint != "" {
+		if pinnedCA, err = fetchDashboardCA(dashboardURL, caFingerprint); err != nil {
+			return nil, err
+		}
+	}
+	tlsCfg, err := registrationTLSConfig(dashboardURL, caFingerprint, pinnedCA)
 	if err != nil {
 		return nil, err
 	}

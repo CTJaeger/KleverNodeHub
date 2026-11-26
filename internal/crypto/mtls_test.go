@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -253,5 +254,28 @@ func TestMTLSHandshake_WrongCA(t *testing.T) {
 	_, err = client.Get(fmt.Sprintf("https://%s/", listener.Addr().String()))
 	if err == nil {
 		t.Error("expected TLS handshake to fail with cert from wrong CA")
+	}
+}
+
+// Browsers can't verify Ed25519 certificates: with the CA in the chain they
+// refuse the dashboard outright instead of showing the self-signed warning.
+func TestDashboardTLSConfig_SendsLeafOnly(t *testing.T) {
+	ca, err := NewCA()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := DashboardTLSConfig(ca)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(cfg.Certificates[0].Certificate); n != 1 {
+		t.Fatalf("dashboard must present only its leaf certificate, got a chain of %d", n)
+	}
+	leaf, err := x509.ParseCertificate(cfg.Certificates[0].Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaf.PublicKeyAlgorithm != x509.ECDSA {
+		t.Errorf("leaf key must be ECDSA for browsers, got %v", leaf.PublicKeyAlgorithm)
 	}
 }
