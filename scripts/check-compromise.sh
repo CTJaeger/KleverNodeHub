@@ -60,10 +60,14 @@ CHECKSUMS="$TMP/official.txt"
 : > "$CHECKSUMS"
 load_official_checksums() {
     command -v curl >/dev/null 2>&1 || return 1
-    local tags tag
-    tags=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=60" 2>/dev/null \
-        | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
-    [[ -n "$tags" ]] || return 1
+    local tags="" page more tag
+    for page in 1 2 3 4 5 6 7 8; do
+        more=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+        [[ -n "$more" ]] || break
+        tags="${tags} ${more}"
+    done
+    [[ -n "${tags// /}" ]] || return 1
     for tag in $tags; do
         curl -fsSL "https://github.com/${REPO}/releases/download/${tag}/checksums.txt" 2>/dev/null \
             | awk -v t="$tag" 'NF == 2 { sub(/^\*/, "", $2); print t, tolower($1), $2 }' >> "$CHECKSUMS"
@@ -74,6 +78,12 @@ load_official_checksums() {
 # official_release <sha256> -> prints "<tag> <asset>" of the first match
 official_release() {
     awk -v h="$1" '$2 == h { print $1, $3; exit }' "$CHECKSUMS"
+}
+
+# official_hash <tag> <os> <arch> -> the release's checksum of its agent asset
+official_agent_hash() {
+    awk -v t="$1" -v a="klever-agent-$2-$3" -v b="agent-$2-$3" \
+        '$1 == t && ($3 == a || $3 == a ".exe" || $3 == b || $3 == b ".exe") { print $2; exit }' "$CHECKSUMS"
 }
 
 sha256_of() { sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
@@ -106,26 +116,32 @@ else
 fi
 
 procs=0
-if command -v pgrep >/dev/null 2>&1; then
-    while read -r pid; do
-        [[ -n "$pid" && -e "/proc/$pid/exe" ]] || continue
-        exe=$(readlink "/proc/$pid/exe" 2>/dev/null)
-        hash=$(sha256_of "/proc/$pid/exe")
-        [[ -n "$hash" ]] || continue
-        procs=$((procs + 1))
-        if [[ $HAVE_OFFICIAL -eq 1 ]]; then
-            match=$(official_release "$hash")
-            if [[ -n "$match" ]]; then
-                ok "pid $pid $exe = official release ${match}"
-            else
-                warn "pid $pid $exe is NOT an official release binary (sha256 ${hash:0:16}...)"
-                info "expected only if you built it yourself; otherwise treat this host as compromised"
-            fi
+# Matched by executable name: a command-line match would also catch this
+# script's own shell when a log path contains "klever-node-hub".
+for p in /proc/[0-9]*; do
+    exe=$(readlink "$p/exe" 2>/dev/null) || continue
+    base="${exe##*/}"
+    base="${base% (deleted)}"
+    case "$base" in
+        *klever-node-hub*|*klever-agent*) ;;
+        *) continue ;;
+    esac
+    pid="${p#/proc/}"
+    hash=$(sha256_of "$p/exe")
+    [[ -n "$hash" ]] || continue
+    procs=$((procs + 1))
+    if [[ $HAVE_OFFICIAL -eq 1 ]]; then
+        match=$(official_release "$hash")
+        if [[ -n "$match" ]]; then
+            ok "pid $pid $exe = official release ${match}"
         else
-            info "pid $pid $exe sha256 $hash"
+            warn "pid $pid $exe is NOT an official release binary (sha256 ${hash:0:16}...)"
+            info "expected only if you built it yourself; otherwise treat this host as compromised"
         fi
-    done < <(pgrep -f 'klever-node-hub|klever-agent' 2>/dev/null)
-fi
+    else
+        info "pid $pid $exe sha256 $hash"
+    fi
+done
 [[ $procs -eq 0 ]] && info "no running klever-node-hub / klever-agent process found on this host"
 
 if command -v docker >/dev/null 2>&1; then
@@ -244,23 +260,35 @@ PYEOF
     BIN_DIR="$DATA_DIR/agent-binaries"
     if [[ -d "$BIN_DIR" ]]; then
         stored=0
+        matched=0
         for f in "$BIN_DIR"/agent-*; do
             [[ -f "$f" ]] || continue
             stored=$((stored + 1))
             hash=$(sha256_of "$f")
             base=$(basename "$f")
-            if [[ $HAVE_OFFICIAL -eq 1 ]]; then
-                match=$(official_release "$hash")
-                if [[ -n "$match" ]]; then
-                    ok "stored agent binary $base = official release ${match}"
-                else
-                    warn "stored agent binary $base is NOT an official release binary (sha256 ${hash:0:16}...)"
-                    info "expected only if you uploaded your own build; the dashboard hands this file to agents"
-                fi
-            else
+            if [[ $HAVE_OFFICIAL -ne 1 ]]; then
                 info "stored agent binary $base sha256 $hash"
+                continue
+            fi
+            if [[ -n "$(official_release "$hash")" ]]; then
+                matched=$((matched + 1))
+                continue
+            fi
+            # agent-<version>-<os>-<arch>
+            rest="${base#agent-}"
+            arch="${rest##*-}"; rest="${rest%-*}"
+            os="${rest##*-}"; ver="${rest%-*}"
+            mtime=$(stat -c %y "$f" 2>/dev/null | cut -d. -f1)
+            want=$(official_agent_hash "$ver" "$os" "$arch")
+            if [[ -n "$want" ]]; then
+                warn "stored agent binary $base differs from the official $ver release (file from ${mtime:-unknown date})"
+                info "sha256 ${hash:0:16}... instead of ${want:0:16}...; fine if you uploaded your own build back then"
+                info "the dashboard hands stored binaries to agents: delete the file if you cannot explain it"
+            else
+                note "stored agent binary $base cannot be compared: no official checksum for $ver (file from ${mtime:-unknown date})"
             fi
         done
+        [[ $matched -gt 0 ]] && ok "$matched stored agent binaries match official releases"
         [[ $stored -eq 0 ]] && info "no agent binaries stored"
     fi
 fi
