@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (compromise check)
+- **New `scripts/check-compromise.sh`**: a read-only check for operators whose dashboard was reachable from the internet before v0.3.89. Run it as root on the dashboard host and on every node server (`curl -sSL https://raw.githubusercontent.com/CTJaeger/KleverNodeHub/main/scripts/check-compromise.sh | sudo bash`). It searches for attacker files, compares the running dashboard/agent programs and the agent binaries stored in the dashboard with the official release checksums, lists passkeys, the linked wallet and registered servers from the dashboard database (flagging agents that report a non-release version) and scans the dashboard and agent logs for non-release agent builds. Exit code 1 if anything is flagged. A clean result is not proof, and updating alone does not remove someone who already got in.
+
 ### 2026-11-26 (later)
 - **Fix: dashboard not reachable in the browser after updating to v0.3.89 (`ERR_CERT_INVALID`)**. v0.3.89 added the dashboard's CA certificate to the TLS chain so that new agents could check it during registration. The CA uses Ed25519, which browsers can't verify — with the CA in the chain Chrome refuses the page outright, without the usual "proceed anyway" for self-signed certificates. Dashboards opened directly (`https://<host>:9443`) were affected; dashboards behind a reverse proxy with its own certificate were not. The dashboard now presents only its (ECDSA) server certificate again, exactly as up to v0.3.88. Agents fetch the CA from the new public endpoint `GET /api/agent/ca`, compare it with the `--ca-fingerprint` from the install command and only then verify the dashboard and send their token. **If you are locked out on v0.3.89**: replace the dashboard binary / image with v0.3.90 on the server — no data is affected. Agents don't need to be touched for this fix; agents installed with v0.3.89 keep working.
 
