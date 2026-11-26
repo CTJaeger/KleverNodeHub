@@ -93,6 +93,7 @@ func (s *Server) SetupRoutes() error {
 	s.mux.HandleFunc("GET /batchconfig", s.servePage("templates/batchconfig.html"))
 	s.mux.HandleFunc("GET /slotinspector", s.servePage("templates/slotinspector.html"))
 	s.mux.HandleFunc("GET /docker-cleanup", s.servePage("templates/docker-cleanup.html"))
+	s.mux.HandleFunc("GET /security", s.servePage("templates/security.html"))
 
 	return nil
 }

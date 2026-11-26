@@ -729,7 +729,7 @@ Agents only install signed releases (v0.3.89 and newer) and do not downgrade. If
 
 ## Security Check
 
-Under **Settings → Security → Security Check**, **Run Check** lists findings from the dashboard data and **Check Servers** lets the connected agents look for known attacker files and verify their own program against the signed release. The check is read-only: the dashboard changes nothing on its own.
+Open **Security Check** in the sidebar (under Tools). The page lists findings from the dashboard data right away, and **Check Servers** lets the connected agents look for known attacker files and verify their own program against the signed release. The check is read-only: the dashboard changes nothing on its own.
 
 ---
 

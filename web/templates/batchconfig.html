@@ -80,6 +80,13 @@
                             Docker Cleanup
                         </a>
                     </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/security" class="sidebar-nav-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            Security Check
+                            <span id="sidebar-security-badge" class="sidebar-alert-badge"></span>
+                        </a>
+                    </li>
                 </ul>
             </div>
 
@@ -205,6 +212,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/security-badge.js"></script>
     <script src="/static/js/agent-update-check.js"></script>
     <script>
     // Initialize API token, then auto-load configs from agents
