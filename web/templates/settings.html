@@ -290,6 +290,15 @@
                         <button class="btn btn-secondary btn-sm" onclick="logoutAllSessions()">Log Out All Other Sessions</button>
                     </div>
                     <div class="settings-section" style="margin-top:16px;">
+                        <h4>Security Check</h4>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                            <button class="btn btn-secondary btn-sm" id="btn-sec-check" onclick="runSecurityCheck()">Run Check</button>
+                            <button class="btn btn-secondary btn-sm" id="btn-sec-servers" onclick="runServerCheck()">Check Servers</button>
+                        </div>
+                        <div id="sec-check-result"></div>
+                        <div id="sec-servers-result"></div>
+                    </div>
+                    <div class="settings-section" style="margin-top:16px;">
                         <h4>Klever Wallet</h4>
                         <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Link a Klever wallet address for passwordless login via the Klever Extension browser extension.</p>
                         <div id="klever-status"></div>
@@ -738,6 +747,48 @@
                 const data = resp ? await resp.json() : {};
                 showStatus('Error: ' + (data.error || 'failed'), true);
             }
+        }
+
+        // --- Security check ---
+        function secLine(color, text) {
+            return '<div style="padding:4px 0;font-size:13px;color:' + color + ';">' + text + '</div>';
+        }
+
+        async function runSecurityCheck() {
+            const el = document.getElementById('sec-check-result');
+            const d = await API.getJSON('/api/security/check');
+            if (!d) { el.innerHTML = secLine('var(--error)', 'Check failed'); return; }
+            let html = '';
+            (d.findings || []).forEach(f => {
+                html += secLine(f.level === 'warn' ? 'var(--error)' : 'var(--text-secondary)', esc(f.text));
+            });
+            if (!(d.findings || []).some(f => f.level === 'warn')) {
+                html += secLine('var(--success, #22c55e)', 'No findings in the dashboard data');
+            }
+            (d.servers || []).forEach(s => {
+                html += secLine(s.release_version ? 'var(--text-secondary)' : 'var(--error)',
+                    esc(s.name) + ' &middot; agent ' + esc(s.agent_version || 'unknown') + (s.online ? '' : ' &middot; offline'));
+            });
+            el.innerHTML = html;
+        }
+
+        async function runServerCheck() {
+            const el = document.getElementById('sec-servers-result');
+            const btn = document.getElementById('btn-sec-servers');
+            btn.disabled = true;
+            el.innerHTML = secLine('var(--text-secondary)', 'Checking servers...');
+            const res = await API.postJSON('/api/security/check/servers', {});
+            btn.disabled = false;
+            if (!res || !res.ok) { el.innerHTML = secLine('var(--error)', 'Server check failed'); return; }
+            const labels = { ok: 'no known traces', warn: 'FINDINGS', offline: 'offline', unsupported: 'agent too old for this check', error: 'check failed' };
+            el.innerHTML = (res.data.servers || []).map(s => {
+                let text = esc(s.name) + ' &middot; ' + esc(labels[s.status] || s.status);
+                if (s.binary) text += ' &middot; agent binary ' + esc(s.binary);
+                if (s.detail) text += ' &middot; ' + esc(s.detail);
+                (s.files || []).forEach(f => { text += '<br><span style="font-family:monospace;font-size:12px;">' + esc(f) + '</span>'; });
+                const color = s.status === 'warn' ? 'var(--error)' : (s.status === 'ok' ? 'var(--success, #22c55e)' : 'var(--text-secondary)');
+                return secLine(color, text);
+            }).join('');
         }
 
         // --- Passkey management ---

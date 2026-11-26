@@ -105,6 +105,8 @@ Any Device (Browser)
 | Rate Limiting | 5 failed attempts per 15 min per IP (50 across all IPs for password login), then HTTP 429 |
 | Account Recovery | Single-use recovery codes (Argon2id hashed) |
 | Sessions | Ended on password change, passkey deletion and "Log Out All Other Sessions" |
+| Agent Identity | Agents sign every connect with the key from their registration (replay-protected) |
+| Security Check | Settings → Security: read-only check of login methods, agent versions and stored binaries, plus a check run by the agents |
 | Updates | Releases are signed (Ed25519); agents verify every update themselves and refuse downgrades |
 | Config Encryption | AES-256-GCM (encrypted at rest) |
 | Agent Communication | mTLS with Ed25519 certificates |
@@ -349,6 +351,10 @@ git push --tags
 ```
 
 This creates a GitHub Release with pre-built binaries for all platforms, SHA256 checksums (`checksums.txt`) and their Ed25519 signature (`release.sig`).
+
+### Security Check in the dashboard
+
+**Settings → Security → Security Check** lists findings from the dashboard data (login methods, servers whose agent reports a version that is not a release, stored agent binaries without a release signature) and can ask the connected agents (v0.3.91+) to look for known attacker files and report the checksum of their own program. It only reads and reports — nothing is removed or changed automatically.
 
 ### Check for compromise
 

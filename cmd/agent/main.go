@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/CTJaeger/KleverNodeHub/internal/agent"
+	"github.com/CTJaeger/KleverNodeHub/internal/crypto"
 	"github.com/CTJaeger/KleverNodeHub/internal/models"
 	"github.com/CTJaeger/KleverNodeHub/internal/version"
 )
@@ -223,7 +225,23 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		return fmt.Errorf("TLS config: %w", err)
 	}
 
-	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+	// Prove we own this server's private key (see AgentHandler.authenticateAgent).
+	authHeader := http.Header{}
+	if cfg := ag.Config(); cfg != nil {
+		if priv, kerr := crypto.DecodePrivateKeyPEM([]byte(cfg.KeyPEM)); kerr == nil {
+			ts := time.Now().Unix()
+			if nonce, nerr := crypto.NewAgentAuthNonce(); nerr == nil {
+				authHeader.Set("X-Agent-Timestamp", strconv.FormatInt(ts, 10))
+				authHeader.Set("X-Agent-Nonce", nonce)
+				authHeader.Set("X-Agent-Signature", crypto.SignAgentAuth(priv, cfg.ServerID, ts, nonce))
+			}
+		} else {
+			log.Printf("signed auth unavailable: %v", kerr)
+		}
+	}
+
+	conn, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		HTTPHeader: authHeader,
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: tlsConfig,
@@ -231,6 +249,9 @@ func runAgentLoop(ctx context.Context, wsURL string, ag *agent.Agent, executor *
 		},
 	})
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("dashboard rejected the connection (401): check that this agent's clock is in sync (NTP) and that its registration is still valid")
+		}
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "closing") }()

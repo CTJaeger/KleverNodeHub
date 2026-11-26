@@ -228,3 +228,24 @@ func scanServer(row *sql.Row) (*models.Server, error) {
 func scanServerRow(rows *sql.Rows) (*models.Server, error) {
 	return scanServerFromScanner(rows)
 }
+
+// RequiresSignedAuth reports whether the server has previously authenticated
+// with a signed WebSocket upgrade, in which case unsigned connects are refused.
+// A read error is returned so callers can fail closed.
+func (s *ServerStore) RequiresSignedAuth(id string) (bool, error) {
+	var v int
+	if err := s.db.db.QueryRow(`SELECT signed_auth FROM servers WHERE id = ?`, id).Scan(&v); err != nil {
+		return false, fmt.Errorf("read signed_auth: %w", err)
+	}
+	return v == 1, nil
+}
+
+// MarkSignedAuth records that the server authenticated with a signed upgrade.
+func (s *ServerStore) MarkSignedAuth(id string) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, err := s.db.db.Exec(`UPDATE servers SET signed_auth = 1 WHERE id = ? AND signed_auth = 0`, id); err != nil {
+		return fmt.Errorf("mark signed auth: %w", err)
+	}
+	return nil
+}
